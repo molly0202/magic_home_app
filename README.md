@@ -39,7 +39,7 @@ A Flutter mobile application for home management with a complete authentication 
 
 1. Clone this repository:
 ```
-git clone https://github.com/yourusername/magic_home_app.git
+git clone https://github.com/molly0202/magic_home_app.git
 cd magic_home_app
 ```
 
