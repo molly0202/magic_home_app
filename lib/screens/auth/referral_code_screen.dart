@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import '../home/home_screen.dart';
+import '../../main.dart';
+import '../../services/auth_service.dart';
+import '../auth/login_screen.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../widgets/app_logo.dart';
 
 class ReferralCodeScreen extends StatefulWidget {
@@ -11,6 +14,7 @@ class ReferralCodeScreen extends StatefulWidget {
 
 class _ReferralCodeScreenState extends State<ReferralCodeScreen> {
   final TextEditingController _referralController = TextEditingController();
+  final AuthService _authService = AuthService();
   bool _isLoading = false;
 
   @override
@@ -54,14 +58,6 @@ class _ReferralCodeScreenState extends State<ReferralCodeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Referral code',
-                    style: TextStyle(
-                      fontSize: 28, 
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
                   const SizedBox(height: 20),
                   const Text(
                     'If you have a referral code, you can enter it here now. Or you can always enter it in your profile page later.',
@@ -83,7 +79,6 @@ class _ReferralCodeScreenState extends State<ReferralCodeScreen> {
                         borderRadius: BorderRadius.all(Radius.circular(8.0)),
                       ),
                       hintText: 'Enter referral code (optional)',
-                      labelText: 'Referral Code (Optional)',
                       floatingLabelBehavior: FloatingLabelBehavior.always,
                     ),
                   ),
@@ -99,12 +94,46 @@ class _ReferralCodeScreenState extends State<ReferralCodeScreen> {
                         // Allow a small delay to show loading state
                         Future.delayed(const Duration(milliseconds: 500), () {
                           if (!mounted) return;
-                          // Registration complete - Navigate to home screen
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (_) => const HomeScreen()),
-                            (route) => false,
-                          );
+                          
+                          // Get the current user
+                          final user = _authService.currentUser;
+                          if (user != null) {
+                            // Create mock Google account to use with HomeScreen
+                            final mockGoogleUser = MockGoogleSignInAccount(
+                              id: user.id,
+                              displayName: user.name,
+                              email: user.email,
+                              phoneNumber: user.phoneNumber,
+                            );
+                            
+                            // Navigate to HomeScreen
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => HomeScreen(
+                                  user: mockGoogleUser,
+                                  googleSignIn: GoogleSignIn(
+                                    clientId: '441732602904-ib5itb3on72gkv6qffdjv6g58kgvmpnf.apps.googleusercontent.com',
+                                  ),
+                                  onSignOut: (user) {
+                                    // Handle sign out by returning to the LoginScreen
+                                    Navigator.pushAndRemoveUntil(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                      (route) => false,
+                                    );
+                                  },
+                                ),
+                              ),
+                              (route) => false,
+                            );
+                          } else {
+                            // Fallback - show error
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Error: User data not found')),
+                            );
+                            setState(() => _isLoading = false);
+                          }
                         });
                       },
                       style: ElevatedButton.styleFrom(

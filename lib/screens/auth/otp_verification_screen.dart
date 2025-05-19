@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/app_logo.dart';
+import '../../main.dart';
+import '../auth/login_screen.dart';
 import 'referral_code_screen.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
@@ -157,39 +160,77 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     });
     
     try {
-      // In a real app, we would verify the OTP with a backend service
-      // For demo purposes, any 6-digit code is accepted with a simulated delay
-      await Future.delayed(const Duration(milliseconds: 1500));
+      // Verify the OTP code with Firebase
+      final isValid = await _authService.verifyOtpCode(otp);
       
       if (!mounted) return;
       
-      setState(() {
-        _isVerified = true;
-      });
-      
-      // Show verification success
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Phone number verified successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      
-      // Navigate to the next screen after a short delay
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (!mounted) return;
+      if (isValid) {
+        setState(() {
+          _isVerified = true;
+        });
         
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const ReferralCodeScreen()),
+        // Show verification success
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Phone number verified successfully!'),
+            backgroundColor: Colors.green,
+          ),
         );
-      });
+        
+        // Navigate to the next screen after a short delay
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (!mounted) return;
+          
+          // Get the current user
+          final user = _authService.currentUser;
+          if (user != null) {
+            // Create mock Google account to use with HomeScreen
+            final mockGoogleUser = MockGoogleSignInAccount(
+              id: user.id,
+              displayName: user.name,
+              email: user.email,
+              phoneNumber: widget.phoneNumber,
+            );
+            
+            // Navigate to HomeScreen
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => HomeScreen(
+                  user: mockGoogleUser,
+                  googleSignIn: GoogleSignIn(
+                    clientId: '441732602904-ib5itb3on72gkv6qffdjv6g58kgvmpnf.apps.googleusercontent.com',
+                  ),
+                  onSignOut: (user) {
+                    // Handle sign out by returning to the LoginScreen
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    );
+                  },
+                ),
+              ),
+            );
+          } else {
+            // Fallback to referral screen if no user found
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const ReferralCodeScreen()),
+            );
+          }
+        });
+      } else {
+        setState(() {
+          _errorMessage = 'Invalid verification code. Please try again.';
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       
-      // In production, display specific error based on backend response
+      // Display error
       setState(() {
-        _errorMessage = 'Invalid verification code. Please try again.';
+        _errorMessage = 'Verification failed: ${e.toString()}';
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -198,17 +239,81 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   
   void _resendOtp() {
     if (_timerSeconds == 0) {
-      // Simulate OTP resend
       setState(() {
         _errorMessage = '';
+        _isLoading = true;
       });
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('New verification code sent')),
+      // Resend OTP via Firebase
+      _authService.verifyPhoneNumber(
+        phoneNumber: widget.phoneNumber,
+        onCodeSent: (verificationId) {
+          if (!mounted) return;
+          
+          setState(() {
+            _isLoading = false;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('New verification code sent')),
+          );
+          _startTimer();
+        },
+        onVerificationFailed: (errorMessage) {
+          if (!mounted) return;
+          
+          setState(() {
+            _isLoading = false;
+            _errorMessage = 'Failed to resend code: $errorMessage';
+          });
+        },
+        onVerificationCompleted: () {
+          if (!mounted) return;
+          
+          setState(() {
+            _isLoading = false;
+            _isVerified = true;
+          });
+          
+          // Get the current user
+          final user = _authService.currentUser;
+          if (user != null) {
+            // Create mock Google account to use with HomeScreen
+            final mockGoogleUser = MockGoogleSignInAccount(
+              id: user.id,
+              displayName: user.name,
+              email: user.email,
+              phoneNumber: widget.phoneNumber,
+            );
+            
+            // Navigate to HomeScreen
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => HomeScreen(
+                  user: mockGoogleUser,
+                  googleSignIn: GoogleSignIn(
+                    clientId: '441732602904-ib5itb3on72gkv6qffdjv6g58kgvmpnf.apps.googleusercontent.com',
+                  ),
+                  onSignOut: (user) {
+                    // Handle sign out by returning to the LoginScreen
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    );
+                  },
+                ),
+              ),
+            );
+          } else {
+            // Fallback to referral screen if no user found
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const ReferralCodeScreen()),
+            );
+          }
+        },
       );
-      _startTimer();
-      
-      // In a production app, this would call your backend to resend the OTP
     }
   }
 

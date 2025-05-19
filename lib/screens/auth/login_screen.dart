@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
-import '../home/home_screen.dart';
+import '../../main.dart'; // Import main.dart for HomeScreen
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,8 +16,14 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId: '441732602904-ib5itb3on72gkv6qffdjv6g58kgvmpnf.apps.googleusercontent.com',
+  );
+  
   bool _isPasswordVisible = false;
   bool _isLoading = false;
+  bool _isGoogleSigningIn = false;
+  String? _googleSignInError;
   
   @override
   void dispose() {
@@ -44,9 +51,31 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       
       if (user != null) {
+        // Create a mock GoogleSignInAccount from the regular user
+        final mockGoogleUser = MockGoogleSignInAccount(
+          id: user.id,
+          displayName: user.name,
+          email: user.email,
+          photoUrl: null, // No photo for email login users
+          phoneNumber: user.phoneNumber,
+        );
+        
+        // Navigate to HomeScreen with the mock user
         Navigator.pushReplacement(
-          context, 
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          context,
+          MaterialPageRoute(
+            builder: (context) => HomeScreen(
+              user: mockGoogleUser,
+              googleSignIn: _googleSignIn,
+              onSignOut: (user) {
+                // Handle sign out by returning to the LoginScreen
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
+              },
+            ),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -60,6 +89,63 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isGoogleSigningIn = true;
+      _googleSignInError = null;
+    });
+    
+    try {
+      final account = await _googleSignIn.signIn();
+      
+      if (!mounted) return;
+      
+      if (account == null) {
+        // User canceled sign-in
+        setState(() {
+          _isGoogleSigningIn = false;
+          _googleSignInError = 'Sign in was canceled';
+        });
+        return;
+      }
+      
+      print('Successfully signed in with Google: ${account.displayName}');
+      
+      // Navigate to the HomeScreen from main.dart
+      // We need to import the HomeScreen, GoogleSignInAccount and GoogleSignIn types from main.dart
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) {
+            // HomeScreen requires user, googleSignIn, and onSignOut parameters
+            return HomeScreen(
+              user: account,
+              googleSignIn: _googleSignIn,
+              onSignOut: (user) {
+                // Handle sign out by returning to the LoginScreen
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
+              },
+            );
+          },
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isGoogleSigningIn = false;
+        _googleSignInError = 'Sign in error: $error';
+      });
+      print('Error signing in with Google: $error');
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Google Sign-In failed: $error')),
+      );
     }
   }
 
@@ -77,14 +163,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 height: 270,
                 decoration: const BoxDecoration(
                   color: Color(0xFFFBB04C),
-                  gradient: RadialGradient(
-                    center: Alignment(0.0, -0.3),
-                    radius: 1.2,
-                    colors: [
-                      Color(0xFFFFCD7F), // lighter orange in the center
-                      Color(0xFFFBB04C), // original orange color
-                    ],
-                  ),
                   borderRadius: BorderRadius.only(
                     bottomLeft: Radius.circular(40),
                     bottomRight: Radius.circular(40),
@@ -127,6 +205,32 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Test user credentials hint
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Test User Credentials:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text('Email: test@example.com'),
+                          Text('Password: password123'),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    
                     // Email field
                     TextField(
                       controller: _emailController,
@@ -236,13 +340,23 @@ class _LoginScreenState extends State<LoginScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        _buildSocialButton(Icons.g_mobiledata, Colors.red),
+                        _buildGoogleSignInButton(),
                         const SizedBox(width: 20),
                         _buildSocialButton(Icons.facebook, Colors.blue),
                         const SizedBox(width: 20),
                         _buildSocialButton(Icons.apple, Colors.black),
                       ],
                     ),
+                    
+                    if (_googleSignInError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          _googleSignInError!,
+                          style: const TextStyle(color: Colors.red, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     
                     // Registration link
                     const SizedBox(height: 40),
@@ -282,6 +396,35 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
   
+  Widget _buildGoogleSignInButton() {
+    return InkWell(
+      onTap: _isGoogleSigningIn ? null : _handleGoogleSignIn,
+      child: Container(
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          shape: BoxShape.circle,
+        ),
+        child: _isGoogleSigningIn
+          ? const Padding(
+              padding: EdgeInsets.all(12),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.red,
+              ),
+            )
+          : Center(
+              child: Icon(
+                Icons.g_mobiledata,
+                size: 28,
+                color: Colors.red,
+              ),
+            ),
+      ),
+    );
+  }
+  
   Widget _buildSocialButton(IconData icon, Color iconColor) {
     return InkWell(
       onTap: () {
@@ -306,4 +449,45 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+}
+
+// Mock GoogleSignInAccount for email login users
+class MockGoogleSignInAccount implements GoogleSignInAccount {
+  @override
+  final String? displayName;
+  
+  @override
+  final String email;
+  
+  @override
+  final String id;
+  
+  @override
+  final String? photoUrl;
+  
+  // Additional fields not in GoogleSignInAccount interface
+  final String? phoneNumber;
+  
+  // Required constructor fields
+  MockGoogleSignInAccount({
+    required this.id,
+    required this.email,
+    this.displayName,
+    this.photoUrl,
+    this.phoneNumber,
+  });
+  
+  // Implement remaining required methods with stub implementations
+  @override
+  Future<Map<String, String>> get authHeaders async => {};
+  
+  @override
+  Future<GoogleSignInAuthentication> get authentication async =>
+      throw UnimplementedError();
+  
+  @override
+  String? get serverAuthCode => null;
+  
+  @override
+  Future<void> clearAuthCache() async {}
 } 
