@@ -50,9 +50,40 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
 
   Future<void> _pickFile(String documentType) async {
     try {
+      // Show dialog to choose between camera and gallery
+      final ImageSource? source = await showDialog<ImageSource>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Select Image Source'),
+            content: const Text('Choose how you want to add your document:'),
+            actions: [
+              TextButton.icon(
+                onPressed: () => Navigator.pop(context, ImageSource.camera),
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Take Photo'),
+              ),
+              TextButton.icon(
+                onPressed: () => Navigator.pop(context, ImageSource.gallery),
+                icon: const Icon(Icons.photo_library),
+                label: const Text('Choose from Gallery'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (source == null) return; // User cancelled
+
       final XFile? pickedFile = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         imageQuality: 80,
+        maxWidth: 1920,
+        maxHeight: 1920,
       );
       
       if (pickedFile != null) {
@@ -71,13 +102,36 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
         });
       }
     } catch (e) {
+      // Handle specific camera permission errors
+      String errorMessage = 'Failed to pick file: $e';
+      
+      if (e.toString().contains('camera_access_denied') || 
+          e.toString().contains('Permission denied')) {
+        errorMessage = 'Camera permission is required to take photos. Please enable camera access in Settings > Privacy & Security > Camera > Magic Home.';
+      } else if (e.toString().contains('photo_access_denied')) {
+        errorMessage = 'Photo library permission is required. Please enable photo access in Settings > Privacy & Security > Photos > Magic Home.';
+      }
+      
       setState(() {
-        _errorMessage = 'Failed to pick file: $e';
+        _errorMessage = errorMessage;
       });
+      
+      // Show user-friendly error dialog
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Permission Required'),
+          content: Text(errorMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     }
   }
-
-
 
   Future<void> _submitVerification() async {
     // Validation
