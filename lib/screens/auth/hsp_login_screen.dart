@@ -1,33 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../../widgets/app_logo.dart';
+import 'hsp_register_screen.dart';
+import 'forgot_password_screen.dart';
+import '../home/hsp_home_screen.dart';
 
-class ForgotPasswordScreen extends StatefulWidget {
-  const ForgotPasswordScreen({super.key});
+class HspLoginScreen extends StatefulWidget {
+  const HspLoginScreen({super.key});
 
   @override
-  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+  State<HspLoginScreen> createState() => _HspLoginScreenState();
 }
 
-class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+class _HspLoginScreenState extends State<HspLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
-  String? _successMessage;
 
   @override
   void dispose() {
     _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _resetPassword() async {
+  Future<void> _login() async {
     final email = _emailController.text.trim();
-    
-    if (email.isEmpty) {
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
       setState(() {
-        _errorMessage = 'Please enter your email address';
-        _successMessage = null;
+        _errorMessage = 'Please enter both email and password';
       });
       return;
     }
@@ -35,40 +39,54 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
-      _successMessage = null;
     });
 
     try {
-      await firebase_auth.FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-      setState(() {
-        _successMessage = 'Password reset email sent! Please check your inbox.';
-        _errorMessage = null;
-      });
+      final userCredential = await firebase_auth.FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      if (!mounted) return;
+
+      // Always navigate to HSP home screen - users can complete verification from there
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HspHomeScreen(user: userCredential.user!),
+        ),
+      );
     } on firebase_auth.FirebaseAuthException catch (e) {
       String message;
       switch (e.code) {
         case 'user-not-found':
-          message = 'No account found with this email address.';
+          message = 'No provider account found with this email';
+          break;
+        case 'wrong-password':
+          message = 'Incorrect password';
           break;
         case 'invalid-email':
-          message = 'Please enter a valid email address.';
+          message = 'Invalid email address';
+          break;
+        case 'user-disabled':
+          message = 'This account has been disabled';
           break;
         default:
-          message = 'An error occurred. Please try again.';
+          message = 'An error occurred. Please try again';
       }
       setState(() {
         _errorMessage = message;
-        _successMessage = null;
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'An error occurred. Please try again.';
-        _successMessage = null;
+        _errorMessage = 'An error occurred. Please try again';
       });
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -76,14 +94,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFBB04C),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -108,7 +118,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'Reset Password',
+                    'Provider Sign In',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -117,7 +127,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                   const SizedBox(height: 10),
                   const Text(
-                    'Enter your email address and we\'ll send you a link to reset your password.',
+                    'Access your provider dashboard',
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.white,
@@ -138,19 +148,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       ),
                     ),
                   
-                  if (_successMessage != null)
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        _successMessage!,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  
                   const SizedBox(height: 20),
                   
                   TextField(
@@ -163,15 +160,55 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         borderSide: BorderSide.none,
                         borderRadius: BorderRadius.all(Radius.circular(8.0)),
                       ),
-                      hintText: 'Enter your email',
+                      hintText: 'Provider Email',
                       prefixIcon: Icon(Icons.email),
                     ),
                   ),
                   
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 20),
+                  
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      fillColor: Colors.white,
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderSide: BorderSide.none,
+                        borderRadius: BorderRadius.all(Radius.circular(8.0)),
+                      ),
+                      hintText: 'Password',
+                      prefixIcon: Icon(Icons.lock),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 10),
+                  
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ForgotPasswordScreen(),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        'Forgot Password?',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
                   
                   ElevatedButton(
-                    onPressed: _isLoading ? null : _resetPassword,
+                    onPressed: _isLoading ? null : _login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: const Color(0xFFFBB04C),
@@ -190,12 +227,41 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           ),
                         )
                       : const Text(
-                          'Send Reset Link',
+                          'Sign In as Provider',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'New provider? ',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const HspRegisterScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Register Here',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

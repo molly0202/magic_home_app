@@ -3,6 +3,8 @@ import '../../widgets/auth_logo_header.dart';
 import '../../widgets/app_logo.dart';
 import '../../services/auth_service.dart';
 import 'phone_verification_screen.dart';
+import 'verify_email_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -55,30 +57,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
     
     try {
-      // Pre-register the user to make sure email is available
-      final temporaryUser = await _authService.register(
-        name: name,
+      // Register the user with Firebase Auth
+      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-      
-      if (!mounted) return;
-      
-      if (temporaryUser != null) {
-        // Navigate to phone verification
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const PhoneVerificationScreen()),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Email is already in use')),
-        );
+      // Optionally update display name
+      await userCredential.user?.updateDisplayName(name);
+      // Send email verification
+      await userCredential.user?.sendEmailVerification();
+      // Navigate to verify email screen
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const VerifyEmailScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      String errorMsg = 'Registration failed: \\${e.message}';
+      if (e.code == 'email-already-in-use') {
+        errorMsg = 'Email is already in use';
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg)),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Registration failed: ${e.toString()}')),
+        SnackBar(content: Text('Registration failed: \\${e.toString()}')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);

@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/home/home_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  print('Initializing Firebase...');
+  await Firebase.initializeApp();
+  print('Firebase initialized successfully');
   runApp(const MagicHomeApp());
 }
 
@@ -24,11 +31,13 @@ class _MagicHomeAppState extends State<MagicHomeApp> {
   @override
   void initState() {
     super.initState();
+    print('MagicHomeApp initState called');
     // Check if user is already signed in
     _checkCurrentUser();
   }
 
   Future<void> _checkCurrentUser() async {
+    print('Checking current user...');
     try {
       _user = await _googleSignIn.signInSilently();
       print('User already signed in: ${_user?.displayName}');
@@ -49,6 +58,7 @@ class _MagicHomeAppState extends State<MagicHomeApp> {
 
   @override
   Widget build(BuildContext context) {
+    print('Building MagicHomeApp');
     return MaterialApp(
       title: 'Magic Home',
       debugShowCheckedModeBanner: false,
@@ -69,7 +79,23 @@ class _MagicHomeAppState extends State<MagicHomeApp> {
           ),
         ),
       ),
-      home: const WelcomeScreen(),
+      home: _isLoading ? const LoadingScreen() : const WelcomeScreen(),
+      onGenerateRoute: (settings) {
+        print('Generating route for: ${settings.name}');
+        if (settings.name == '/home') {
+          final args = settings.arguments as Map<String, dynamic>?;
+          print('Home route args: $args');
+          return MaterialPageRoute(
+            builder: (context) => HomeScreen(
+              firebaseUser: args?['firebaseUser'],
+              googleUser: args?['googleUser'],
+              googleSignIn: args?['googleSignIn'],
+            ),
+          );
+        }
+        // Add other routes as needed
+        return null;
+      },
     );
   }
 }
@@ -106,7 +132,7 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   bool _isSigningIn = false;
   String? _errorMessage;
-  
+
   Future<void> _handleSignIn() async {
     setState(() {
       _isSigningIn = true;
@@ -204,15 +230,15 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 class HomeScreen extends StatefulWidget {
-  final GoogleSignInAccount user;
-  final GoogleSignIn googleSignIn;
-  final Function(GoogleSignInAccount?) onSignOut;
+  final firebase_auth.User? firebaseUser;
+  final GoogleSignInAccount? googleUser;
+  final GoogleSignIn? googleSignIn;
 
   const HomeScreen({
     super.key,
-    required this.user,
-    required this.googleSignIn,
-    required this.onSignOut,
+    this.firebaseUser,
+    this.googleUser,
+    this.googleSignIn,
   });
 
   @override
@@ -224,9 +250,17 @@ class _HomeScreenState extends State<HomeScreen> {
   
   Future<void> _handleSignOut() async {
     try {
-      await widget.googleSignIn.signOut();
-      widget.onSignOut(null);
-      print('Successfully signed out');
+      if (widget.googleSignIn != null) {
+        await widget.googleSignIn!.signOut();
+      }
+      if (widget.firebaseUser != null) {
+        await firebase_auth.FirebaseAuth.instance.signOut();
+      }
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      );
     } catch (error) {
       print('Error signing out: $error');
     }
@@ -236,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Magic Home'),
+        title: Text('Magic Home (${widget.firebaseUser?.email ?? widget.googleUser?.email ?? "No user"})'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -259,19 +293,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   CircleAvatar(
                     radius: 30,
                     backgroundColor: Colors.white,
-                    backgroundImage: widget.user.photoUrl != null 
-                      ? NetworkImage(widget.user.photoUrl!) 
+                    backgroundImage: widget.googleUser?.photoUrl != null 
+                      ? NetworkImage(widget.googleUser!.photoUrl!) 
                       : null,
-                    child: widget.user.photoUrl == null
+                    child: widget.googleUser?.photoUrl == null
                       ? Text(
-                          widget.user.displayName?.substring(0, 1).toUpperCase() ?? '?',
+                          (widget.googleUser?.displayName ?? widget.firebaseUser?.displayName ?? '?').substring(0, 1).toUpperCase(),
                           style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                         )
                       : null,
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    widget.user.displayName ?? 'User',
+                    widget.googleUser?.displayName ?? widget.firebaseUser?.displayName ?? 'User',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -279,20 +313,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   Text(
-                    widget.user.email,
+                    widget.googleUser?.email ?? widget.firebaseUser?.email ?? '',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
                     ),
                   ),
-                  if (_getUserPhoneNumber() != null && _getUserPhoneNumber()!.isNotEmpty)
-                    Text(
-                      _getUserPhoneNumber()!,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -393,17 +419,13 @@ class _HomeScreenState extends State<HomeScreen> {
       case 2:
         return const RoutinesScreen();
       case 3:
-        return SettingsScreen(user: widget.user);
+        return SettingsScreen(
+          firebaseUser: widget.firebaseUser,
+          googleUser: widget.googleUser,
+        );
       default:
         return const DashboardScreen();
     }
-  }
-
-  String? _getUserPhoneNumber() {
-    if (widget.user is MockGoogleSignInAccount) {
-      return (widget.user as MockGoogleSignInAccount).phoneNumber;
-    }
-    return null;
   }
 }
 
@@ -771,7 +793,7 @@ class RoutinesScreen extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Text(
+            Text(
                         schedule,
                         style: const TextStyle(color: Colors.grey),
                       ),
@@ -823,16 +845,10 @@ class RoutinesScreen extends StatelessWidget {
 }
 
 class SettingsScreen extends StatelessWidget {
-  final GoogleSignInAccount user;
+  final GoogleSignInAccount? googleUser;
+  final firebase_auth.User? firebaseUser;
   
-  const SettingsScreen({super.key, required this.user});
-
-  String? _getUserPhoneNumber() {
-    if (user is MockGoogleSignInAccount) {
-      return (user as MockGoogleSignInAccount).phoneNumber;
-    }
-    return null;
-  }
+  const SettingsScreen({super.key, this.googleUser, this.firebaseUser});
 
   @override
   Widget build(BuildContext context) {
@@ -852,18 +868,16 @@ class SettingsScreen extends StatelessWidget {
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(user.email),
-                    if (_getUserPhoneNumber() != null && _getUserPhoneNumber()!.isNotEmpty)
-                      Text('Phone: ${_getUserPhoneNumber()}'),
+                    Text(googleUser?.email ?? firebaseUser?.email ?? ''),
                   ],
                 ),
-                isThreeLine: _getUserPhoneNumber() != null,
+                isThreeLine: false,
                 leading: CircleAvatar(
                   backgroundColor: Colors.grey[200],
-                  backgroundImage: user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
-                  child: user.photoUrl == null
+                  backgroundImage: googleUser?.photoUrl != null ? NetworkImage(googleUser!.photoUrl!) : null,
+                  child: googleUser?.photoUrl == null
                     ? Text(
-                        user.displayName?.substring(0, 1).toUpperCase() ?? '?',
+                        (googleUser?.displayName ?? firebaseUser?.displayName ?? '?').substring(0, 1).toUpperCase(),
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       )
                     : null,

@@ -36,55 +36,38 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
     setState(() => _isLoading = true);
     
     try {
-      // Format the phone number with country code if not already included
-      final formattedPhoneNumber = phoneNumber.startsWith('+') 
-          ? phoneNumber 
-          : '+1$phoneNumber'; // Assuming US by default, adjust as needed
-      
-      // Update the user's phone number in local storage
-      await _authService.updatePhoneNumber(formattedPhoneNumber);
-      
-      // Use Firebase Auth to verify phone number
       await _authService.verifyPhoneNumber(
-        phoneNumber: formattedPhoneNumber,
-        onCodeSent: (verificationId) {
+        phoneNumber: phoneNumber,
+        onCodeSent: (verificationId, resendToken) {
           if (!mounted) return;
-          
-          // Navigate to OTP verification screen
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => OtpVerificationScreen(
-                phoneNumber: formattedPhoneNumber,
+                phoneNumber: phoneNumber,
+                verificationId: verificationId,
               ),
             ),
           );
         },
-        onVerificationFailed: (errorMessage) {
+        onVerificationFailed: (error) {
           if (!mounted) return;
-          
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Verification failed: $errorMessage')),
+            SnackBar(content: Text('Verification failed: ${error.message}')),
           );
         },
-        onVerificationCompleted: () {
-          if (!mounted) return;
-          
-          // In case of auto-verification (Android only)
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Phone verified automatically!')),
-          );
-          
-          // Navigate to next screen
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const ReferralCodeScreen()),
-          );
+        onVerificationCompleted: (credential) async {
+          // Optionally, you can auto-link or sign in here
+          try {
+            await _authService.linkWithPhoneCredential(credential);
+            // Success! Optionally navigate or show a message
+          } catch (e) {
+            // Handle error
+          }
         },
       );
     } catch (e) {
       if (!mounted) return;
-      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to send OTP: ${e.toString()}')),
       );

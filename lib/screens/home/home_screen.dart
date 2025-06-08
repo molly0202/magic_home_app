@@ -1,9 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../services/auth_service.dart';
 import '../../screens/auth/welcome_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final firebase_auth.User? firebaseUser;
+  final GoogleSignInAccount? googleUser;
+  final GoogleSignIn? googleSignIn;
+
+  const HomeScreen({
+    super.key,
+    this.firebaseUser,
+    this.googleUser,
+    this.googleSignIn,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -25,11 +36,20 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  String? get _displayEmail {
+    if (widget.googleUser != null) {
+      return widget.googleUser!.email;
+    } else if (widget.firebaseUser != null) {
+      return widget.firebaseUser!.email;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Magic Home'),
+        title: Text('Magic Home (${_displayEmail ?? "No user"})'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         actions: [

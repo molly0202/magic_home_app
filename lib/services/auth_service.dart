@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 // Remove Firebase imports
 // import 'package:firebase_core/firebase_core.dart';
 // import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
@@ -8,12 +9,14 @@ class User {
   final String name;
   final String email;
   final String phoneNumber;
+  final String role;
   
   User({
     required this.id,
     required this.name,
     required this.email,
     this.phoneNumber = '',
+    this.role = 'user',
   });
   
   // Create a User from a Google Sign In account
@@ -23,6 +26,7 @@ class User {
       name: googleUser.displayName ?? 'User',
       email: googleUser.email ?? '',
       phoneNumber: '',
+      role: 'user',
     );
   }
 }
@@ -34,6 +38,8 @@ void log(String message) {
 }
 
 class AuthService {
+  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+
   // Singleton pattern
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
@@ -112,6 +118,7 @@ class AuthService {
           name: userData['name'],
           email: userData['email'],
           phoneNumber: userData['phoneNumber'] ?? '',
+          role: userData['role'] ?? 'user',
         );
         _userController.add(_currentUser);
         log('Mock login successful for user: ${_currentUser!.name}');
@@ -159,6 +166,7 @@ class AuthService {
         'email': email,
         'password': password,
         'phoneNumber': phoneNumber,
+        'role': 'user',
       };
       
       // Set as current user
@@ -167,6 +175,7 @@ class AuthService {
         name: name,
         email: email,
         phoneNumber: phoneNumber,
+        role: 'user',
       );
       
       _userController.add(_currentUser);
@@ -194,56 +203,44 @@ class AuthService {
     }
   }
   
-  // Verify phone number (mock implementation)
+  // Start phone verification
   Future<void> verifyPhoneNumber({
     required String phoneNumber,
-    required Function(String) onCodeSent,
-    required Function(String) onVerificationFailed,
-    required Function() onVerificationCompleted,
+    required Function(String verificationId, int? resendToken) onCodeSent,
+    required Function(FirebaseAuthException error) onVerificationFailed,
+    required Function(PhoneAuthCredential credential) onVerificationCompleted,
+    int? forceResendingToken,
   }) async {
-    log('Mock phone verification for: $phoneNumber');
-    
-    try {
-      // Simulate network delay
-      await Future.delayed(const Duration(seconds: 1));
-      
-      // Always succeed in mock implementation
-      _verificationId = 'mock_verification_id_${DateTime.now().millisecondsSinceEpoch}';
-      log('Mock verification code sent');
-      onCodeSent(_verificationId!);
-    } catch (e) {
-      log('Mock verification failed: $e');
-      onVerificationFailed(e.toString());
-    }
+    await _firebaseAuth.verifyPhoneNumber(
+      phoneNumber: phoneNumber,
+      timeout: const Duration(seconds: 60),
+      verificationCompleted: onVerificationCompleted,
+      verificationFailed: onVerificationFailed,
+      codeSent: onCodeSent,
+      codeAutoRetrievalTimeout: (String verificationId) {},
+      forceResendingToken: forceResendingToken,
+    );
   }
-  
-  // Verify OTP code (mock implementation)
-  Future<bool> verifyOtpCode(String smsCode) async {
-    log('Verifying mock OTP code');
-    
-    if (_verificationId == null) {
-      log('Verification ID is null, cannot verify OTP');
-      return false;
-    }
-    
-    // Simulate network delay
-    await Future.delayed(const Duration(seconds: 1));
-    
-    // In mock implementation, any 6-digit code is valid
-    bool isValid = smsCode.length == 6 && int.tryParse(smsCode) != null;
-    
-    if (isValid) {
-      log('Mock OTP verification successful');
-      
-      // If we have a current user, update their phone number
-      if (_currentUser != null) {
-        updatePhoneNumber(_currentUser!.phoneNumber);
-      }
-    } else {
-      log('Mock OTP verification failed: invalid code format');
-    }
-    
-    return isValid;
+
+  // Create credential from code
+  PhoneAuthCredential getCredential({
+    required String verificationId,
+    required String smsCode,
+  }) {
+    return PhoneAuthProvider.credential(
+      verificationId: verificationId,
+      smsCode: smsCode,
+    );
+  }
+
+  // Link phone credential to current user
+  Future<void> linkWithPhoneCredential(PhoneAuthCredential credential) async {
+    await _firebaseAuth.currentUser?.linkWithCredential(credential);
+  }
+
+  // Sign in with phone credential (if not already signed in)
+  Future<UserCredential> signInWithPhoneCredential(PhoneAuthCredential credential) async {
+    return await _firebaseAuth.signInWithCredential(credential);
   }
   
   // Update user phone number
@@ -259,6 +256,7 @@ class AuthService {
         name: _currentUser!.name,
         email: _currentUser!.email,
         phoneNumber: phoneNumber,
+        role: _currentUser!.role,
       );
       
       _userController.add(_currentUser);

@@ -98,34 +98,14 @@ class _ReferralCodeScreenState extends State<ReferralCodeScreen> {
                           // Get the current user
                           final user = _authService.currentUser;
                           if (user != null) {
-                            // Create mock Google account to use with HomeScreen
-                            final mockGoogleUser = MockGoogleSignInAccount(
-                              id: user.id,
-                              displayName: user.name,
-                              email: user.email,
-                              phoneNumber: user.phoneNumber,
-                            );
-                            
                             // Navigate to HomeScreen
-                            Navigator.pushAndRemoveUntil(
+                            Navigator.pushNamedAndRemoveUntil(
                               context,
-                              MaterialPageRoute(
-                                builder: (context) => HomeScreen(
-                                  user: mockGoogleUser,
-                                  googleSignIn: GoogleSignIn(
-                                    clientId: '441732602904-ib5itb3on72gkv6qffdjv6g58kgvmpnf.apps.googleusercontent.com',
-                                  ),
-                                  onSignOut: (user) {
-                                    // Handle sign out by returning to the LoginScreen
-                                    Navigator.pushAndRemoveUntil(
-                                      context,
-                                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                                      (route) => false,
-                                    );
-                                  },
-                                ),
-                              ),
+                              '/home',
                               (route) => false,
+                              arguments: {'googleUser': null, 'googleSignIn': GoogleSignIn(
+                                clientId: '441732602904-ib5itb3on72gkv6qffdjv6g58kgvmpnf.apps.googleusercontent.com',
+                              )},
                             );
                           } else {
                             // Fallback - show error
