@@ -7,6 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'hsp_entry_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../home/hsp_home_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -18,6 +20,11 @@ class WelcomeScreen extends StatefulWidget {
 class _WelcomeScreenState extends State<WelcomeScreen> {
   bool _isLoading = false;
   String? _errorMessage;
+
+  Future<String> _generateReferralCode(String uid) async {
+    final random = DateTime.now().millisecondsSinceEpoch % 100;
+    return uid.substring(0, 6).toUpperCase() + random.toString().padLeft(2, '0');
+  }
 
   Future<void> _signInWithGoogle() async {
     setState(() {
@@ -40,10 +47,43 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       );
       final userCredential = await firebase_auth.FirebaseAuth.instance.signInWithCredential(credential);
       if (!mounted) return;
+      final user = userCredential.user;
+      if (user == null) throw Exception('Google sign-in failed: user not found');
+      // Check Firestore for user role
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (userDoc.exists && userDoc.data()?['role'] == 'user') {
+        Navigator.pushReplacementNamed(
+          context,
+          '/home',
+          arguments: {'firebaseUser': user, 'googleUser': googleUser, 'googleSignIn': GoogleSignIn()},
+        );
+        return;
+      }
+      final providerDoc = await FirebaseFirestore.instance.collection('providers').doc(user.uid).get();
+      if (providerDoc.exists && providerDoc.data()?['role'] == 'provider') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => HspHomeScreen(user: user)),
+        );
+        return;
+      }
+      // If not found, create user profile, generate referral code, and prompt for profile setup
+      final referralCode = await _generateReferralCode(user.uid);
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'email': user.email,
+        'role': 'user',
+        'referralCode': referralCode,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => _ProfileSetupDialog(userId: user.uid),
+      );
       Navigator.pushReplacementNamed(
         context,
         '/home',
-        arguments: {'firebaseUser': userCredential.user, 'googleUser': googleUser, 'googleSignIn': GoogleSignIn()},
+        arguments: {'firebaseUser': user, 'googleUser': googleUser, 'googleSignIn': GoogleSignIn()},
       );
     } catch (e) {
       setState(() {
@@ -207,7 +247,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       Icons.g_mobiledata,
                       size: 40,
                       color: Color(0xFFFBB04C),
-                    ),
+                      ),
                     ),
                   ),
                 ),
@@ -234,7 +274,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           Icons.apple,
                           size: 40,
                           color: Color(0xFFFBB04C),
-                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -287,6 +327,81 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// Profile setup dialog widget (copied from register_screen.dart for reuse)
+class _ProfileSetupDialog extends StatefulWidget {
+  final String userId;
+  const _ProfileSetupDialog({required this.userId});
+  @override
+  State<_ProfileSetupDialog> createState() => _ProfileSetupDialogState();
+}
+class _ProfileSetupDialogState extends State<_ProfileSetupDialog> {
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
+  bool _saving = false;
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+  Future<void> _saveProfile() async {
+    final name = _nameController.text.trim();
+    final phone = _phoneController.text.trim();
+    final address = _addressController.text.trim();
+    if (name.isEmpty || phone.isEmpty || address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    await FirebaseFirestore.instance.collection('users').doc(widget.userId).update({
+      'name': name,
+      'phone': phone,
+      'address': address,
+    });
+    if (mounted) Navigator.of(context).pop();
+  }
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Set Up Your Profile'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'Phone'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _addressController,
+              decoration: const InputDecoration(labelText: 'Address'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : _saveProfile,
+          child: _saving
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Save'),
+        ),
+      ],
     );
   }
 } 

@@ -66,12 +66,49 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
       return;
     }
 
+    if (referralCode.isEmpty) {
+      setState(() {
+        _errorMessage = 'Referral code is required';
+      });
+      return;
+    }
+
+    // Validate referral code exists in users collection
+    final referralQuery = await FirebaseFirestore.instance
+        .collection('users')
+        .where('referralCode', isEqualTo: referralCode)
+        .limit(1)
+        .get();
+    if (referralQuery.docs.isEmpty) {
+      setState(() {
+        _errorMessage = 'Invalid referral code. Please enter a code from an existing user.';
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
+      // Check both users and providers collections for email
+      final usersQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: email)
+          .get();
+      final providersQuery = await FirebaseFirestore.instance
+          .collection('providers')
+          .where('email', isEqualTo: email)
+          .get();
+      if (usersQuery.docs.isNotEmpty || providersQuery.docs.isNotEmpty) {
+        setState(() {
+          _errorMessage = 'Email is already in use for another account';
+          _isLoading = false;
+        });
+        return;
+      }
+
       // Create Firebase Auth account
       final userCredential = await firebase_auth.FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
@@ -88,6 +125,7 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
         'status': 'pending_verification', // Status field for admin approval
         'createdAt': FieldValue.serverTimestamp(),
         'verificationStep': 'documents_pending',
+        'role': 'provider',
       });
 
       // Send email verification
@@ -233,6 +271,7 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
                     decoration: const InputDecoration(
                       fillColor: Colors.white,
                       filled: true,
@@ -259,6 +298,7 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
                   TextField(
                     controller: _passwordController,
                     obscureText: !_isPasswordVisible,
+                    autofillHints: const [AutofillHints.newPassword],
                     decoration: InputDecoration(
                       fillColor: Colors.white,
                       filled: true,
@@ -339,7 +379,7 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
                         borderSide: BorderSide.none,
                         borderRadius: BorderRadius.all(Radius.circular(8.0)),
                       ),
-                      hintText: 'Enter referral code (optional)',
+                      hintText: 'Enter referral code',
                     ),
                   ),
                   

@@ -431,21 +431,6 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Referral Code
-            const Text(
-              'Referral Code',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _referralCodeController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Enter referral code (optional)',
-              ),
-            ),
-            const SizedBox(height: 30),
-
             // Document Upload Sections
             _buildFileUploadSection(
               'Government ID (Legal Representative)',

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/app_logo.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import '../home/home_screen.dart';
+import '../home/hsp_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -60,11 +62,37 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       // Navigate to home screen
-      Navigator.pushReplacementNamed(
-        context,
-        '/home',
-        arguments: {'user': userCredential.user},
-      );
+      final user = userCredential.user;
+      if (user == null) {
+        setState(() {
+          _errorMessage = 'Login failed: user not found';
+          _isLoading = false;
+        });
+        return;
+      }
+      // Check Firestore for user role
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (userDoc.exists && userDoc.data()?['role'] == 'user') {
+        Navigator.pushReplacementNamed(
+          context,
+          '/home',
+          arguments: {'firebaseUser': user},
+        );
+        return;
+      }
+      final providerDoc = await FirebaseFirestore.instance.collection('providers').doc(user.uid).get();
+      if (providerDoc.exists && providerDoc.data()?['role'] == 'provider') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => HspHomeScreen(user: user)),
+        );
+        return;
+      }
+      // If not found in either, show error
+      setState(() {
+        _errorMessage = 'Account role not found. Please contact support.';
+        _isLoading = false;
+      });
     } on firebase_auth.FirebaseAuthException catch (e) {
       String message;
       switch (e.code) {
@@ -162,6 +190,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
                     decoration: const InputDecoration(
                       fillColor: Colors.white,
                       filled: true,
@@ -179,6 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _passwordController,
                     obscureText: true,
+                    autofillHints: const [AutofillHints.password],
                     decoration: const InputDecoration(
                       fillColor: Colors.white,
                       filled: true,

@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import 'phone_verification_screen.dart';
 import 'verify_email_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -33,43 +34,77 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  Future<String> _generateReferralCode(String uid) async {
+    // Simple unique code: first 6 of UID + random 2 digits
+    final random = DateTime.now().millisecondsSinceEpoch % 100;
+    return uid.substring(0, 6).toUpperCase() + random.toString().padLeft(2, '0');
+  }
+
   Future<void> _register() async {
-    // Validate inputs
-    final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     final confirmPassword = _confirmPasswordController.text;
     
-    if (name.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
+    if (email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in all fields')),
       );
       return;
     }
-    
     if (password != confirmPassword) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Passwords do not match')),
       );
       return;
     }
-    
     setState(() => _isLoading = true);
-    
     try {
+      // Check both users and providers collections for email
+      final usersQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: email)
+          .get();
+      final providersQuery = await FirebaseFirestore.instance
+          .collection('providers')
+          .where('email', isEqualTo: email)
+          .get();
+      if (usersQuery.docs.isNotEmpty || providersQuery.docs.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Email is already in use for another account')), 
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
       // Register the user with Firebase Auth
       UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-      // Optionally update display name
-      await userCredential.user?.updateDisplayName(name);
-      // Send email verification
-      await userCredential.user?.sendEmailVerification();
-      // Navigate to verify email screen
-      Navigator.pushReplacement(
+      final user = userCredential.user;
+      if (user == null) throw Exception('User creation failed');
+      // Generate unique referral code
+      final referralCode = await _generateReferralCode(user.uid);
+      // Write user profile to Firestore with role 'user' and referral code
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .set({
+        'email': email,
+        'role': 'user',
+        'referralCode': referralCode,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      // Show profile setup dialog
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => _ProfileSetupDialog(userId: user.uid),
+      );
+      // Go to homepage
+      Navigator.pushReplacementNamed(
         context,
-        MaterialPageRoute(builder: (_) => const VerifyEmailScreen()),
+        '/home',
+        arguments: {'firebaseUser': user},
       );
     } on FirebaseAuthException catch (e) {
       String errorMsg = 'Registration failed: \\${e.message}';
@@ -162,6 +197,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
                     decoration: const InputDecoration(
                       fillColor: Colors.white,
                       filled: true,
@@ -186,6 +222,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextField(
                     controller: _passwordController,
                     obscureText: !_isPasswordVisible,
+                    autofillHints: const [AutofillHints.newPassword],
                     decoration: InputDecoration(
                       fillColor: Colors.white,
                       filled: true,
@@ -342,4 +379,79 @@ class WavePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// Profile setup dialog widget
+class _ProfileSetupDialog extends StatefulWidget {
+  final String userId;
+  const _ProfileSetupDialog({required this.userId});
+  @override
+  State<_ProfileSetupDialog> createState() => _ProfileSetupDialogState();
+}
+class _ProfileSetupDialogState extends State<_ProfileSetupDialog> {
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
+  bool _saving = false;
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+  Future<void> _saveProfile() async {
+    final name = _nameController.text.trim();
+    final phone = _phoneController.text.trim();
+    final address = _addressController.text.trim();
+    if (name.isEmpty || phone.isEmpty || address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    await FirebaseFirestore.instance.collection('users').doc(widget.userId).update({
+      'name': name,
+      'phone': phone,
+      'address': address,
+    });
+    if (mounted) Navigator.of(context).pop();
+  }
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Set Up Your Profile'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'Phone'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _addressController,
+              decoration: const InputDecoration(labelText: 'Address'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : _saveProfile,
+          child: _saving
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Save'),
+        ),
+      ],
+    );
+  }
 } 
