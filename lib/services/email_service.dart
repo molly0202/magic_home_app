@@ -370,16 +370,38 @@ Please review the documents and verify the provider's information.
   // Method to handle approval/rejection from admin
   static Future<void> updateProviderStatus(String providerId, String status) async {
     try {
-      await FirebaseFirestore.instance
+      // Get current status first
+      final currentDoc = await FirebaseFirestore.instance
           .collection('providers')
           .doc(providerId)
-          .update({
-        'status': status, // 'active' or 'rejected'
-        'reviewedAt': FieldValue.serverTimestamp(),
-      });
+          .get();
+      
+      if (!currentDoc.exists) {
+        throw Exception('Provider not found');
+      }
+      
+      final currentData = currentDoc.data()!;
+      final currentStatus = currentData['status'] as String?;
+      
+      // Only update if status actually changed
+      if (currentStatus != status) {
+        await FirebaseFirestore.instance
+            .collection('providers')
+            .doc(providerId)
+            .update({
+          'status': status, // 'verified', 'active' or 'rejected'
+          'previousStatus': currentStatus,
+          'statusUpdatedAt': FieldValue.serverTimestamp(),
+          'reviewedAt': FieldValue.serverTimestamp(),
+        });
 
-      // Send notification email to provider (optional)
-      await _sendStatusNotificationToProvider(providerId, status);
+        // Send notification email to provider (optional)
+        await _sendStatusNotificationToProvider(providerId, status);
+        
+        print('Provider status updated via EmailService: $providerId -> $status (from $currentStatus)');
+      } else {
+        print('Provider status unchanged via EmailService: $providerId already has status $status');
+      }
       
     } catch (e) {
       print('Error updating provider status: $e');

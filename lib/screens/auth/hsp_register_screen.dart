@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/app_logo.dart';
 import 'hsp_verification_screen.dart';
+import '../../services/account_merge_service.dart';
 
 class HspRegisterScreen extends StatefulWidget {
   const HspRegisterScreen({super.key});
@@ -66,22 +67,40 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
       return;
     }
 
+    // Validate referral code (required field for providers)
     if (referralCode.isEmpty) {
       setState(() {
-        _errorMessage = 'Referral code is required';
+        _errorMessage = 'Referral code is required for provider registration';
       });
       return;
     }
 
-    // Validate referral code exists in users collection
-    final referralQuery = await FirebaseFirestore.instance
-        .collection('users')
-        .where('referralCode', isEqualTo: referralCode)
-        .limit(1)
-        .get();
-    if (referralQuery.docs.isEmpty) {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    String? referrerUserId;
+    try {
+      final referralQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('referralCode', isEqualTo: referralCode)
+          .limit(1)
+          .get();
+      
+      if (referralQuery.docs.isEmpty) {
+        setState(() {
+          _errorMessage = 'Invalid referral code. Please enter a valid referral code.';
+          _isLoading = false;
+        });
+        return;
+      }
+      
+      referrerUserId = referralQuery.docs.first.id;
+    } catch (e) {
       setState(() {
-        _errorMessage = 'Invalid referral code. Please enter a code from an existing user.';
+        _errorMessage = 'Unable to verify referral code. Please check your connection and try again.';
+        _isLoading = false;
       });
       return;
     }
@@ -92,6 +111,33 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
     });
 
     try {
+      // Check for existing authentication methods
+      final existingAuthMethods = await AccountMergeService.getExistingAuthProviders(email);
+      
+      if (existingAuthMethods.contains('google.com')) {
+        // Google account already exists - offer to link
+        final shouldLink = await AccountMergeService.showAccountLinkDialog(
+          context, 
+          email, 
+          AccountMergeService.getAuthMethodName('google.com'), 
+          AccountMergeService.getAuthMethodName('password')
+        );
+        
+        if (shouldLink) {
+          // User wants to link - they need to sign in with Google first
+          setState(() {
+            _errorMessage = 'Please sign in with Google first, then we\'ll link your provider account';
+            _isLoading = false;
+          });
+          return;
+        } else {
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+      
       // Check both users and providers collections for email
       final usersQuery = await FirebaseFirestore.instance
           .collection('users')
@@ -116,17 +162,34 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
       if (!mounted) return;
 
       // Create provider profile in Firestore
-      await FirebaseFirestore.instance
-          .collection('providers')
-          .doc(userCredential.user!.uid)
-          .set({
+      final providerData = {
         'email': email,
-        'referralCode': referralCode,
         'status': 'pending_verification', // Status field for admin approval
         'createdAt': FieldValue.serverTimestamp(),
         'verificationStep': 'documents_pending',
         'role': 'provider',
-      });
+        'referralCode': referralCode, // Always include referral code (required for providers)
+        'referred_by_user_ids': [referrerUserId!], // referrerUserId is guaranteed to be non-null
+      };
+
+      await FirebaseFirestore.instance
+          .collection('providers')
+          .doc(userCredential.user!.uid)
+          .set(providerData);
+
+      // Update the referrer user's referred_provider_ids
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(referrerUserId!)
+            .update({
+          'referred_provider_ids': FieldValue.arrayUnion([userCredential.user!.uid]),
+        });
+      } catch (e) {
+        // Log error but don't fail registration
+        print('Error updating referrer user: $e');
+        // Continue with registration - referral tracking is not critical
+      }
 
       // Send email verification
       await userCredential.user!.sendEmailVerification();

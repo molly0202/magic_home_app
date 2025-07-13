@@ -4,8 +4,10 @@ import '../../widgets/app_logo.dart';
 import '../../services/auth_service.dart';
 import 'phone_verification_screen.dart';
 import 'verify_email_screen.dart';
+import 'referral_code_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../services/account_merge_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -59,6 +61,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
     setState(() => _isLoading = true);
     try {
+      // Check for existing authentication methods
+      final existingAuthMethods = await AccountMergeService.getExistingAuthProviders(email);
+      
+      if (existingAuthMethods.contains('google.com')) {
+        // Google account already exists - offer to link
+        final shouldLink = await AccountMergeService.showAccountLinkDialog(
+          context, 
+          email, 
+          AccountMergeService.getAuthMethodName('google.com'), 
+          AccountMergeService.getAuthMethodName('password')
+        );
+        
+        if (shouldLink) {
+          // User wants to link - they need to sign in with Google first
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please sign in with Google first, then we\'ll link your email/password')),
+          );
+          setState(() => _isLoading = false);
+          return;
+        } else {
+          setState(() => _isLoading = false);
+          return;
+        }
+      }
+      
       // Check both users and providers collections for email
       final usersQuery = await FirebaseFirestore.instance
           .collection('users')
@@ -75,6 +102,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         setState(() => _isLoading = false);
         return;
       }
+      
       // Register the user with Firebase Auth
       UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
@@ -82,8 +110,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       final user = userCredential.user;
       if (user == null) throw Exception('User creation failed');
+      
       // Generate unique referral code
       final referralCode = await _generateReferralCode(user.uid);
+      
       // Write user profile to Firestore with role 'user' and referral code
       await FirebaseFirestore.instance
           .collection('users')
@@ -94,20 +124,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'referralCode': referralCode,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      // Show profile setup dialog
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => _ProfileSetupDialog(userId: user.uid),
-      );
-      // Go to homepage
-      Navigator.pushReplacementNamed(
+      
+      // Send email verification
+      await user.sendEmailVerification();
+      
+      if (!mounted) return;
+      
+      // Navigate to email verification screen
+      Navigator.pushReplacement(
         context,
-        '/home',
-        arguments: {'firebaseUser': user},
+        MaterialPageRoute(
+          builder: (context) => const VerifyEmailScreen(),
+        ),
       );
     } on FirebaseAuthException catch (e) {
-      String errorMsg = 'Registration failed: \\${e.message}';
+      String errorMsg = 'Registration failed: ${e.message}';
       if (e.code == 'email-already-in-use') {
         errorMsg = 'Email is already in use';
       }
@@ -117,7 +148,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Registration failed: \\${e.toString()}')),
+        SnackBar(content: Text('Registration failed: ${e.toString()}')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);

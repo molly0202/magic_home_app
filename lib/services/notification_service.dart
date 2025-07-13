@@ -18,26 +18,46 @@ class NotificationService {
 
   // Listen for status changes and show notifications
   static void listenForStatusChanges(String providerId, BuildContext context) {
+    String? lastKnownStatus;
+    
     getProviderStatusStream(providerId).listen((snapshot) {
       if (snapshot.exists) {
         final data = snapshot.data() as Map<String, dynamic>;
-        final status = data['status'] as String?;
-        final previousStatus = data['previousStatus'] as String?;
+        final currentStatus = data['status'] as String?;
+        final statusUpdatedAt = data['statusUpdatedAt'] as Timestamp?;
         
-        // Check if status changed to verified/active
-        if (status == 'verified' || status == 'active') {
-          if (previousStatus != 'verified' && previousStatus != 'active') {
+        // Only process if this is a real status change
+        if (currentStatus != null && currentStatus != lastKnownStatus) {
+          // Additional check: only trigger for recent status updates (within last 30 seconds)
+          final now = DateTime.now();
+          final statusUpdateTime = statusUpdatedAt?.toDate();
+          final isRecentStatusUpdate = statusUpdateTime != null && 
+              now.difference(statusUpdateTime).inSeconds <= 30;
+          
+          // Check if status changed to verified/active
+          if ((currentStatus == 'verified' || currentStatus == 'active') && 
+              lastKnownStatus != null && 
+              lastKnownStatus != 'verified' && 
+              lastKnownStatus != 'active' &&
+              isRecentStatusUpdate) {
             _showVerificationSuccessNotification(context, data);
             _sendVerificationEmailToProvider(data);
           }
-        }
-        
-        // Check if status changed to rejected
-        if (status == 'rejected') {
-          if (previousStatus != 'rejected') {
+          
+          // Check if status changed to rejected
+          if (currentStatus == 'rejected' && 
+              lastKnownStatus != null && 
+              lastKnownStatus != 'rejected' &&
+              isRecentStatusUpdate) {
             _showRejectionNotification(context, data);
             _sendRejectionEmailToProvider(data);
           }
+          
+          // Update the last known status
+          lastKnownStatus = currentStatus;
+        } else if (lastKnownStatus == null) {
+          // First time loading - just record the current status without notifications
+          lastKnownStatus = currentStatus;
         }
       }
     });
@@ -325,18 +345,23 @@ Thank you.
       final currentData = currentDoc.data()!;
       final currentStatus = currentData['status'] as String?;
       
-      // Update status with previous status tracking
-      await FirebaseFirestore.instance
-          .collection('providers')
-          .doc(providerId)
-          .update({
-        'status': newStatus,
-        'previousStatus': currentStatus,
-        'statusUpdatedAt': FieldValue.serverTimestamp(),
-        'reviewedBy': 'admin', // In production, use actual admin user ID
-      });
-      
-      print('Provider status updated: $providerId -> $newStatus');
+      // Only update if status actually changed
+      if (currentStatus != newStatus) {
+        // Update status with proper timestamp for notification detection
+        await FirebaseFirestore.instance
+            .collection('providers')
+            .doc(providerId)
+            .update({
+          'status': newStatus,
+          'previousStatus': currentStatus,
+          'statusUpdatedAt': FieldValue.serverTimestamp(),
+          'reviewedBy': 'admin', // In production, use actual admin user ID
+        });
+        
+        print('Provider status updated: $providerId -> $newStatus (from $currentStatus)');
+      } else {
+        print('Provider status unchanged: $providerId already has status $newStatus');
+      }
       
     } catch (e) {
       print('Error updating provider status: $e');

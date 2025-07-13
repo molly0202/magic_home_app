@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../services/auth_service.dart';
 import '../../screens/auth/welcome_screen.dart';
+import '../../screens/ai_task_intake_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
   final firebase_auth.User? firebaseUser;
@@ -25,6 +30,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final AuthService _authService = AuthService();
+  final ImagePicker _picker = ImagePicker();
+  bool _isUpdatingPhoto = false;
   
   String? get _displayName {
     if (widget.googleUser != null) {
@@ -250,63 +257,65 @@ class _HomeScreenState extends State<HomeScreen> {
             flex: 3,
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'sendhelper',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w500,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'sendhelper',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                    const SizedBox(height: 4),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    discount,
-                    style: const TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                    const SizedBox(height: 8),
+                    Text(
+                      discount,
+                      style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    promoText,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w500,
+                    const SizedBox(height: 6),
+                    Text(
+                      promoText,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  Text(
-                    promoCode,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFFBB04C),
+                    Text(
+                      promoCode,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFFBB04C),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    description,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey,
-                      height: 1.2,
+                    const SizedBox(height: 6),
+                    Text(
+                      description,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey,
+                        height: 1.2,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -338,12 +347,12 @@ class _HomeScreenState extends State<HomeScreen> {
         'rating': '⭐⭐⭐⭐⭐',
         'type': 'provider', // provider or user
         'images': [
-          'https://images.unsplash.com/photo-1560472354-8b77cccf8f59?w=400',
-          'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
-          'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400',
+          'https://picsum.photos/400/300?random=1',
+          'https://picsum.photos/400/300?random=2',
+          'https://picsum.photos/400/300?random=3',
         ],
         'review': 'They\'ve really done a great job on my garden!!',
-        'avatar': 'https://images.unsplash.com/photo-1494790108755-2616b612e5e3?w=100',
+        'avatar': 'https://picsum.photos/100/100?random=10',
         'time': '2 hours ago',
       },
       {
@@ -352,11 +361,11 @@ class _HomeScreenState extends State<HomeScreen> {
         'rating': '⭐⭐⭐⭐⭐',
         'type': 'user', // This is a customer post
         'images': [
-          'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400',
-          'https://images.unsplash.com/photo-1600566753151-384129cf4e3e?w=400',
+          'https://picsum.photos/400/300?random=4',
+          'https://picsum.photos/400/300?random=5',
         ],
         'review': 'Amazing cleaning service! My house has never looked better. The team was professional and thorough.',
-        'avatar': 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100',
+        'avatar': 'https://picsum.photos/100/100?random=11',
         'time': '5 hours ago',
       },
       {
@@ -382,7 +391,7 @@ class _HomeScreenState extends State<HomeScreen> {
           'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
         ],
         'review': 'Fantastic landscaping work! They transformed my backyard into a beautiful garden paradise.',
-        'avatar': 'https://images.unsplash.com/photo-1494790108755-2616b612e5e3?w=100',
+        'avatar': 'https://picsum.photos/100/100?random=13',
         'time': '2 days ago',
       },
       {
@@ -404,13 +413,13 @@ class _HomeScreenState extends State<HomeScreen> {
         'rating': '⭐⭐⭐⭐⭐',
         'type': 'user',
         'images': [
-          'https://images.unsplash.com/photo-1571066811602-716837d681de?w=400',
-          'https://images.unsplash.com/photo-1600566753151-384129cf4e3e?w=400',
-          'https://images.unsplash.com/photo-1560472354-8b77cccf8f59?w=400',
-          'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
+          'https://picsum.photos/400/300?random=6',
+          'https://picsum.photos/400/300?random=7',
+          'https://picsum.photos/400/300?random=8',
+          'https://picsum.photos/400/300?random=9',
         ],
         'review': 'Amazing pool cleaning and maintenance service. My pool is crystal clear now! Highly recommended!',
-        'avatar': 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100',
+        'avatar': 'https://picsum.photos/100/100?random=12',
         'time': '1 week ago',
       },
     ];
@@ -714,13 +723,256 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _updateProfilePhoto() async {
+    if (widget.firebaseUser == null) {
+      print('Error: No Firebase user found');
+      return;
+    }
+
+    try {
+      print('Starting profile photo update...');
+      print('User ID: ${widget.firebaseUser!.uid}');
+      print('User email: ${widget.firebaseUser!.email}');
+      print('User auth token: ${await widget.firebaseUser!.getIdToken()}');
+
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 500,
+        maxHeight: 500,
+        imageQuality: 85,
+      );
+
+      if (pickedFile == null) {
+        print('No file selected');
+        return;
+      }
+
+      print('File selected: ${pickedFile.path}');
+      
+      setState(() {
+        _isUpdatingPhoto = true;
+      });
+
+      // Upload to Firebase Storage
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_pictures')
+          .child(widget.firebaseUser!.uid)
+          .child('profile.jpg');
+
+      print('Storage path: profile_pictures/${widget.firebaseUser!.uid}/profile.jpg');
+      
+      final uploadTask = storageRef.putFile(File(pickedFile.path));
+      print('Starting upload...');
+      final snapshot = await uploadTask;
+      print('Upload completed');
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+      print('Download URL obtained: $downloadUrl');
+
+      // Update Firestore document
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.firebaseUser!.uid)
+          .update({
+        'profileImageUrl': downloadUrl,
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile photo updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error updating profile photo: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update profile photo: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingPhoto = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildProfileImage(Map<String, dynamic> data) {
+    final profileImageUrl = data['profileImageUrl'] as String?;
+    final googlePhotoUrl = widget.googleUser?.photoUrl;
+    final firebasePhotoUrl = widget.firebaseUser?.photoURL;
+    
+    print('Building profile image - profileImageUrl: $profileImageUrl, googlePhotoUrl: $googlePhotoUrl, firebasePhotoUrl: $firebasePhotoUrl');
+    
+    return GestureDetector(
+      onTap: _isUpdatingPhoto ? null : _updateProfilePhoto,
+      child: Stack(
+        children: [
+          // Profile image
+          _buildImageWidget(profileImageUrl, googlePhotoUrl, firebasePhotoUrl),
+          // Loading overlay
+          if (_isUpdatingPhoto)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFFBB04C),
+                  ),
+                ),
+              ),
+            ),
+          // Camera icon overlay
+          if (!_isUpdatingPhoto)
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFBB04C),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: const Icon(
+                  Icons.camera_alt,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImageWidget(String? profileImageUrl, String? googlePhotoUrl, String? firebasePhotoUrl) {
+    // Try profile image first
+    if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          profileImageUrl,
+          width: 114,
+          height: 114,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return CircleAvatar(
+              radius: 57,
+              backgroundColor: Colors.grey[200],
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded / 
+                      loadingProgress.expectedTotalBytes!
+                    : null,
+                color: const Color(0xFFFBB04C),
+              ),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            print('Error loading uploaded profile image: $error');
+            // Fall back to Google or Firebase photo if uploaded image fails
+            return _buildFallbackImage(googlePhotoUrl, firebasePhotoUrl);
+          },
+        ),
+      );
+    } 
+    // Try Google photo
+    else if (googlePhotoUrl != null && googlePhotoUrl.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          googlePhotoUrl,
+          width: 114,
+          height: 114,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('Error loading Google profile image: $error');
+            return _buildFallbackImage(firebasePhotoUrl, null);
+          },
+        ),
+      );
+    }
+    // Try Firebase photo
+    else if (firebasePhotoUrl != null && firebasePhotoUrl.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          firebasePhotoUrl,
+          width: 114,
+          height: 114,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('Error loading Firebase profile image: $error');
+            return _buildDefaultAvatar();
+          },
+        ),
+      );
+    } 
+    // Default avatar
+    else {
+      return _buildDefaultAvatar();
+    }
+  }
+
+  Widget _buildFallbackImage(String? primaryUrl, String? secondaryUrl) {
+    if (primaryUrl != null && primaryUrl.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          primaryUrl,
+          width: 114,
+          height: 114,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('Error loading fallback image: $error');
+            if (secondaryUrl != null && secondaryUrl.isNotEmpty) {
+              return ClipOval(
+                child: Image.network(
+                  secondaryUrl,
+                  width: 114,
+                  height: 114,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    print('Error loading secondary fallback image: $error');
+                    return _buildDefaultAvatar();
+                  },
+                ),
+              );
+            } else {
+              return _buildDefaultAvatar();
+            }
+          },
+        ),
+      );
+    } else {
+      return _buildDefaultAvatar();
+    }
+  }
+
+  Widget _buildDefaultAvatar() {
+    return const CircleAvatar(
+      radius: 57,
+      backgroundColor: Colors.grey,
+      child: Icon(Icons.person, size: 60, color: Colors.white),
+    );
+  }
+
   Widget _buildProfileScreen() {
     final user = widget.firebaseUser;
     if (user == null) {
       return const Center(child: Text('No user logged in'));
     }
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -729,6 +981,11 @@ class _HomeScreenState extends State<HomeScreen> {
           return const Center(child: Text('Profile data not found'));
         }
         final data = snapshot.data!.data() as Map<String, dynamic>;
+        
+        // Debug logging
+        print('Profile data: $data');
+        print('profileImageUrl: ${data['profileImageUrl']}');
+        print('Google photo URL: ${widget.googleUser?.photoUrl}');
         
         return Scaffold(
           backgroundColor: Colors.grey[50],
@@ -755,14 +1012,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             width: 3,
                           ),
                         ),
-                        child: CircleAvatar(
-                          radius: 57,
-                          backgroundImage: widget.googleUser?.photoUrl != null 
-                              ? NetworkImage(widget.googleUser!.photoUrl!)
-                              : null,
-                          child: widget.googleUser?.photoUrl == null 
-                              ? const Icon(Icons.person, size: 60, color: Colors.grey)
-                              : null,
+                        child: _buildProfileImage(data),
+                      ),
+                      const SizedBox(height: 8),
+                      // Tap to change text
+                      Text(
+                        'Tap to change photo',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -1235,11 +1494,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onCreateServiceRequest() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _buildServiceRequestModal(),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AITaskIntakeScreen(
+          user: widget.firebaseUser,
+        ),
+      ),
     );
   }
 
@@ -1336,36 +1597,392 @@ class MyConnectionsScreen extends StatefulWidget {
 }
 
 class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
-  final List<Map<String, String>> connections = [
-    {
-      'name': 'Anne',
-      'avatar': 'https://images.unsplash.com/photo-1494790108755-2616b612e5e3?w=100',
-    },
-    {
-      'name': 'Bethany',
-      'avatar': 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100',
-    },
-    {
-      'name': 'Derek',
-      'avatar': 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100',
-    },
-    {
-      'name': 'Dianne',
-      'avatar': 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100',
-    },
-    {
-      'name': 'Emma',
-      'avatar': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100',
-    },
-    {
-      'name': 'Mary',
-      'avatar': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
-    },
-    {
-      'name': 'Penny',
-      'avatar': 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=100',
-    },
-  ];
+  final TextEditingController _referralCodeController = TextEditingController();
+  bool _isLoading = false;
+  bool _showReferralInput = false;
+  Map<String, dynamic>? _pendingConnection;
+  List<Map<String, dynamic>> _connections = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConnections();
+  }
+
+  @override
+  void dispose() {
+    _referralCodeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadConnections() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      // Get current user's data
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      if (!userDoc.exists) return;
+
+      final userData = userDoc.data()!;
+      final referredByUserIds = List<String>.from(userData['referred_by_user_ids'] ?? []);
+      final referredUserIds = List<String>.from(userData['referred_user_ids'] ?? []);
+      final referredProviderIds = List<String>.from(userData['referred_provider_ids'] ?? []);
+
+      List<Map<String, dynamic>> connections = [];
+
+      // Add users who referred this user
+      for (String userId in referredByUserIds) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
+        if (userDoc.exists) {
+          final data = userDoc.data()!;
+          connections.add({
+            'id': userId,
+            'name': data['name'] ?? 'User',
+            'email': data['email'] ?? '',
+            'avatar': data['profileImageUrl'] ?? 'https://picsum.photos/100/100?random=${userId.hashCode}',
+            'type': 'user',
+            'relationship': 'referred_by',
+            'referralCode': data['referralCode'] ?? '',
+          });
+        }
+      }
+
+      // Add users referred by this user
+      for (String userId in referredUserIds) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
+        if (userDoc.exists) {
+          final data = userDoc.data()!;
+          connections.add({
+            'id': userId,
+            'name': data['name'] ?? 'User',
+            'email': data['email'] ?? '',
+            'avatar': data['profileImageUrl'] ?? 'https://picsum.photos/100/100?random=${userId.hashCode}',
+            'type': 'user',
+            'relationship': 'referred_user',
+            'referralCode': data['referralCode'] ?? '',
+          });
+        }
+      }
+
+      // Add providers referred by this user
+      for (String providerId in referredProviderIds) {
+        final providerDoc = await FirebaseFirestore.instance
+            .collection('providers')
+            .doc(providerId)
+            .get();
+        if (providerDoc.exists) {
+          final data = providerDoc.data()!;
+          connections.add({
+            'id': providerId,
+            'name': data['companyName'] ?? data['legalRepresentativeName'] ?? 'Provider',
+            'email': data['email'] ?? '',
+            'avatar': data['profileImageUrl'] ?? 'https://picsum.photos/100/100?random=${providerId.hashCode}',
+            'type': 'provider',
+            'relationship': 'referred_provider',
+            'referralCode': data['referralCode'] ?? '',
+          });
+        }
+      }
+
+      setState(() {
+        _connections = connections;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading connections: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _lookupReferralCode() async {
+    final referralCode = _referralCodeController.text.trim();
+    if (referralCode.isEmpty) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Check in users collection
+      final usersQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('referralCode', isEqualTo: referralCode)
+          .limit(1)
+          .get();
+
+      if (usersQuery.docs.isNotEmpty) {
+        final doc = usersQuery.docs.first;
+        final data = doc.data();
+        setState(() {
+          _pendingConnection = {
+            'id': doc.id,
+            'name': data['name'] ?? 'User',
+            'email': data['email'] ?? '',
+            'avatar': data['profileImageUrl'] ?? 'https://picsum.photos/100/100?random=${doc.id.hashCode}',
+            'type': 'user',
+            'referralCode': referralCode,
+          };
+          _showReferralInput = false;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Check in providers collection
+      final providersQuery = await FirebaseFirestore.instance
+          .collection('providers')
+          .where('referralCode', isEqualTo: referralCode)
+          .limit(1)
+          .get();
+
+      if (providersQuery.docs.isNotEmpty) {
+        final doc = providersQuery.docs.first;
+        final data = doc.data();
+        setState(() {
+          _pendingConnection = {
+            'id': doc.id,
+            'name': data['companyName'] ?? data['legalRepresentativeName'] ?? 'Provider',
+            'email': data['email'] ?? '',
+            'avatar': data['profileImageUrl'] ?? 'https://picsum.photos/100/100?random=${doc.id.hashCode}',
+            'type': 'provider',
+            'referralCode': referralCode,
+          };
+          _showReferralInput = false;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Not found
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Referral code not found. Please check and try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error looking up referral code: $e');
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error looking up referral code. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmConnection() async {
+    if (_pendingConnection == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      final connectionId = _pendingConnection!['id'];
+      final connectionType = _pendingConnection!['type'];
+
+      // Create bidirectional relationship
+      final batch = FirebaseFirestore.instance.batch();
+
+      if (connectionType == 'user') {
+        // Add connection to current user's referred_by_user_ids
+        batch.update(
+          FirebaseFirestore.instance.collection('users').doc(currentUser.uid),
+          {
+            'referred_by_user_ids': FieldValue.arrayUnion([connectionId]),
+          },
+        );
+
+        // Add current user to connection's referred_user_ids
+        batch.update(
+          FirebaseFirestore.instance.collection('users').doc(connectionId),
+          {
+            'referred_user_ids': FieldValue.arrayUnion([currentUser.uid]),
+          },
+        );
+      } else {
+        // For providers, add to current user's referred_provider_ids
+        batch.update(
+          FirebaseFirestore.instance.collection('users').doc(currentUser.uid),
+          {
+            'referred_provider_ids': FieldValue.arrayUnion([connectionId]),
+          },
+        );
+
+        // Add current user to provider's referred_by_user_ids
+        batch.update(
+          FirebaseFirestore.instance.collection('providers').doc(connectionId),
+          {
+            'referred_by_user_ids': FieldValue.arrayUnion([currentUser.uid]),
+          },
+        );
+      }
+
+      await batch.commit();
+
+      setState(() {
+        _pendingConnection = null;
+        _referralCodeController.clear();
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Connection added successfully!'),
+            backgroundColor: Color(0xFFFBB04C),
+          ),
+        );
+      }
+
+      // Reload connections
+      _loadConnections();
+    } catch (e) {
+      print('Error confirming connection: $e');
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error adding connection. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteConnection(Map<String, dynamic> connection) async {
+    setState(() => _isLoading = true);
+
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      final connectionId = connection['id'];
+      final connectionType = connection['type'];
+      final relationship = connection['relationship'];
+
+      final batch = FirebaseFirestore.instance.batch();
+
+      if (connectionType == 'user') {
+        if (relationship == 'referred_by') {
+          // Remove from current user's referred_by_user_ids
+          batch.update(
+            FirebaseFirestore.instance.collection('users').doc(currentUser.uid),
+            {
+              'referred_by_user_ids': FieldValue.arrayRemove([connectionId]),
+            },
+          );
+          // Remove from other user's referred_user_ids
+          batch.update(
+            FirebaseFirestore.instance.collection('users').doc(connectionId),
+            {
+              'referred_user_ids': FieldValue.arrayRemove([currentUser.uid]),
+            },
+          );
+        } else if (relationship == 'referred_user') {
+          // Remove from current user's referred_user_ids
+          batch.update(
+            FirebaseFirestore.instance.collection('users').doc(currentUser.uid),
+            {
+              'referred_user_ids': FieldValue.arrayRemove([connectionId]),
+            },
+          );
+          // Remove from other user's referred_by_user_ids
+          batch.update(
+            FirebaseFirestore.instance.collection('users').doc(connectionId),
+            {
+              'referred_by_user_ids': FieldValue.arrayRemove([currentUser.uid]),
+            },
+          );
+        }
+      } else if (connectionType == 'provider') {
+        // Remove from current user's referred_provider_ids
+        batch.update(
+          FirebaseFirestore.instance.collection('users').doc(currentUser.uid),
+          {
+            'referred_provider_ids': FieldValue.arrayRemove([connectionId]),
+          },
+        );
+        // Remove from provider's referred_by_user_ids
+        batch.update(
+          FirebaseFirestore.instance.collection('providers').doc(connectionId),
+          {
+            'referred_by_user_ids': FieldValue.arrayRemove([currentUser.uid]),
+          },
+        );
+      }
+
+      await batch.commit();
+
+      setState(() => _isLoading = false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${connection['name']} removed from connections'),
+            backgroundColor: Color(0xFFFBB04C),
+          ),
+        );
+      }
+
+      // Reload connections
+      _loadConnections();
+    } catch (e) {
+      print('Error deleting connection: $e');
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error removing connection. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showDeleteDialog(Map<String, dynamic> connection) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Connection'),
+        content: Text('Are you sure you want to remove ${connection['name']} from your connections?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteConnection(connection);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1390,109 +2007,300 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
           IconButton(
             icon: const Icon(Icons.add, color: Color(0xFFFBB04C)),
             onPressed: () {
-              // Add new connection functionality
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Add connection feature coming soon!')),
-              );
+              setState(() {
+                _showReferralInput = true;
+                _pendingConnection = null;
+              });
             },
           ),
         ],
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: connections.length,
-        itemBuilder: (context, index) {
-          final connection = connections[index];
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              leading: CircleAvatar(
-                radius: 24,
-                backgroundImage: NetworkImage(connection['avatar']!),
-              ),
-              title: Text(
-                connection['name']!,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.message_outlined, color: Color(0xFFFBB04C)),
-                    onPressed: () {
-                      // Message functionality
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Message ${connection['name']} feature coming soon!')),
-                      );
-                    },
-                  ),
-                  PopupMenuButton(
-                    icon: const Icon(Icons.more_vert, color: Colors.grey),
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.delete_outline, color: Colors.red),
-                            const SizedBox(width: 8),
-                            Text('Delete', style: TextStyle(color: Colors.red[700])),
-                          ],
-                        ),
+                  // Existing connections
+                  if (_connections.isNotEmpty) ...[
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _connections.length,
+                      itemBuilder: (context, index) {
+                        final connection = _connections[index];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            leading: CircleAvatar(
+                              radius: 24,
+                              backgroundImage: NetworkImage(connection['avatar']!),
+                            ),
+                            title: Text(
+                              connection['name']!,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  connection['type'] == 'user' ? 'User' : 'Provider',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: connection['type'] == 'user' ? Colors.blue : Colors.green,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  connection['relationship'] == 'referred_by' 
+                                      ? 'You were referred by this person'
+                                      : 'You referred this person',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            trailing: PopupMenuButton(
+                              icon: const Icon(Icons.more_vert, color: Colors.grey),
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.delete_outline, color: Colors.red),
+                                      const SizedBox(width: 8),
+                                      Text('Delete', style: TextStyle(color: Colors.red[700])),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              onSelected: (value) {
+                                if (value == 'delete') {
+                                  _showDeleteDialog(connection);
+                                }
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                  
+                  // Add referral code section
+                  if (_showReferralInput) ...[
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ],
-                    onSelected: (value) {
-                      if (value == 'delete') {
-                        _showDeleteDialog(connection['name']!);
-                      }
-                    },
-                  ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'Enter Referral Code',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          TextField(
+                            controller: _referralCodeController,
+                            decoration: const InputDecoration(
+                              hintText: 'Enter referral code',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(12)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(12)),
+                                borderSide: BorderSide(color: Color(0xFFFBB04C), width: 2),
+                              ),
+                            ),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton(
+                            onPressed: _lookupReferralCode,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFBB04C),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Next',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
+                  // Pending connection confirmation
+                  if (_pendingConnection != null) ...[
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'You\'re Adding',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          Center(
+                            child: Column(
+                              children: [
+                                CircleAvatar(
+                                  radius: 40,
+                                  backgroundImage: NetworkImage(_pendingConnection!['avatar']!),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _pendingConnection!['name']!,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _pendingConnection!['type'] == 'user' ? 'User' : 'Provider',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _pendingConnection!['type'] == 'user' ? Colors.blue : Colors.green,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: _confirmConnection,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFBB04C),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Confirm',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
+                  // Empty state
+                  if (_connections.isEmpty && !_showReferralInput && _pendingConnection == null) ...[
+                    const SizedBox(height: 40),
+                    Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.people_outline,
+                            size: 64,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No connections yet',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Add connections using referral codes',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _showReferralInput = true;
+                              });
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Connection'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFBB04C),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showDeleteDialog(String name) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Connection'),
-        content: Text('Are you sure you want to remove $name from your connections?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('$name removed from connections')),
-              );
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
   }
 }

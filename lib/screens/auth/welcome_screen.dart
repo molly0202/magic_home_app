@@ -3,12 +3,14 @@ import '../../widgets/auth_logo_header.dart';
 import '../../widgets/logo_with_text.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
+import 'referral_code_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'hsp_entry_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../home/hsp_home_screen.dart';
+import '../../services/account_merge_service.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -40,6 +42,61 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         });
         return;
       }
+
+      final String email = googleUser.email;
+      
+      // Check if there's an existing account with this email
+      final existingAuthMethods = await AccountMergeService.getExistingAuthProviders(email);
+      
+      if (existingAuthMethods.contains('password')) {
+        // Email/password account already exists - offer to link
+        final shouldLink = await AccountMergeService.showAccountLinkDialog(
+          context, 
+          email, 
+          AccountMergeService.getAuthMethodName('password'), 
+          AccountMergeService.getAuthMethodName('google.com')
+        );
+        
+        if (shouldLink) {
+          // Ask for password to link accounts
+          final password = await AccountMergeService.showPasswordDialog(context, email);
+          if (password != null) {
+            final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+            final googleCredential = firebase_auth.GoogleAuthProvider.credential(
+              accessToken: googleAuth.accessToken,
+              idToken: googleAuth.idToken,
+            );
+            
+            final linkedCredential = await AccountMergeService.linkGoogleToExistingAccount(
+              email, 
+              password, 
+              googleCredential
+            );
+            
+            if (linkedCredential != null) {
+              await _handleSuccessfulSignIn(linkedCredential.user!, googleUser);
+              return;
+            } else {
+              setState(() {
+                _errorMessage = 'Failed to link accounts. Please check your password.';
+              });
+              return;
+            }
+          } else {
+            setState(() {
+              _isLoading = false;
+            });
+            return;
+          }
+        } else {
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+      
+      // Normal Google sign-in flow
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final credential = firebase_auth.GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
@@ -49,42 +106,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       if (!mounted) return;
       final user = userCredential.user;
       if (user == null) throw Exception('Google sign-in failed: user not found');
-      // Check Firestore for user role
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      if (userDoc.exists && userDoc.data()?['role'] == 'user') {
-        Navigator.pushReplacementNamed(
-          context,
-          '/home',
-          arguments: {'firebaseUser': user, 'googleUser': googleUser, 'googleSignIn': GoogleSignIn()},
-        );
-        return;
-      }
-      final providerDoc = await FirebaseFirestore.instance.collection('providers').doc(user.uid).get();
-      if (providerDoc.exists && providerDoc.data()?['role'] == 'provider') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => HspHomeScreen(user: user)),
-        );
-        return;
-      }
-      // If not found, create user profile, generate referral code, and prompt for profile setup
-      final referralCode = await _generateReferralCode(user.uid);
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'email': user.email,
-        'role': 'user',
-        'referralCode': referralCode,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => _ProfileSetupDialog(userId: user.uid),
-      );
-      Navigator.pushReplacementNamed(
-        context,
-        '/home',
-        arguments: {'firebaseUser': user, 'googleUser': googleUser, 'googleSignIn': GoogleSignIn()},
-      );
+      
+      await _handleSuccessfulSignIn(user, googleUser);
+      
     } catch (e) {
       setState(() {
         _errorMessage = 'Google sign-in failed: $e';
@@ -94,6 +118,41 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _handleSuccessfulSignIn(firebase_auth.User user, GoogleSignInAccount googleUser) async {
+    // Check Firestore for user role
+    final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    if (userDoc.exists && userDoc.data()?['role'] == 'user') {
+      Navigator.pushReplacementNamed(
+        context,
+        '/home',
+        arguments: {'firebaseUser': user, 'googleUser': googleUser, 'googleSignIn': GoogleSignIn()},
+      );
+      return;
+    }
+    final providerDoc = await FirebaseFirestore.instance.collection('providers').doc(user.uid).get();
+    if (providerDoc.exists && providerDoc.data()?['role'] == 'provider') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => HspHomeScreen(user: user)),
+      );
+      return;
+    }
+    // If not found, create user profile, generate referral code, and navigate to referral code screen
+    final referralCode = await _generateReferralCode(user.uid);
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      'email': user.email,
+      'role': 'user',
+      'referralCode': referralCode,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ReferralCodeScreen(),
+      ),
+    );
   }
 
   Future<void> _signInWithApple() async {

@@ -43,10 +43,13 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.2
   flutter_svg: ^2.1.0
-  google_sign_in: ^6.1.4
+  google_sign_in: ^6.2.1  # Updated to latest version for Xcode 16 compatibility
   sign_in_with_apple: ^7.0.1
   firebase_messaging: ^15.2.7
   intl: ^0.20.2
+  shared_preferences: ^2.2.2
+  table_calendar: ^3.0.9
+  speech_to_text: ^7.1.1
   
   # Firebase - temporarily disable Auth
   # firebase_auth: ^4.10.0

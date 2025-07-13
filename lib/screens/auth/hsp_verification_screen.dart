@@ -26,7 +26,6 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
   final TextEditingController _legalRepNameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
-  final TextEditingController _referralCodeController = TextEditingController();
   
   bool _backgroundCheckConsent = false;
   bool _isLoading = false;
@@ -44,7 +43,6 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
     _legalRepNameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
-    _referralCodeController.dispose();
     super.dispose();
   }
 
@@ -198,7 +196,6 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
           'legalRepresentativeName': _legalRepNameController.text.trim(),
           'phoneNumber': _phoneController.text.trim(),
           'address': _addressController.text.trim(),
-          'referralCode': _referralCodeController.text.trim(),
         },
         documentFiles: {
           'governmentId': _governmentIdFile!,
@@ -220,7 +217,6 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
         'legalRepresentativeName': _legalRepNameController.text.trim(),
         'phoneNumber': _phoneController.text.trim(),
         'address': _addressController.text.trim(),
-        'referralCode': _referralCodeController.text.trim(),
         'backgroundCheckConsent': _backgroundCheckConsent,
         'verificationStep': 'documents_submitted',
         'status': 'under_review', // Set status for admin review

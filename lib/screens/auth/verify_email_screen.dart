@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'referral_code_screen.dart';
 
 class VerifyEmailScreen extends StatefulWidget {
   const VerifyEmailScreen({Key? key}) : super(key: key);
@@ -25,10 +26,11 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     });
     if (_isVerified && user != null) {
       if (!mounted) return;
-      Navigator.pushReplacementNamed(
+      Navigator.pushReplacement(
         context,
-        '/home',
-        arguments: {'firebaseUser': user},
+        MaterialPageRoute(
+          builder: (context) => const ReferralCodeScreen(),
+        ),
       );
     }
   }

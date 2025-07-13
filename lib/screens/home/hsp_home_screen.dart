@@ -10,6 +10,7 @@ import '../../models/service_order.dart';
 import '../../models/service_request.dart';
 import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HspHomeScreen extends StatefulWidget {
   final firebase_auth.User user;
@@ -24,6 +25,9 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
   int _selectedIndex = 0;
   ProviderStats? _providerStats;
   bool _statusPanelMinimized = false;
+  bool _isAcceptingNewTasks = false;
+  String _currentAddress = 'Lynnwood, WA 98036';
+  String? _dismissedStatusPanelForStatus;
 
   @override
   void initState() {
@@ -34,6 +38,10 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     NotificationService.initializePushNotifications(widget.user.uid);
     // Load provider stats
     _loadProviderStats();
+    // Load provider settings
+    _loadProviderSettings();
+    // Load status panel dismissal state
+    _loadStatusPanelDismissalState();
   }
 
   Future<void> _loadProviderStats() async {
@@ -41,6 +49,188 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     setState(() {
       _providerStats = stats;
     });
+  }
+
+  Future<void> _loadProviderSettings() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('providers')
+          .doc(widget.user.uid)
+          .get();
+      
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _isAcceptingNewTasks = data['acceptingNewTasks'] ?? false;
+          _currentAddress = data['address'] ?? 'Lynnwood, WA 98036';
+        });
+      }
+    } catch (e) {
+      print('Error loading provider settings: $e');
+    }
+  }
+
+  Future<void> _loadStatusPanelDismissalState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'dismissed_status_panel_${widget.user.uid}';
+      final dismissedStatus = prefs.getString(key);
+      setState(() {
+        _dismissedStatusPanelForStatus = dismissedStatus;
+      });
+    } catch (e) {
+      print('Error loading status panel dismissal state: $e');
+    }
+  }
+
+  Future<void> _saveStatusPanelDismissalState(String status) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'dismissed_status_panel_${widget.user.uid}';
+      await prefs.setString(key, status);
+      setState(() {
+        _dismissedStatusPanelForStatus = status;
+      });
+    } catch (e) {
+      print('Error saving status panel dismissal state: $e');
+    }
+  }
+
+  Future<void> _toggleNewTasksStatus() async {
+    try {
+      final newStatus = !_isAcceptingNewTasks;
+      
+      await FirebaseFirestore.instance
+          .collection('providers')
+          .doc(widget.user.uid)
+          .update({
+        'acceptingNewTasks': newStatus,
+        'lastStatusUpdate': FieldValue.serverTimestamp(),
+      });
+      
+      setState(() {
+        _isAcceptingNewTasks = newStatus;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              newStatus 
+                ? 'You are now accepting new tasks' 
+                : 'You are no longer accepting new tasks'
+            ),
+            backgroundColor: const Color(0xFFFBB04C),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error updating task status: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update status. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateProviderAddress() async {
+    final addressController = TextEditingController(text: _currentAddress);
+    
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Update Your Address'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+        children: [
+            const Text(
+              'Enter your service area address:',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: addressController,
+              decoration: const InputDecoration(
+                labelText: 'Address',
+                border: OutlineInputBorder(),
+                helperText: 'This will be shown to customers',
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: () async {
+                // Here you could add location services to get current location
+                // For now, we'll use a default location
+                addressController.text = 'Lynnwood, WA 98036';
+              },
+              icon: const Icon(Icons.my_location),
+              label: const Text('Use Current Location'),
+            ),
+        ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newAddress = addressController.text.trim();
+              if (newAddress.isNotEmpty) {
+                Navigator.pop(context, newAddress);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFBB04C),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+    
+    if (result != null && result != _currentAddress) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('providers')
+            .doc(widget.user.uid)
+            .update({
+          'address': result,
+          'lastAddressUpdate': FieldValue.serverTimestamp(),
+        });
+        
+        setState(() {
+          _currentAddress = result;
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Address updated successfully'),
+              backgroundColor: Color(0xFFFBB04C),
+            ),
+          );
+        }
+      } catch (e) {
+        print('Error updating address: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to update address. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+    
+    addressController.dispose();
   }
 
   void _navigateToVerification() {
@@ -115,7 +305,13 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                               verificationStep == 'documents_pending') &&
                               status != 'verified' && status != 'active';
 
-    // Minimize panel if status is verified and user has seen it
+    // Completely hide panel if user has dismissed it for this status
+    if ((status == 'verified' || status == 'active') && 
+        _dismissedStatusPanelForStatus == status) {
+      return const SizedBox.shrink(); // Completely hidden
+    }
+
+    // Legacy minimized state (for backwards compatibility during this session)
     if ((status == 'verified' || status == 'active') && _statusPanelMinimized) {
       return GestureDetector(
         onTap: () {
@@ -148,8 +344,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             Row(
               children: [
                 Icon(
@@ -171,9 +367,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () {
-                      setState(() {
-                        _statusPanelMinimized = true;
-                      });
+                      _saveStatusPanelDismissalState(status!);
                     },
                   ),
               ],
@@ -213,7 +407,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             ),
             const SizedBox(height: 16),
             _buildStatusDescription(providerData),
-          ],
+        ],
         ),
       ),
     );
@@ -225,8 +419,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     switch (status) {
       case 'pending_verification':
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             const Text(
               'Complete your document submission to start taking new task requests.',
               style: TextStyle(fontSize: 16, color: Colors.grey),
@@ -252,13 +446,13 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 fontWeight: FontWeight.w500,
               ),
             ),
-          ],
+        ],
         );
       
       case 'under_review':
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             const Text(
               'Your application is currently being reviewed by our team.',
               style: TextStyle(fontSize: 16, color: Colors.grey),
@@ -275,13 +469,13 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               '• Approval typically takes 1-2 business days',
               style: TextStyle(color: Colors.grey),
             ),
-          ],
+        ],
         );
       case 'verified':
       case 'active':
         return const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             Text(
               '🎉 Congratulations! Your account is now verified.',
               style: TextStyle(fontSize: 16, color: Colors.green),
@@ -298,13 +492,13 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               '• Build your reputation with reviews',
               style: TextStyle(color: Colors.grey),
             ),
-          ],
+        ],
         );
       
       case 'rejected':
         return const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             Text(
               'Unfortunately, we cannot approve your application at this time.',
               style: TextStyle(fontSize: 16, color: Colors.red),
@@ -314,12 +508,12 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               'Please contact our support team for more information.',
               style: TextStyle(color: Colors.grey),
             ),
-          ],
+        ],
         );
       default:
         return const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             Text(
               'Complete your verification to start receiving service requests.',
               style: TextStyle(fontSize: 16, color: Colors.grey),
@@ -333,7 +527,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 fontStyle: FontStyle.italic,
               ),
             ),
-          ],
+        ],
         );
     }
   }
@@ -347,8 +541,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
   List<Widget> _getScreens(Map<String, dynamic>? providerData) {
     return [
       _buildDashboard(providerData),
-      _buildServices(),
-      _buildBookings(),
+      _buildDiscover(),
+      _buildMyTasks(),
       _buildProfile(),
     ];
   }
@@ -356,76 +550,227 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
   Widget _buildDashboard(Map<String, dynamic>? providerData) {
     final isVerified = providerData?['status'] == 'verified' || providerData?['status'] == 'active';
     
-    return SingleChildScrollView(
+    return SafeArea(
       child: Column(
         children: [
-          _buildStatusCard(providerData),
-          if (isVerified) ...[
-            _buildStatsDashboard(),
-            _buildUpcomingTasks(),
-            _buildPendingRequests(),
-          ],
+          // Header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFBB04C),
+            ),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: _updateProviderAddress,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_on, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Text(
+                        _currentAddress,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.edit, color: Colors.white70, size: 16),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: _toggleNewTasksStatus,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _isAcceptingNewTasks 
+                          ? Colors.green.withOpacity(0.2)
+                          : Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(
+                        color: _isAcceptingNewTasks 
+                            ? Colors.green.withOpacity(0.5)
+                            : Colors.white.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'New Tasks',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 40,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: _isAcceptingNewTasks ? Colors.green : Colors.grey,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: AnimatedAlign(
+                            duration: const Duration(milliseconds: 200),
+                            alignment: _isAcceptingNewTasks 
+                                ? Alignment.centerRight 
+                                : Alignment.centerLeft,
+                            child: Container(
+                              width: 16,
+                              height: 16,
+                              margin: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  _buildStatusCard(providerData),
+                  if (isVerified) ...[
+                    _buildStatsDashboard(),
+                    _buildUpcomingTasks(),
+                    _buildPendingRequests(),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildStatsDashboard() {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionHeader('My Stats', Icons.analytics),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'My Stats',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFFFBB04C),
+            ),
+          ),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    'Total Tasks',
-                    '${_providerStats?.totalTasks ?? 0}',
-                    Colors.blue,
-                    Icons.work,
-                  ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      '${_providerStats?.tasksThisMonth ?? 3}',
+                      style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFFBB04C),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'This Month',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'This Month',
-                    '${_providerStats?.tasksThisMonth ?? 0}',
-                    Colors.green,
-                    Icons.calendar_today,
-                  ),
+              ),
+              Container(
+                width: 1,
+                height: 60,
+                color: Colors.grey[300],
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      '${_providerStats?.totalTasks ?? 12}',
+                      style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFFBB04C),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Total Tasks',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    'Total Earnings',
-                    '\$${(_providerStats?.totalEarned ?? 0.0).toStringAsFixed(0)}',
-                    Colors.orange,
-                    Icons.attach_money,
-                  ),
+              ),
+              Container(
+                width: 1,
+                height: 60,
+                color: Colors.grey[300],
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      '\$${(_providerStats?.totalEarned ?? 3402.0).toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFFBB04C),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Earned',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'Collected',
-                    '0',
-                    Colors.purple,
-                    Icons.bookmark,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -441,7 +786,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
       child: Column(
         children: [
           Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
+            const SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
@@ -450,7 +795,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               color: color,
             ),
           ),
-          const SizedBox(height: 4),
+            const SizedBox(height: 4),
           Text(
             title,
             style: TextStyle(
@@ -466,15 +811,31 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
   }
 
   Widget _buildUpcomingTasks() {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionHeader('Upcoming Tasks', Icons.schedule),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+            const Text(
+              'Upcoming Task',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFFBB04C),
+              ),
+            ),
             const SizedBox(height: 16),
             StreamBuilder<List<ServiceOrder>>(
               stream: HspHomeService.getUpcomingTasks(widget.user.uid),
@@ -536,8 +897,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 );
               },
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -582,7 +942,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+            const SizedBox(height: 8),
           Row(
             children: [
               Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
@@ -605,7 +965,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+            const SizedBox(height: 4),
           Row(
             children: [
               Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
@@ -623,44 +983,53 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               ),
             ],
           ),
-          if (task.status == 'confirmed') ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _updateTaskStatus(task.orderId, 'in_progress'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                    child: const Text('Start Task'),
-                  ),
-                ),
-              ],
-            ),
-          ] else if (task.status == 'in_progress') ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _updateTaskStatus(task.orderId, 'completed'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                    child: const Text('Mark Complete'),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ..._buildTaskStatusWidgets(task),
         ],
       ),
     );
+  }
+
+  List<Widget> _buildTaskStatusWidgets(ServiceOrder task) {
+    if (task.status == 'confirmed') {
+      return [
+        const SizedBox(height: 12),
+        Row(
+        children: [
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () => _updateTaskStatus(task.orderId, 'in_progress'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+                child: const Text('Start Task'),
+              ),
+            ),
+        ],
+        ),
+      ];
+    } else if (task.status == 'in_progress') {
+      return [
+        const SizedBox(height: 12),
+        Row(
+        children: [
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () => _updateTaskStatus(task.orderId, 'completed'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+                child: const Text('Mark Complete'),
+              ),
+            ),
+        ],
+        ),
+      ];
+    }
+    return [];
   }
 
   Future<void> _updateTaskStatus(String orderId, String newStatus) async {
@@ -679,15 +1048,31 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
   }
 
   Widget _buildPendingRequests() {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionHeader('Pending Requests', Icons.pending_actions),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Pending Request',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFFFBB04C),
+            ),
+          ),
             const SizedBox(height: 16),
             StreamBuilder<List<ServiceRequest>>(
               stream: HspHomeService.getPendingRequests(widget.user.uid),
@@ -697,7 +1082,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 }
                 
                 if (snapshot.hasError) {
-                  debugPrint('Firestore error: \\${snapshot.error}');
+                  debugPrint('Firestore error: ${snapshot.error}');
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -749,8 +1134,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 );
               },
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -774,8 +1158,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
           border: Border.all(color: Colors.orange[200]!),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             Row(
               children: [
                 Expanded(
@@ -875,7 +1259,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 ),
               ],
             ),
-          ],
+        ],
         ),
       ),
     );
@@ -1108,55 +1492,1066 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     return '$dateText at $timeText';
   }
 
-  Widget _buildServices() {
-    return const Center(
-      child: Text(
-        'Services',
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+  Widget _buildDiscover() {
+    return SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+        children: [
+            // Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: const BoxDecoration(
+                color: Color(0xFFFBB04C),
+              ),
+              child: GestureDetector(
+                onTap: _updateProviderAddress,
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Text(
+                      _currentAddress,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.edit, color: Colors.white70, size: 16),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // Promotional Banner
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              height: 200,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                image: const DecorationImage(
+                  image: NetworkImage('https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400'),
+                  fit: BoxFit.cover,
+                ),
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Colors.black.withOpacity(0.7),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'sendhelper',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w300,
+                        ),
+                      ),
+                      Text(
+                        'DEEP CLEANING SERVICE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        '10% OFF',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'ENTER PROMO CODE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        'DCFS',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 30),
+            
+            // Service Provider Feed
+            _buildServiceProviderFeed(),
+        ],
+        ),
       ),
     );
   }
 
-  Widget _buildBookings() {
-    return const Center(
-      child: Text(
-        'Bookings',
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+  Widget _buildServiceProviderFeed() {
+    final posts = [
+      {
+        'name': 'Shayla',
+        'service': 'SweetHome',
+        'rating': '⭐⭐⭐⭐⭐',
+        'type': 'provider',
+        'images': [
+          'https://images.unsplash.com/photo-1560472354-8b77cccf8f59?w=400',
+        ],
+        'review': 'They\'ve really done a great job on my garden!!',
+        'avatar': 'https://images.unsplash.com/photo-1494790108755-2616b612e5e3?w=100',
+        'time': '2 hours ago',
+      },
+      {
+        'name': 'Mikaela',
+        'service': 'HomeLovely',
+        'rating': '⭐⭐⭐⭐⭐',
+        'type': 'user',
+        'images': [
+          'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
+        ],
+        'review': 'I was recommended by a friend. I can\'t believe the turnout! It\'s so goooood! Definitely would recommend <3',
+        'avatar': 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100',
+        'time': '5 hours ago',
+      },
+      {
+        'name': 'Jiwon',
+        'service': '',
+        'rating': '⭐⭐⭐⭐⭐',
+        'type': 'user',
+        'images': [
+          'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400',
+        ],
+        'review': '',
+        'avatar': 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100',
+        'time': '1 day ago',
+      },
+      {
+        'name': 'Liyuan',
+        'service': '',
+        'rating': '⭐⭐⭐⭐⭐',
+        'type': 'provider',
+        'images': [
+          'https://images.unsplash.com/photo-1571066811602-716837d681de?w=400',
+        ],
+        'review': '',
+        'avatar': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100',
+        'time': '2 days ago',
+      },
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        children: posts.map((post) => _buildProviderPost(post)).toList(),
+      ),
+    );
+  }
+
+  Widget _buildProviderPost(Map<String, dynamic> post) {
+    final isProvider = post['type'] == 'provider';
+    final images = post['images'] as List<String>;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFFFBB04C).withOpacity(0.3),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // User/Provider header
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundImage: NetworkImage(post['avatar']!),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            post['name']!,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          if (isProvider) ...[
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.verified,
+                              color: Color(0xFFFBB04C),
+                              size: 16,
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (post['service']!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          post['service']!,
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Image
+          if (images.isNotEmpty)
+            Container(
+              height: 200,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: NetworkImage(images.first),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          
+          // Review and Service info
+          if (post['review']!.isNotEmpty || post['service']!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (post['review']!.isNotEmpty)
+                    Text(
+                      post['review']!,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  if (post['service']!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Text(
+                          'Service by',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.eco,
+                                size: 12,
+                                color: Colors.green[700],
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                post['service']!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.green[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMyTasks() {
+    return SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+                     children: [
+             // Header
+             Container(
+               width: double.infinity,
+               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+               decoration: const BoxDecoration(
+                 color: Color(0xFFFBB04C),
+               ),
+               child: GestureDetector(
+                 onTap: _updateProviderAddress,
+                 child: Row(
+                   children: [
+                     const Icon(Icons.location_on, color: Colors.white),
+                     const SizedBox(width: 8),
+                     Text(
+                       _currentAddress,
+                       style: const TextStyle(
+                         color: Colors.white,
+                         fontSize: 16,
+                         fontWeight: FontWeight.w500,
+                       ),
+                     ),
+                     const SizedBox(width: 4),
+                     const Icon(Icons.edit, color: Colors.white70, size: 16),
+                   ],
+                 ),
+               ),
+             ),
+             
+             const SizedBox(height: 20),
+             
+             // Tasks List
+            _buildUpcomingTasks(),
+            _buildPendingRequests(),
+        ],
+        ),
       ),
     );
   }
 
   Widget _buildProfile() {
-    return Center(
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('providers').doc(widget.user.uid).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const Center(child: Text('Profile data not found'));
+        }
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                // Storefront Header
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(20),
+                      bottomRight: Radius.circular(20),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 10,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      // Profile Photo
+                      Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFFFBB04C),
+                            width: 3,
+                          ),
+                        ),
+                        child: ClipOval(
+                          child: data['profileImageUrl'] != null
+                              ? Image.network(
+                                  data['profileImageUrl'],
+                                  width: 120,
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      color: Colors.grey[300],
+                                      child: const Icon(
+                                        Icons.business,
+                                        size: 50,
+                                        color: Colors.grey,
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Container(
+                                  color: Colors.grey[300],
+                                  child: const Icon(
+                                    Icons.business,
+                                    size: 50,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Company Name
+                      Text(
+                        data['companyName'] ?? 'Business Name',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Legal Representative
+                      Text(
+                        data['legalRepresentativeName'] ?? 'Representative Name',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Rating and Stats
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildStatItem('${_providerStats?.averageRating.toStringAsFixed(1) ?? '4.8'}', 'Rating', Icons.star, Colors.orange),
+                          _buildStatItem('${_providerStats?.totalTasks ?? 45}', 'Jobs Done', Icons.work, Colors.blue),
+                          _buildStatItem('${_providerStats?.tasksThisMonth ?? 8}', 'This Month', Icons.trending_up, Colors.green),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 20),
+                
+                // Recommended Users Section
+                _buildRecommendedUsers(),
+                
+                const SizedBox(height: 20),
+                
+                // Company Description Section
+                _buildCompanyDescription(data),
+                
+                const SizedBox(height: 20),
+                
+                // Past Projects Section
+                _buildPastProjects(),
+                
+                const SizedBox(height: 20),
+                
+                // Reviews Section
+                _buildReviews(),
+                
+                const SizedBox(height: 20),
+                
+                // Sign Out Button
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 24),
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      await firebase_auth.FirebaseAuth.instance.signOut();
+                      if (mounted) {
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+                          (route) => false,
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                    child: const Text(
+                      'Sign Out',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 40),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatItem(String value, String label, IconData icon, Color color) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecommendedUsers() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Profile',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            'Recommended by',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
           ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: () async {
-              await firebase_auth.FirebaseAuth.instance.signOut();
-              if (mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (context) => const WelcomeScreen()),
-                  (route) => false,
+          const SizedBox(height: 16),
+          StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance.collection('providers').doc(widget.user.uid).snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              final data = snapshot.data!.data() as Map<String, dynamic>?;
+              final referredByUserIds = List<String>.from(data?['referred_by_user_ids'] ?? []);
+              
+              if (referredByUserIds.isEmpty) {
+                return Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.people_outline,
+                        size: 48,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No recommendations yet',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               }
+              
+              return SizedBox(
+                height: 80,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: referredByUserIds.length,
+                  itemBuilder: (context, index) {
+                    final userId = referredByUserIds[index];
+                    return FutureBuilder<DocumentSnapshot>(
+                      future: FirebaseFirestore.instance.collection('users').doc(userId).get(),
+                      builder: (context, userSnapshot) {
+                        if (!userSnapshot.hasData) {
+                          return Container(
+                            width: 60,
+                            margin: const EdgeInsets.only(right: 12),
+                            child: const CircularProgressIndicator(),
+                          );
+                        }
+                        
+                        final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
+                        return Container(
+                          width: 60,
+                          margin: const EdgeInsets.only(right: 12),
+                          child: Column(
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundImage: userData?['profileImageUrl'] != null
+                                    ? NetworkImage(userData!['profileImageUrl'])
+                                    : null,
+                                backgroundColor: Colors.grey[300],
+                                child: userData?['profileImageUrl'] == null
+                                    ? const Icon(Icons.person, color: Colors.grey)
+                                    : null,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                userData?['name'] ?? 'User',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              );
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompanyDescription(Map<String, dynamic> data) {
+    final TextEditingController descriptionController = TextEditingController();
+    descriptionController.text = data['companyDescription'] ?? '';
+    bool isEditing = false;
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: StatefulBuilder(
+        builder: (context, setState) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    'About Our Service',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: Icon(
+                      isEditing ? Icons.save : Icons.edit,
+                      color: const Color(0xFFFBB04C),
+                    ),
+                    onPressed: () async {
+                      if (isEditing) {
+                        // Save the description
+                        try {
+                          await FirebaseFirestore.instance
+                              .collection('providers')
+                              .doc(widget.user.uid)
+                              .update({
+                            'companyDescription': descriptionController.text,
+                          });
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Description updated successfully'),
+                                backgroundColor: Color(0xFFFBB04C),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Error updating description'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                        setState(() {
+                          isEditing = false;
+                        });
+                      } else {
+                        setState(() {
+                          isEditing = true;
+                        });
+                      }
+                    },
+                  ),
+                ],
               ),
+              const SizedBox(height: 16),
+              if (isEditing)
+                TextField(
+                  controller: descriptionController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    hintText: 'Describe your services, specialties, and what makes your business unique...',
+                    border: OutlineInputBorder(),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFFFBB04C), width: 2),
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  data['companyDescription'] ?? 'No description available. Tap the edit button to add information about your services.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[700],
+                    height: 1.5,
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPastProjects() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Past Projects',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
             ),
-            child: const Text(
-              'Sign Out',
-              style: TextStyle(color: Colors.white),
+          ),
+          const SizedBox(height: 16),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('service_orders')
+                .where('provider_id', isEqualTo: widget.user.uid)
+                .where('status', isEqualTo: 'completed')
+                .orderBy('created_at', descending: true)
+                .limit(6)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.work_outline,
+                        size: 48,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No completed projects yet',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1.2,
+                ),
+                itemCount: snapshot.data!.docs.length,
+                itemBuilder: (context, index) {
+                  final doc = snapshot.data!.docs[index];
+                  final order = doc.data() as Map<String, dynamic>;
+                  
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                              color: Colors.grey[200],
+                            ),
+                            child: Center(
+                              child: Icon(
+                                Icons.photo_library,
+                                size: 40,
+                                color: Colors.grey[400],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                order['service_description'] ?? 'Service',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '\$${order['final_price']?.toStringAsFixed(0) ?? '0'}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReviews() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Customer Reviews',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
             ),
+          ),
+          const SizedBox(height: 16),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('service_orders')
+                .where('provider_id', isEqualTo: widget.user.uid)
+                .where('status', isEqualTo: 'completed')
+                .orderBy('created_at', descending: true)
+                .limit(3)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.rate_review_outlined,
+                        size: 48,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No reviews yet',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: snapshot.data!.docs.length,
+                itemBuilder: (context, index) {
+                  final doc = snapshot.data!.docs[index];
+                  final order = doc.data() as Map<String, dynamic>;
+                  
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor: Colors.grey[300],
+                              child: const Icon(Icons.person, size: 20, color: Colors.grey),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    order['customer_name'] ?? 'Customer',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Row(
+                                    children: List.generate(5, (i) => Icon(
+                                      Icons.star,
+                                      size: 14,
+                                      color: i < (order['rating'] ?? 5) ? Colors.orange : Colors.grey[300],
+                                    )),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          order['review'] ?? 'Great service! Professional and efficient work. Highly recommend!',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
           ),
         ],
       ),
@@ -1175,7 +2570,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
-          children: [
+        children: [
             // Handle bar
             Container(
               margin: const EdgeInsets.only(top: 8),
@@ -1304,7 +2699,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 },
               ),
             ),
-          ],
+        ],
         ),
       ),
     );
@@ -1376,7 +2771,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
       child: Row(
         children: [
           Icon(icon, color: Colors.black87, size: 22),
-          const SizedBox(width: 8),
+            const SizedBox(width: 8),
           Flexible(
             child: Text(
               title,
@@ -1406,7 +2801,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         elevation: 0,
         actions: [
           // Notification icon
-          StreamBuilder<QuerySnapshot>(
+            StreamBuilder<QuerySnapshot>(
             stream: NotificationService.getNotificationHistory(widget.user.uid),
             builder: (context, snapshot) {
               int unreadCount = 0;
@@ -1508,16 +2903,16 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
+            icon: Icon(Icons.home),
+            label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.build),
-            label: 'Services',
+            icon: Icon(Icons.explore),
+            label: 'Discover',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today),
-            label: 'Bookings',
+            icon: Icon(Icons.assignment),
+            label: 'My Tasks',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
@@ -1655,8 +3050,8 @@ class _PendingRequestDetailScreenState extends State<PendingRequestDetailScreen>
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
             Text(
               request.description,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
@@ -2036,7 +3431,7 @@ class _PendingRequestDetailScreenState extends State<PendingRequestDetailScreen>
               ),
               child: const Text('Provide Quote / Accept'),
             ),
-          ],
+        ],
         ),
       ),
     );

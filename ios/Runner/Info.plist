@@ -65,11 +65,13 @@
 	
 	<!-- Permission descriptions for phone verification -->
 	<key>NSCameraUsageDescription</key>
-	<string>We need access to your camera for identity verification</string>
+	<string>We need access to your camera for identity verification and to take photos of your service needs.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>We need access to your microphone for voice verification</string>
+	<string>We need access to your microphone for voice input to describe your service needs.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>We need access to speech recognition to convert your voice into text for describing service needs.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>We need access to your photo library for identity verification</string>
+	<string>We need access to your photo library for identity verification and to upload photos of your service needs.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>We need access to your contacts to find your friends on Magic Home</string>
 </dict>
