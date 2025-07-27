@@ -36,25 +36,117 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   bool _showSummary = false;
   bool _isListening = false;
   bool _speechEnabled = false;
+  bool _keyboardVisible = false;
   DateTime _selectedDate = DateTime.now();
   List<DateTime> _selectedDates = [];
+  
+  // Time selection variables
+  Map<DateTime, List<String>> _selectedTimeSlots = {};
+  String _selectedTimeSlot = '';
+  List<String> _availableTimeSlots = [
+    'Morning (8:00 AM - 12:00 PM)',
+    'Afternoon (12:00 PM - 4:00 PM)',
+    'Evening (4:00 PM - 8:00 PM)',
+    'Flexible (Any time)',
+  ];
 
   @override
   void initState() {
     super.initState();
     _speech = stt.SpeechToText();
     _initializeSpeech();
-    _aiService.startConversation();
+    
+    // Load existing conversation or start new one
+    _aiService.loadConversationState();
+    if (_aiService.messages.isEmpty) {
+      _aiService.startConversation();
+    }
+    
+    // Listen for keyboard visibility changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom();
+      _checkKeyboardVisibility();
     });
+    
+    // Add listener for text field focus changes
+    _messageController.addListener(_onTextChanged);
+    
+    // Add listener for scroll controller
+    _scrollController.addListener(() {
+      // Update keyboard visibility check when scrolling
+      _checkKeyboardVisibility();
+    });
+    
+    // Test Firebase Storage connectivity
+    _testFirebaseStorage();
+  }
+
+  void _checkKeyboardVisibility() {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final isKeyboardVisible = bottomInset > 0;
+    
+    if (isKeyboardVisible != _keyboardVisible) {
+      setState(() {
+        _keyboardVisible = isKeyboardVisible;
+        
+        // Dismiss calendar and other UI elements when keyboard becomes visible
+        if (isKeyboardVisible) {
+          _showCalendar = false;
+          _showPhotoUpload = false;
+          _showSummary = false;
+        }
+      });
+      
+      if (isKeyboardVisible) {
+        // Scroll to bottom when keyboard appears with a slight delay
+        Future.delayed(const Duration(milliseconds: 100), () {
+          _scrollToBottom();
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
+    _messageController.removeListener(_onTextChanged);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onTextChanged() {
+    // Dismiss calendar and other UI elements when user starts typing
+    if (_messageController.text.isNotEmpty && (_showCalendar || _showPhotoUpload || _showSummary)) {
+      setState(() {
+        _showCalendar = false;
+        _showPhotoUpload = false;
+        _showSummary = false;
+      });
+    }
+  }
+
+  Future<void> _testFirebaseStorage() async {
+    try {
+      print('Testing Firebase Storage connectivity...');
+      print('Storage bucket: ${FirebaseStorage.instance.app.options.storageBucket}');
+      
+      // Test if we can access the storage reference
+      final testRef = FirebaseStorage.instance.ref().child('test_connection.txt');
+      print('Test reference created successfully');
+      
+      // Check if user is authenticated
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        print('User authenticated: ${currentUser.uid}');
+        print('User email: ${currentUser.email}');
+      } else {
+        print('No authenticated user found');
+      }
+      
+      print('Firebase Storage test completed successfully');
+    } catch (e) {
+      print('Firebase Storage test failed: $e');
+    }
   }
 
   Future<void> _initializeSpeech() async {
@@ -82,6 +174,10 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   }
 
   Future<void> _startListening() async {
+    print('Starting speech recognition...');
+    print('Speech enabled: $_speechEnabled');
+    print('Currently listening: $_isListening');
+    
     if (!_speechEnabled) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Speech recognition not available')),
@@ -90,13 +186,24 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     }
 
     if (_isListening) {
+      print('Already listening, stopping...');
       _stopListening();
       return;
     }
 
     try {
+      setState(() {
+        _isListening = true;
+        // Dismiss calendar and other UI elements when starting voice input
+        _showCalendar = false;
+        _showPhotoUpload = false;
+        _showSummary = false;
+      });
+      print('Set listening state to true');
+      
       await _speech.listen(
         onResult: (val) {
+          print('Speech result: ${val.recognizedWords}');
           setState(() {
             _messageController.text = val.recognizedWords;
           });
@@ -118,6 +225,9 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       );
     } catch (e) {
       print('Error starting speech recognition: $e');
+      setState(() {
+        _isListening = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error starting speech recognition: $e')),
       );
@@ -125,19 +235,23 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   }
 
   Future<void> _stopListening() async {
+    print('Stopping speech recognition...');
     await _speech.stop();
     setState(() {
       _isListening = false;
     });
+    print('Set listening state to false');
   }
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent + 50, // Extra padding
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      });
     }
   }
 
@@ -166,13 +280,32 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         _showCalendar = false;
         _showSummary = false;
         
-        // Check if we need to show special UI elements
-        if (_aiService.currentState.conversationStep == 3) {
-          _showPhotoUpload = true;
-        } else if (_aiService.currentState.conversationStep == 4) {
-          _showCalendar = true;
-        } else if (_aiService.currentState.conversationStep == 5) {
-          _showSummary = true;
+        // Check LLM response for UI trigger keywords
+        final lastMessage = _aiService.messages.isNotEmpty ? _aiService.messages.last : null;
+        if (lastMessage != null && lastMessage.type == MessageType.ai) {
+          final response = lastMessage.content.toLowerCase();
+          print('Checking LLM response for UI triggers: $response');
+          
+          // Check for photo/video upload triggers
+          if (response.contains('photo') || response.contains('picture') || response.contains('video') || 
+              response.contains('upload') || response.contains('image')) {
+            print('Showing photo upload UI');
+            _showPhotoUpload = true;
+          }
+          
+          // Check for calendar/availability triggers
+          if (response.contains('availability') || response.contains('schedule') || response.contains('calendar') ||
+              response.contains('when') || response.contains('time') || response.contains('appointment')) {
+            print('Showing calendar UI');
+            _showCalendar = true;
+          }
+          
+          // Check for summary triggers
+          if (response.contains('summary') || response.contains('review') || response.contains('confirm') ||
+              response.contains('all the information') || response.contains('comprehensive summary')) {
+            print('Showing summary UI');
+            _showSummary = true;
+          }
         }
       });
       
@@ -226,11 +359,22 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         setState(() {
           _showPhotoUpload = false;
           _isLoading = false;
-          // Check if we need to show next step
-          if (_aiService.currentState.conversationStep == 4) {
-            _showCalendar = true;
-          } else if (_aiService.currentState.conversationStep == 5) {
-            _showSummary = true;
+          // Check LLM response for next UI triggers
+          final lastMessage = _aiService.messages.isNotEmpty ? _aiService.messages.last : null;
+          if (lastMessage != null && lastMessage.type == MessageType.ai) {
+            final response = lastMessage.content.toLowerCase();
+            
+            // Check for calendar/availability triggers
+            if (response.contains('availability') || response.contains('schedule') || response.contains('calendar') ||
+                response.contains('when') || response.contains('time') || response.contains('appointment')) {
+              _showCalendar = true;
+            }
+            
+            // Check for summary triggers
+            if (response.contains('summary') || response.contains('review') || response.contains('confirm') ||
+                response.contains('all the information') || response.contains('comprehensive summary')) {
+              _showSummary = true;
+            }
           }
         });
         
@@ -247,31 +391,248 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     }
   }
 
+  Future<void> _uploadVideo() async {
+    try {
+      final XFile? video = await _picker.pickVideo(
+        source: ImageSource.camera,
+        maxDuration: const Duration(seconds: 30),
+      );
+      
+      if (video != null) {
+        setState(() {
+          _isLoading = true;
+        });
+        
+        final String downloadUrl = await _uploadVideoToFirebase(File(video.path));
+        _aiService.addMediaUrl(downloadUrl);
+        
+        // Add system message about video upload
+        setState(() {
+          _aiService.messages.add(ChatMessage(
+            content: "Video uploaded successfully!",
+            type: MessageType.system,
+            timestamp: DateTime.now(),
+            imageUrl: downloadUrl, // Using imageUrl field for video URL
+          ));
+        });
+        
+        // Continue conversation
+        await _aiService.processUserInput("I've uploaded a video.");
+        
+        setState(() {
+          _showPhotoUpload = false;
+          _isLoading = false;
+          // Check LLM response for next UI triggers
+          final lastMessage = _aiService.messages.isNotEmpty ? _aiService.messages.last : null;
+          if (lastMessage != null && lastMessage.type == MessageType.ai) {
+            final response = lastMessage.content.toLowerCase();
+            
+            // Check for calendar/availability triggers
+            if (response.contains('availability') || response.contains('schedule') || response.contains('calendar') ||
+                response.contains('when') || response.contains('time') || response.contains('appointment')) {
+              _showCalendar = true;
+            }
+            
+            // Check for summary triggers
+            if (response.contains('summary') || response.contains('review') || response.contains('confirm') ||
+                response.contains('all the information') || response.contains('comprehensive summary')) {
+              _showSummary = true;
+            }
+          }
+        });
+        
+        _scrollToBottom();
+      }
+    } catch (e) {
+      print('Error uploading video: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error uploading video: $e')),
+      );
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   Future<String> _uploadImageToFirebase(File imageFile) async {
     try {
-      final String fileName = 'service_attachment_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final Reference ref = FirebaseStorage.instance
-          .ref()
-          .child('service_attachments')
-          .child(widget.user?.uid ?? 'anonymous')
-          .child(fileName);
+      // Check if user is authenticated
+      if (widget.user?.uid == null) {
+        throw Exception('User not authenticated. Please sign in again.');
+      }
       
-      final UploadTask uploadTask = ref.putFile(imageFile);
+      print('User ID: ${widget.user!.uid}');
+      print('User email: ${widget.user!.email}');
+      print('User display name: ${widget.user!.displayName}');
+      
+      // Check if user is still authenticated with Firebase
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw Exception('Firebase authentication lost. Please sign in again.');
+      }
+      
+      print('Current Firebase user: ${currentUser.uid}');
+      print('Firebase Storage bucket: ${FirebaseStorage.instance.app.options.storageBucket}');
+      
+      final String fileName = 'service_attachment_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final String uploadPath = 'service_attachments/${widget.user!.uid}/$fileName';
+      
+      print('Upload path: $uploadPath');
+      print('File size: ${await imageFile.length()} bytes');
+      
+      final Reference ref = FirebaseStorage.instance.ref().child(uploadPath);
+      
+      // Add metadata for better security
+      final UploadTask uploadTask = ref.putFile(
+        imageFile,
+        SettableMetadata(
+          contentType: 'image/jpeg',
+          customMetadata: {
+            'uploadedBy': widget.user!.uid,
+            'uploadedAt': DateTime.now().toIso8601String(),
+            'fileType': 'service_attachment',
+          },
+        ),
+      );
+      
       final TaskSnapshot snapshot = await uploadTask;
       final String downloadUrl = await snapshot.ref.getDownloadURL();
       
+      print('Image uploaded successfully: $downloadUrl');
       return downloadUrl;
     } catch (e) {
       print('Error uploading image to Firebase: $e');
+      if (e.toString().contains('unauthorized')) {
+        throw Exception('Upload failed: Please make sure you are signed in and try again. Error: $e');
+      }
       rethrow;
     }
   }
 
+  Future<String> _uploadVideoToFirebase(File videoFile) async {
+    try {
+      // Check if user is authenticated
+      if (widget.user?.uid == null) {
+        throw Exception('User not authenticated. Please sign in again.');
+      }
+      
+      print('User ID: ${widget.user!.uid}');
+      print('User email: ${widget.user!.email}');
+      print('User display name: ${widget.user!.displayName}');
+      
+      // Check if user is still authenticated with Firebase
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw Exception('Firebase authentication lost. Please sign in again.');
+      }
+      
+      final String fileName = 'service_video_${DateTime.now().millisecondsSinceEpoch}.mp4';
+      final String uploadPath = 'service_attachments/${widget.user!.uid}/$fileName';
+      
+      print('Upload path: $uploadPath');
+      print('File size: ${await videoFile.length()} bytes');
+      
+      final Reference ref = FirebaseStorage.instance.ref().child(uploadPath);
+      
+      // Add metadata for better security
+      final UploadTask uploadTask = ref.putFile(
+        videoFile,
+        SettableMetadata(
+          contentType: 'video/mp4',
+          customMetadata: {
+            'uploadedBy': widget.user!.uid,
+            'uploadedAt': DateTime.now().toIso8601String(),
+            'fileType': 'service_video',
+            'maxDuration': '30',
+          },
+        ),
+      );
+      
+      final TaskSnapshot snapshot = await uploadTask;
+      final String downloadUrl = await snapshot.ref.getDownloadURL();
+      
+      print('Video uploaded successfully: $downloadUrl');
+      return downloadUrl;
+    } catch (e) {
+      print('Error uploading video to Firebase: $e');
+      if (e.toString().contains('unauthorized')) {
+        throw Exception('Upload failed: Please make sure you are signed in and try again. Error: $e');
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _skipMediaUpload() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      // Add system message about skipping media upload
+      setState(() {
+        _aiService.messages.add(ChatMessage(
+          content: "Media upload skipped. Continuing with text description only.",
+          type: MessageType.system,
+          timestamp: DateTime.now(),
+        ));
+      });
+      
+      // Continue conversation
+      await _aiService.processUserInput("I'll skip the photo/video for now.");
+      
+      setState(() {
+        _showPhotoUpload = false;
+        _isLoading = false;
+        // Check LLM response for next UI triggers
+        final lastMessage = _aiService.messages.isNotEmpty ? _aiService.messages.last : null;
+        if (lastMessage != null && lastMessage.type == MessageType.ai) {
+          final response = lastMessage.content.toLowerCase();
+          
+          // Check for calendar/availability triggers
+          if (response.contains('availability') || response.contains('schedule') || response.contains('calendar') ||
+              response.contains('when') || response.contains('time') || response.contains('appointment')) {
+            _showCalendar = true;
+          }
+          
+          // Check for summary triggers
+          if (response.contains('summary') || response.contains('review') || response.contains('confirm') ||
+              response.contains('all the information') || response.contains('comprehensive summary')) {
+            _showSummary = true;
+          }
+        }
+      });
+      
+      _scrollToBottom();
+    } catch (e) {
+      print('Error skipping media upload: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   Future<void> _selectAvailability() async {
+    // Convert time slots to a more readable format
+    final timeSlotDetails = _selectedTimeSlots.entries.map((entry) {
+      final date = entry.key;
+      final slots = entry.value;
+      return {
+        'date': date.toIso8601String(),
+        'timeSlots': slots,
+        'formattedDate': _formatDate(date),
+      };
+    }).toList();
+    
     final availabilityData = {
       'selectedDates': _selectedDates.map((date) => date.toIso8601String()).toList(),
-      'preferredTime': 'flexible',
-      'notes': 'Available on selected dates',
+      'timeSlots': timeSlotDetails,
+      'preferredTime': _selectedTimeSlots.isNotEmpty ? 'specific' : 'flexible',
+      'notes': _selectedTimeSlots.isNotEmpty 
+          ? 'Available on selected dates with specific time preferences'
+          : 'Available on selected dates with flexible timing',
     };
     
     _aiService.setAvailability(availabilityData);
@@ -287,9 +648,16 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       
       setState(() {
         _isLoading = false;
-        // Check if we need to show summary
-        if (_aiService.currentState.conversationStep == 5) {
-          _showSummary = true;
+        // Check LLM response for summary triggers
+        final lastMessage = _aiService.messages.isNotEmpty ? _aiService.messages.last : null;
+        if (lastMessage != null && lastMessage.type == MessageType.ai) {
+          final response = lastMessage.content.toLowerCase();
+          
+          // Check for summary triggers
+          if (response.contains('summary') || response.contains('review') || response.contains('confirm') ||
+              response.contains('all the information') || response.contains('comprehensive summary')) {
+            _showSummary = true;
+          }
         }
       });
       
@@ -311,7 +679,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         _isLoading = true;
       });
       
-      final summary = _aiService.generateServiceRequestSummary();
+      final summary = await _aiService.generateServiceRequestSummary();
       
       // Create service request in Firestore
       await FirebaseFirestore.instance.collection('service_requests').add({
@@ -340,6 +708,9 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         ),
       );
       
+      // Clear conversation cache after successful submission
+      _aiService.clearConversation();
+      
       // Close the screen
       Navigator.pop(context);
       
@@ -357,8 +728,22 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFBB04C),
+    return GestureDetector(
+      onTap: () {
+        // Dismiss calendar and other UI elements when tapping outside
+        if (_showCalendar || _showPhotoUpload || _showSummary) {
+          setState(() {
+            _showCalendar = false;
+            _showPhotoUpload = false;
+            _showSummary = false;
+          });
+        }
+        // Unfocus text field
+        FocusScope.of(context).unfocus();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFBB04C),
+        resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: const Color(0xFFFBB04C),
         elevation: 0,
@@ -378,44 +763,57 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () {
-              _aiService.resetConversation();
+              _aiService.clearConversation();
               _aiService.startConversation();
               setState(() {
                 _showPhotoUpload = false;
                 _showCalendar = false;
                 _showSummary = false;
+                _isListening = false;
+                _selectedDates.clear();
+                _selectedTimeSlots.clear();
               });
             },
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Chat messages
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _aiService.messages.length + (_isTyping ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (_isTyping && index == _aiService.messages.length) {
-                  return _buildTypingIndicator();
-                }
-                
-                final message = _aiService.messages[index];
-                return _buildMessageBubble(message);
-              },
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Chat messages and special UI elements in scrollable area
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    // Chat messages
+                    ...List.generate(_aiService.messages.length + (_isTyping ? 1 : 0), (index) {
+                      if (_isTyping && index == _aiService.messages.length) {
+                        return _buildTypingIndicator();
+                      }
+                      
+                      final message = _aiService.messages[index];
+                      return _buildMessageBubble(message);
+                    }),
+                    
+                    // Special UI elements
+                    if (_showPhotoUpload) _buildPhotoUploadSection(),
+                    if (_showCalendar) _buildCalendarSection(),
+                    if (_showSummary) _buildSummarySection(),
+                    
+                    // Add extra bottom padding to ensure content doesn't get hidden behind input area
+                    const SizedBox(height: 100),
+                  ],
+                ),
+              ),
             ),
-          ),
-          
-          // Special UI elements
-          if (_showPhotoUpload) _buildPhotoUploadSection(),
-          if (_showCalendar) _buildCalendarSection(),
-          if (_showSummary) _buildSummarySection(),
-          
-          // Input area
-          _buildInputArea(),
-        ],
+            
+            // Input area - always at the bottom
+            _buildInputArea(),
+          ],
+        ),
+      ),
       ),
     );
   }
@@ -599,25 +997,29 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   }
 
   Widget _buildPhotoUploadSection() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return GestureDetector(
+      onTap: () {
+        // Prevent photo upload section from being dismissed when tapping on it
+      },
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Upload Photo',
+            'Upload Photo or Video',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -626,52 +1028,96 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Take a photo to help service providers understand your needs better.',
+            'Take a photo or record a short video (under 30 seconds) to help service providers understand your needs better.',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey,
             ),
           ),
           const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _isLoading ? null : _uploadPhoto,
-            icon: _isLoading 
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.camera_alt),
-            label: Text(_isLoading ? 'Uploading...' : 'Upload Photo'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFBB04C),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _uploadPhoto,
+                  icon: _isLoading 
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.camera_alt),
+                  label: Text(_isLoading ? 'Uploading...' : 'Take Photo'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFBB04C),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _uploadVideo,
+                  icon: _isLoading 
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.videocam),
+                  label: Text(_isLoading ? 'Uploading...' : 'Record Video'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFBB04C),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: _isLoading ? null : _skipMediaUpload,
+            child: const Text(
+              'Skip for now',
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 14,
               ),
             ),
           ),
         ],
       ),
+      ),
     );
   }
 
   Widget _buildCalendarSection() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return GestureDetector(
+      onTap: () {
+        // Prevent calendar from being dismissed when tapping on it
+      },
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -734,6 +1180,25 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          
+          // Time selection section
+          if (_selectedDates.isNotEmpty) ...[
+            const Text(
+              'Select preferred time slots:',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Time slots for each selected date
+            ..._selectedDates.map((date) => _buildTimeSlotSelector(date)),
+            
+            const SizedBox(height: 16),
+          ],
+          
           ElevatedButton(
             onPressed: _selectedDates.isEmpty ? null : _selectAvailability,
             style: ElevatedButton.styleFrom(
@@ -744,31 +1209,178 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: Text('Continue (${_selectedDates.length} days selected)'),
+            child: Text(_selectedTimeSlots.isNotEmpty 
+                ? 'Continue (${_selectedDates.length} days, ${_selectedTimeSlots.values.expand((slots) => slots).length} time slots)'
+                : 'Continue (${_selectedDates.length} days selected)'),
+          ),
+        ],
+      ),
+      ),
+    );
+  }
+
+  Widget _buildTimeSlotSelector(DateTime date) {
+    final dateKey = DateTime(date.year, date.month, date.day);
+    final selectedSlots = _selectedTimeSlots[dateKey] ?? [];
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${_formatDate(date)}:',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: _availableTimeSlots.map((timeSlot) {
+              final isSelected = selectedSlots.contains(timeSlot);
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    if (isSelected) {
+                      selectedSlots.remove(timeSlot);
+                    } else {
+                      selectedSlots.add(timeSlot);
+                    }
+                    _selectedTimeSlots[dateKey] = List.from(selectedSlots);
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isSelected 
+                        ? const Color(0xFFFBB04C) 
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected 
+                          ? const Color(0xFFFBB04C) 
+                          : Colors.grey[300]!,
+                    ),
+                  ),
+                  child: Text(
+                    timeSlot,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSummarySection() {
-    final summary = _aiService.generateServiceRequestSummary();
-    final priceEstimate = summary['priceEstimate'] as Map<String, dynamic>;
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final dateOnly = DateTime(date.year, date.month, date.day);
     
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    if (dateOnly == today) {
+      return 'Today';
+    } else if (dateOnly == tomorrow) {
+      return 'Tomorrow';
+    } else {
+      return '${date.month}/${date.day}/${date.year}';
+    }
+  }
+
+  Widget _buildSummarySection() {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _aiService.generateServiceRequestSummary(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Column(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Analyzing service request and generating price estimate...'),
+              ],
+            ),
+          );
+        }
+        
+        if (snapshot.hasError) {
+          return Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.error, color: Colors.red, size: 48),
+                const SizedBox(height: 16),
+                const Text('Error generating summary'),
+                const SizedBox(height: 8),
+                Text('${snapshot.error}'),
+              ],
+            ),
+          );
+        }
+        
+        final summary = snapshot.data!;
+        final priceEstimate = summary['priceEstimate'] as Map<String, dynamic>;
+    
+    return GestureDetector(
+      onTap: () {
+        // Prevent summary section from being dismissed when tapping on it
+      },
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -897,7 +1509,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Estimated Price Range',
+                  'AI-Generated Price Estimate',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -919,6 +1531,50 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                     color: Colors.grey,
                   ),
                 ),
+                if (priceEstimate['reasoning'] != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Analysis: ${priceEstimate['reasoning']}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+                if (priceEstimate['factors'] != null) ...[
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 2,
+                    children: (priceEstimate['factors'] as List<String>).map((factor) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          factor,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.green,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+                if (priceEstimate['confidence'] != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Confidence: ${(priceEstimate['confidence'] * 100).round()}%',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -961,14 +1617,25 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           ),
         ],
       ),
+      ),
+    );
+      },
     );
   }
 
   Widget _buildInputArea() {
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+    final isKeyboardVisible = bottomPadding > 0;
+    
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(
+        16, 
+        12, 
+        16, 
+        isKeyboardVisible ? bottomPadding + 12 : 16,
+      ),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
+        color: Colors.white.withOpacity(0.95),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
@@ -1001,8 +1668,40 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                 ),
               ),
               maxLines: null,
+              minLines: 1,
               textInputAction: TextInputAction.send,
               onSubmitted: (_) => _sendMessage(),
+              onTap: () {
+                // Dismiss calendar and other UI elements when user starts typing
+                setState(() {
+                  _showCalendar = false;
+                  _showPhotoUpload = false;
+                  _showSummary = false;
+                });
+                
+                // Scroll to bottom when keyboard appears
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  _scrollToBottom();
+                });
+              },
+              onChanged: (value) {
+                // Dismiss calendar and other UI elements when user starts typing
+                if (value.isNotEmpty && (_showCalendar || _showPhotoUpload || _showSummary)) {
+                  setState(() {
+                    _showCalendar = false;
+                    _showPhotoUpload = false;
+                    _showSummary = false;
+                  });
+                }
+              },
+              onEditingComplete: () {
+                // Dismiss calendar and other UI elements when user finishes editing
+                setState(() {
+                  _showCalendar = false;
+                  _showPhotoUpload = false;
+                  _showSummary = false;
+                });
+              },
             ),
           ),
           const SizedBox(width: 8),

@@ -16,8 +16,8 @@ service firebase.storage {
     }
     
     // Allow service request attachments (images, videos, and PDFs)
-    match /service_attachments/{userId}/{fileName} {
-      allow read, write: if request.auth != null && request.auth.uid == userId
+    match /service_attachments/{allPaths=**} {
+      allow read, write: if request.auth != null 
                     && request.resource.size < 50 * 1024 * 1024 // 50MB
                     && (request.resource.contentType.matches('image/.*') || 
                         request.resource.contentType.matches('video/.*') ||
