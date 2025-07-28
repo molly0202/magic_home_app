@@ -1197,7 +1197,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    'Preferred: ${request.preferredTime}',
+                    'Preferred: ${request.availability?['preferredTime'] ?? 'Not specified'}',
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 14,
@@ -1208,7 +1208,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  request.priceRange,
+                  request.details['price_range'] ?? 'Price not specified',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -1224,7 +1224,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    request.locationMasked,
+                    request.details['location_masked'] ?? request.location ?? 'Location not specified',
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 14,
@@ -1419,13 +1419,15 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                     final price = double.parse(priceController.text);
                     final scheduledDateTime = DateTime.parse(dateController.text);
                     
-                    await HspHomeService.acceptServiceRequest(
-                      request.requestId,
-                      widget.user.uid,
-                      price,
-                      scheduledDateTime,
-                      addressController.text,
-                    );
+                    if (request.requestId != null) {
+                      await HspHomeService.acceptServiceRequest(
+                        request.requestId!,
+                        widget.user.uid,
+                        price,
+                        scheduledDateTime,
+                        addressController.text,
+                      );
+                    }
                     
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -3063,7 +3065,7 @@ class _PendingRequestDetailScreenState extends State<PendingRequestDetailScreen>
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    request.locationMasked,
+                    request.details['location_masked'] ?? request.location ?? 'Location not specified',
                     style: const TextStyle(fontSize: 16),
                   ),
                 ),
@@ -3076,7 +3078,7 @@ class _PendingRequestDetailScreenState extends State<PendingRequestDetailScreen>
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    'Preferred: ${request.preferredTime}',
+                    'Preferred: ${request.availability?['preferredTime'] ?? 'Not specified'}',
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 14,
@@ -3087,7 +3089,7 @@ class _PendingRequestDetailScreenState extends State<PendingRequestDetailScreen>
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  request.priceRange,
+                  request.details['price_range'] ?? 'Price not specified',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,

@@ -113,18 +113,29 @@ class HspHomeService {
           return snapshot.docs.map((doc) {
             final data = doc.data();
             return ServiceRequest(
-              requestId: doc.id,
-              userId: data['user_id'] ?? '',
+              category: data['category'] ?? 'general',
               description: data['description'] ?? '',
+              details: Map<String, dynamic>.from(data['details'] ?? {
+                'preferred_time': data['preferred_time'],
+                'location_masked': data['location_masked'],
+                'final_address': data['final_address'],
+                'status': data['status'],
+                'price_range': data['price_range'],
+                'customer_name': data['customer_name'],
+                'customer_photo_url': data['customer_photo_url'],
+              }),
               mediaUrls: List<String>.from(data['media_urls'] ?? []),
-              preferredTime: data['preferred_time'] ?? '',
-              locationMasked: data['location_masked'] ?? '',
-              finalAddress: data['final_address'],
-              status: data['status'] ?? '',
+              location: data['location'],
+              contactInfo: data['contact_info'],
+              pricing: data['pricing'] != null ? Map<String, dynamic>.from(data['pricing']) : null,
+              availability: data['availability'] != null ? 
+                Map<String, dynamic>.from(data['availability']) : 
+                {'preferredTime': data['preferred_time'] ?? 'Not specified'},
+              tags: List<String>.from(data['tags'] ?? []),
+              priority: data['priority'],
               createdAt: (data['created_at'] as Timestamp).toDate(),
-              priceRange: data['price_range'] ?? '',
-              customerName: data['customer_name'],
-              customerPhotoUrl: data['customer_photo_url'],
+              userId: data['user_id'] ?? '',
+              requestId: doc.id,
             );
           }).toList();
         });
