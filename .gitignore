@@ -64,3 +64,11 @@ GoogleService-Info.plist
 
 # Coverage files
 coverage/
+
+# Firebase and Node.js
+serviceAccountKey.json
+node_modules/
+functions/venv/
+functions/__pycache__/
+*.pyc
+.env
