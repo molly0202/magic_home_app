@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:math';
+import 'dart:math' as math;
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 enum MessageType { user, ai, system }
 
@@ -22,28 +23,6 @@ class ChatMessage {
   });
 }
 
-class ServiceCategory {
-  final String id;
-  final String name;
-  final String description;
-  final List<String> keywords;
-  final List<String> followUpQuestions;
-  final Map<String, dynamic> priceRange;
-  final String icon;
-  final Color color;
-
-  ServiceCategory({
-    required this.id,
-    required this.name,
-    required this.description,
-    required this.keywords,
-    required this.followUpQuestions,
-    required this.priceRange,
-    required this.icon,
-    required this.color,
-  });
-}
-
 class ConversationState {
   String? serviceCategory;
   String? serviceDescription;
@@ -56,6 +35,10 @@ class ConversationState {
   int conversationStep;
   Map<String, dynamic> extractedInfo;
   List<Map<String, String>> conversationHistory;
+  bool photoUploadRequested;
+  bool photosUploaded;
+  bool calendarRequested;
+  bool availabilitySet;
 
   ConversationState({
     this.serviceCategory,
@@ -69,6 +52,10 @@ class ConversationState {
     this.conversationStep = 0,
     Map<String, dynamic>? extractedInfo,
     List<Map<String, String>>? conversationHistory,
+    this.photoUploadRequested = false,
+    this.photosUploaded = false,
+    this.calendarRequested = false,
+    this.availabilitySet = false,
   }) : mediaUrls = mediaUrls ?? <String>[],
        tags = tags ?? <String>[],
        extractedInfo = extractedInfo ?? <String, dynamic>{},
@@ -80,158 +67,46 @@ class AIConversationService {
   factory AIConversationService() => _instance;
   AIConversationService._internal();
   
-  // LLM Configuration - For production, add your API key here
-  // You can use OpenAI, Google Gemini, or other LLM providers
-  static const String _apiKey = 'your-api-key-here';
-  static const String _baseUrl = 'https://api.openai.com/v1/chat/completions';
-  
-  // System prompt that defines the AI's role and knowledge
+  // Enhanced system prompt optimized for Gemini and Magic Home app
   static const String _systemPrompt = '''
-You are an expert home service AI assistant for Magic Home app. Your role is to:
+You are Gemini, the AI assistant for Magic Home - a premium home services platform. Your role is to help users create detailed service requests through natural conversation.
 
-1. UNDERSTAND user service requests with high accuracy
-2. CATEGORIZE services into: HVAC, Plumbing, Electrical, Cleaning, Appliance Repair, Handyman, Landscaping
-3. ASK relevant follow-up questions to gather complete information
-4. GUIDE users through the service request process
-5. PROVIDE helpful and professional responses
+CONVERSATION FLOW:
+1. GREETING & DISCOVERY (Steps 0-1): Understand what home service they need
+2. DETAILS GATHERING (Step 2): Get specific details about their problem
+3. VISUAL DOCUMENTATION (Step 3): Encourage photo uploads for better quotes
+4. SCHEDULING (Step 4): Help them set availability preferences
+5. SUMMARY & CONFIRMATION (Step 5): Present complete service request
 
-Service Categories:
-- HVAC: heating, cooling, furnace, AC, air conditioning, thermostat, ductwork, boiler, heat pump
-- Plumbing: leak, pipe, drain, toilet, faucet, sink, shower, water, sewer, clog
-- Electrical: power, outlet, switch, light, wiring, breaker, circuit, electrical panel
-- Cleaning: dirty, messy, clean, dust, vacuum, deep clean, sanitize, maid service
-- Appliance: refrigerator, washer, dryer, dishwasher, oven, microwave, broken appliance
-- Handyman: repair, fix, install, drywall, painting, door, window, general maintenance
-- Landscaping: lawn, garden, yard, tree, grass, outdoor, irrigation, landscaping
+SERVICE CATEGORIES: Cleaning, Plumbing, Electrical, HVAC, Appliance Repair, Handyman, Landscaping, Pest Control, Roofing, Painting
 
-Conversation Flow:
-1. First, understand what service they need and categorize it
-2. Ask relevant follow-up questions to gather details
-3. Request photos if helpful for the service type
-4. Ask about availability
-5. Provide a summary and next steps
+CONVERSATION GUIDELINES:
+- Be conversational, helpful, and professional
+- Ask ONE focused question at a time
+- Use the user's name when provided
+- For photo uploads: "Great! You can upload photos now to help providers give accurate quotes."
+- For scheduling: "Perfect! Let's set up your availability. You can select preferred dates and times."
+- Keep responses under 2 sentences for mobile users
+- Use encouraging language like "Perfect!", "Great!", "Excellent!"
 
-Always respond in a helpful, professional tone. Keep responses concise but informative.
-If the user says something like "my house is dirty", correctly identify this as a CLEANING service.
+CONTEXT AWARENESS:
+- Track conversation step and adapt responses accordingly
+- Reference previous information shared by the user
+- Maintain context across the entire conversation
+- If user mentions urgency, acknowledge it in responses
+
+RESPONSE STYLE:
+- Professional yet friendly tone
+- Mobile-optimized (concise but complete)
+- Action-oriented when appropriate
+- Empathetic to user's service needs
+
+Remember: You're helping create a service request that will connect them with qualified professionals. Focus on gathering the essential information to ensure they get the best possible service experience.
 ''';
-
-  final List<ServiceCategory> _serviceCategories = [
-    ServiceCategory(
-      id: 'hvac',
-      name: 'HVAC & Heating',
-      description: 'Heating, ventilation, air conditioning, and furnace services',
-      keywords: ['furnace', 'heating', 'ac', 'air conditioning', 'hvac', 'ventilation', 'boiler', 'heat pump', 'thermostat', 'duct'],
-      followUpQuestions: [
-        'What type of HVAC system do you have?',
-        'When did you first notice the problem?',
-        'What sounds is the system making?',
-        'Is the system not heating/cooling at all, or is it working poorly?',
-        'Have you checked the air filter recently?',
-      ],
-      priceRange: {'min': 100, 'max': 800, 'average': 300},
-      icon: 'ac_unit',
-      color: Colors.blue,
-    ),
-    ServiceCategory(
-      id: 'plumbing',
-      name: 'Plumbing',
-      description: 'Pipe repairs, leak fixes, drain cleaning, and plumbing installations',
-      keywords: ['plumbing', 'pipe', 'leak', 'drain', 'toilet', 'faucet', 'sink', 'shower', 'water', 'sewer'],
-      followUpQuestions: [
-        'Where exactly is the plumbing issue located?',
-        'Is there active water damage or flooding?',
-        'When did the leak/problem start?',
-        'What type of pipes do you have (copper, PVC, etc.)?',
-        'Have you tried any temporary fixes?',
-      ],
-      priceRange: {'min': 80, 'max': 500, 'average': 200},
-      icon: 'plumbing',
-      color: Colors.teal,
-    ),
-    ServiceCategory(
-      id: 'electrical',
-      name: 'Electrical',
-      description: 'Electrical repairs, installations, and troubleshooting',
-      keywords: ['electrical', 'electric', 'outlet', 'switch', 'light', 'wiring', 'power', 'breaker', 'fuse', 'circuit'],
-      followUpQuestions: [
-        'What electrical component is having issues?',
-        'Are you experiencing complete power loss or partial issues?',
-        'When did the electrical problem start?',
-        'Have you checked your circuit breaker?',
-        'Is this a safety concern or emergency?',
-      ],
-      priceRange: {'min': 120, 'max': 600, 'average': 250},
-      icon: 'electrical_services',
-      color: Colors.amber,
-    ),
-    ServiceCategory(
-      id: 'cleaning',
-      name: 'Cleaning',
-      description: 'Deep cleaning, regular maintenance, and specialized cleaning services',
-      keywords: ['clean', 'cleaning', 'vacuum', 'deep clean', 'maid', 'housekeeping', 'sanitize', 'carpet', 'window', 'dirty', 'messy', 'dust', 'dusty', 'spotless', 'tidy', 'mess', 'scrub', 'wash', 'wipe'],
-      followUpQuestions: [
-        'What type of cleaning service do you need?',
-        'How large is the area to be cleaned?',
-        'Do you have any specific cleaning requirements?',
-        'Are there any areas that need special attention?',
-        'Do you need a one-time or recurring service?',
-      ],
-      priceRange: {'min': 80, 'max': 300, 'average': 150},
-      icon: 'cleaning_services',
-      color: Colors.green,
-    ),
-    ServiceCategory(
-      id: 'appliance',
-      name: 'Appliance Repair',
-      description: 'Repair and maintenance of household appliances',
-      keywords: ['appliance', 'refrigerator', 'washer', 'dryer', 'dishwasher', 'oven', 'microwave', 'garbage disposal'],
-      followUpQuestions: [
-        'What type of appliance needs repair?',
-        'What brand and model is the appliance?',
-        'What specific problem are you experiencing?',
-        'How old is the appliance?',
-        'Is the appliance still under warranty?',
-      ],
-      priceRange: {'min': 100, 'max': 400, 'average': 200},
-      icon: 'home_repair_service',
-      color: Colors.orange,
-    ),
-    ServiceCategory(
-      id: 'handyman',
-      name: 'Handyman',
-      description: 'General repairs, installations, and home maintenance',
-      keywords: ['handyman', 'repair', 'fix', 'install', 'maintenance', 'drywall', 'painting', 'door', 'window', 'shelf'],
-      followUpQuestions: [
-        'What type of repair or installation do you need?',
-        'Can you describe the current condition?',
-        'Do you have the materials or need them provided?',
-        'Is this an urgent repair?',
-        'Are there any specific requirements or preferences?',
-      ],
-      priceRange: {'min': 60, 'max': 300, 'average': 120},
-      icon: 'handyman',
-      color: Colors.brown,
-    ),
-    ServiceCategory(
-      id: 'landscaping',
-      name: 'Landscaping',
-      description: 'Lawn care, gardening, and outdoor maintenance',
-      keywords: ['landscaping', 'lawn', 'garden', 'yard', 'grass', 'tree', 'shrub', 'mulch', 'irrigation', 'outdoor'],
-      followUpQuestions: [
-        'What type of landscaping service do you need?',
-        'What is the size of your yard or garden?',
-        'Do you have any specific plants or materials in mind?',
-        'What is the current condition of your outdoor space?',
-        'Do you need ongoing maintenance or a one-time service?',
-      ],
-      priceRange: {'min': 100, 'max': 500, 'average': 250},
-      icon: 'grass',
-      color: Colors.lightGreen,
-    ),
-  ];
 
   ConversationState _currentState = ConversationState();
   final List<ChatMessage> _messages = [];
+  final List<Map<String, dynamic>> _conversationContext = [];
 
   List<ChatMessage> get messages => _messages;
   ConversationState get currentState => _currentState;
@@ -239,9 +114,16 @@ If the user says something like "my house is dirty", correctly identify this as 
   void startConversation() {
     _currentState = ConversationState();
     _messages.clear();
+    _conversationContext.clear();
+    
+    // Add system context for Gemini
+    _conversationContext.add({
+      'role': 'system',
+      'content': _systemPrompt,
+    });
     
     _addMessage(ChatMessage(
-      content: "Hello! I'm your AI assistant for home services. I'll help you describe your service needs and connect you with the right professionals.\n\nWhat do you need help with?",
+      content: "Hi! I'm your Magic Home assistant. I'm here to help you connect with the perfect service professional. What kind of home service do you need today?",
       type: MessageType.ai,
       timestamp: DateTime.now(),
     ));
@@ -250,6 +132,7 @@ If the user says something like "my house is dirty", correctly identify this as 
   void resetConversation() {
     _currentState = ConversationState();
     _messages.clear();
+    _conversationContext.clear();
   }
 
   void _addMessage(ChatMessage message) {
@@ -263,13 +146,23 @@ If the user says something like "my house is dirty", correctly identify this as 
       timestamp: DateTime.now(),
     ));
 
-    // Add user message to conversation history
-    _currentState.conversationHistory.add({
+    // Add user message to conversation context
+    _conversationContext.add({
       'role': 'user',
       'content': input,
     });
 
-    String response = await _generateLLMResponse(input);
+    // Detect and update service category if not already set
+    if (_currentState.serviceCategory == null) {
+      String lowerInput = input.toLowerCase();
+      _currentState.serviceCategory = _detectServiceCategory(lowerInput);
+      if (_currentState.serviceCategory != null) {
+        _currentState.serviceDescription = input;
+        // Don't advance step here - let _generateStepBasedResponse handle step progression
+      }
+    }
+
+    String response = await _generateGeminiResponse(input);
     
     _addMessage(ChatMessage(
       content: response,
@@ -277,387 +170,568 @@ If the user says something like "my house is dirty", correctly identify this as 
       timestamp: DateTime.now(),
     ));
 
-    // Add AI response to conversation history
-    _currentState.conversationHistory.add({
+    // Add AI response to conversation context
+    _conversationContext.add({
       'role': 'assistant',
       'content': response,
     });
 
+    // Update conversation state based on response content
+    _updateConversationState(input, response);
+
     return response;
   }
 
-  Future<String> _generateLLMResponse(String input) async {
+  Future<String> _generateGeminiResponse(String input) async {
     try {
-      // Determine conversation context
-      String contextPrompt = _buildContextPrompt();
-      
-      // For development/testing, use a mock LLM response
-      if (_apiKey == 'your-api-key-here') {
-        return await _generateMockLLMResponse(input);
+      // Check if ANY AI is configured, not just Gemini
+      if (!ApiConfig.isAnyAiConfigured) {
+        return await _generateMockResponse(input);
       }
       
-      // Real LLM integration (uncomment when API key is added)
-      return await _callLLMAPI(input, contextPrompt);
+      // If Gemini is specifically configured, use it
+      if (ApiConfig.isGeminiConfigured) {
+        return await _callGeminiAPI(input);
+      }
+      
+      // If other AI is configured but not Gemini, fall back to mock
+      return await _generateMockResponse(input);
     } catch (e) {
-      print('Error generating LLM response: $e');
+      print('Error generating Gemini response: $e');
       return _generateFallbackResponse(input);
     }
   }
 
-  Future<String> _callLLMAPI(String input, String contextPrompt) async {
-    try {
-      final messages = [
-        {'role': 'system', 'content': '$_systemPrompt\n\n$contextPrompt'},
-        ..._currentState.conversationHistory,
-      ];
-
-      final response = await http.post(
-        Uri.parse(_baseUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_apiKey',
-        },
-        body: jsonEncode({
-          'model': 'gpt-3.5-turbo',
-          'messages': messages,
-          'max_tokens': 300,
-          'temperature': 0.7,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        String aiResponse = data['choices'][0]['message']['content'];
+  Future<String> _callGeminiAPI(String input) async {
+    int retryCount = 0;
+    
+    while (retryCount < ApiConfig.maxRetries) {
+      try {
+        // Build comprehensive conversation context
+        final conversationContext = _buildEnhancedConversationContext();
+        final userMessage = _buildContextualUserMessage(input);
         
-        // Parse the response to update conversation state
-        _updateConversationState(aiResponse, input);
+        final messages = [
+          {
+            "role": "user",
+            "parts": [{"text": "$_systemPrompt\n\n$conversationContext\n\nUser: $userMessage"}]
+          }
+        ];
+
+        final response = await http.post(
+          Uri.parse('${ApiConfig.geminiBaseUrl}?key=${ApiConfig.geminiApiKey}'),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'contents': messages,
+            'generationConfig': {
+              'temperature': 0.7,
+              'topK': 40,
+              'topP': 0.95,
+              'maxOutputTokens': ApiConfig.maxTokens,
+              'stopSequences': [],
+            },
+            'safetySettings': [
+              {
+                'category': 'HARM_CATEGORY_HARASSMENT',
+                'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+              },
+              {
+                'category': 'HARM_CATEGORY_HATE_SPEECH',
+                'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+              }
+            ],
+          }),
+        ).timeout(ApiConfig.apiTimeout);
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+            final responseText = data['candidates'][0]['content']['parts'][0]['text'];
+            print('Gemini API call successful');
+            
+            // Advance conversation step based on response content
+            _advanceConversationStep(responseText);
+            
+            return responseText.trim();
+          }
+        }
         
-        return aiResponse;
-      } else {
-        throw Exception('LLM API error: ${response.statusCode}');
+        throw Exception('Gemini API error: ${response.statusCode} - ${response.body}');
+        
+      } catch (e) {
+        retryCount++;
+        print('Gemini API call attempt $retryCount failed: $e');
+        
+        if (retryCount >= ApiConfig.maxRetries) {
+          print('Max retries reached, falling back to mock response');
+          return _generateFallbackResponse(input);
+        }
+        
+        // Wait before retry with exponential backoff
+        await Future.delayed(Duration(seconds: retryCount * 2));
       }
-    } catch (e) {
-      print('Error calling LLM API: $e');
-      return _generateFallbackResponse(input);
-    }
-  }
-
-  Future<String> _generateMockLLMResponse(String input) async {
-    // Simulate API delay
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    String lowerInput = input.toLowerCase();
-    
-    // Advanced service categorization using multiple indicators
-    if (_currentState.serviceCategory == null) {
-      _currentState.serviceCategory = _intelligentServiceCategorization(lowerInput);
-      _currentState.serviceDescription = input;
-      _currentState.conversationStep = 1;
     }
     
-    // Generate contextual response based on conversation step
-    switch (_currentState.conversationStep) {
-      case 1:
-        return _generateInitialResponse(lowerInput);
-      case 2:
-        return _generateAcknowledgementAndPhotoRequest(lowerInput);
-      case 3:
-        return _generatePhotoRequestResponse();
-      case 4:
-        return _generateAvailabilityResponse();
-      default:
-        return _generateContinuationResponse(lowerInput);
-    }
+    return _generateFallbackResponse(input);
   }
 
-  String _intelligentServiceCategorization(String input) {
-    // Enhanced categorization using context and semantic understanding
-    Map<String, double> categoryScores = {
-      'cleaning': 0.0,
-      'plumbing': 0.0,
-      'electrical': 0.0,
-      'hvac': 0.0,
-      'appliance': 0.0,
-      'handyman': 0.0,
-      'landscaping': 0.0,
-    };
-
-    // Cleaning indicators
-    if (input.contains('dirty') || input.contains('messy') || input.contains('clean') || 
-        input.contains('dust') || input.contains('vacuum') || input.contains('maid') ||
-        input.contains('sanitize') || input.contains('scrub') || input.contains('wash') ||
-        input.contains('wipe') || input.contains('spotless') || input.contains('deep clean')) {
-      categoryScores['cleaning'] = categoryScores['cleaning']! + 10.0;
-    }
-
-    // Plumbing indicators
-    if (input.contains('leak') || input.contains('pipe') || input.contains('drain') ||
-        input.contains('toilet') || input.contains('faucet') || input.contains('sink') ||
-        input.contains('shower') || input.contains('water') || input.contains('plumb')) {
-      categoryScores['plumbing'] = categoryScores['plumbing']! + 10.0;
-    }
-
-    // Electrical indicators
-    if (input.contains('power') || input.contains('outlet') || input.contains('switch') ||
-        input.contains('light') || input.contains('wiring') || input.contains('electric') ||
-        input.contains('breaker') || input.contains('circuit')) {
-      categoryScores['electrical'] = categoryScores['electrical']! + 10.0;
-    }
-
-    // HVAC indicators
-    if (input.contains('heating') || input.contains('cooling') || input.contains('furnace') ||
-        input.contains('air conditioning') || input.contains('hvac') || input.contains('thermostat') ||
-        input.contains('ac ') || input.contains('heat pump') || input.contains('boiler')) {
-      categoryScores['hvac'] = categoryScores['hvac']! + 10.0;
-    }
-
-    // Appliance indicators
-    if (input.contains('refrigerator') || input.contains('washer') || input.contains('dryer') ||
-        input.contains('dishwasher') || input.contains('oven') || input.contains('microwave') ||
-        input.contains('appliance') || input.contains('fridge')) {
-      categoryScores['appliance'] = categoryScores['appliance']! + 10.0;
-    }
-
-    // Landscaping indicators
-    if (input.contains('lawn') || input.contains('garden') || input.contains('yard') ||
-        input.contains('tree') || input.contains('grass') || input.contains('outdoor') ||
-        input.contains('landscape') || input.contains('irrigation')) {
-      categoryScores['landscaping'] = categoryScores['landscaping']! + 10.0;
-    }
-
-    // Find the category with highest score
-    String bestCategory = 'handyman';
-    double bestScore = 0.0;
+  String _buildEnhancedConversationContext() {
+    String context = "CURRENT CONVERSATION STATE:\n";
+    context += "- Step: ${_currentState.conversationStep}\n";
     
-    categoryScores.forEach((category, score) {
-      if (score > bestScore) {
-        bestScore = score;
-        bestCategory = category;
-      }
-    });
-
-    return bestCategory;
-  }
-
-  String _generateInitialResponse(String input) {
-    String category = _currentState.serviceCategory!;
-    String response = "";
-    
-    // Generate category-specific acknowledgment
-    switch (category) {
-      case 'cleaning':
-        response = "I understand you need cleaning services. ";
-        if (input.contains('dirty') || input.contains('messy')) {
-          response += "I can help you get your home clean and tidy. ";
-        }
-        break;
-      case 'plumbing':
-        response = "I see you have a plumbing issue. ";
-        if (input.contains('leak')) {
-          response += "Water leaks can be serious, so let's get this addressed quickly. ";
-        }
-        break;
-      case 'electrical':
-        response = "I understand you need electrical work. ";
-        if (input.contains('power') || input.contains('outlet')) {
-          response += "Electrical issues should be handled by professionals for safety. ";
-        }
-        break;
-      case 'hvac':
-        response = "I see you need help with your heating or cooling system. ";
-        break;
-      case 'appliance':
-        response = "I understand you have an appliance that needs attention. ";
-        break;
-      case 'landscaping':
-        response = "I see you need help with outdoor/landscaping work. ";
-        break;
-      default:
-        response = "I understand you need some handyman services. ";
-    }
-
-    // Add follow-up question
-    response += "To help me understand your specific situation better:\n\n";
-    response += _getContextualFollowUpQuestion(category, input);
-    
-    _currentState.conversationStep = 2;
-    return response;
-  }
-
-  String _getContextualFollowUpQuestion(String category, String input) {
-    switch (category) {
-      case 'cleaning':
-        return "What type of cleaning service are you looking for? (e.g., deep cleaning, regular maintenance, post-construction cleanup)\n\nAre there any specific areas or surfaces you want to focus on?";
-      case 'plumbing':
-        return "Where exactly is the plumbing issue located, and what symptoms are you experiencing?";
-      case 'electrical':
-        return "What electrical problem are you experiencing? Is it affecting a specific outlet, room, or your whole home?";
-      case 'hvac':
-        return "What type of heating/cooling system do you have, and what specific issue are you experiencing?";
-      case 'appliance':
-        return "Which appliance needs service, and what problem are you experiencing with it?";
-      case 'landscaping':
-        return "What type of outdoor work do you need? (lawn care, tree trimming, garden maintenance, etc.)";
-      default:
-        return "What specific work do you need completed around your home?";
-    }
-  }
-
-  String _generateAcknowledgementAndPhotoRequest(String input) {
-    _currentState.problemDescription = (_currentState.problemDescription ?? "") + "\n" + input;
-    _currentState.conversationStep = 3;
-
-    String category = _currentState.serviceCategory ?? 'work';
-    String response = "Got it. ";
-    
-    if (category == 'cleaning') {
-      response += "That gives us a clear picture of the cleaning you need. ";
-    } else {
-      response += "Thanks for providing those details. ";
-    }
-    
-    response += "To help our service providers prepare an accurate quote, could you please take a picture of the area that needs service?";
-    
-    return response;
-  }
-
-  String _generatePhotoRequestResponse() {
-    _currentState.conversationStep = 4;
-    return "Great! Now let's set up your availability. When would be convenient for a service provider to visit?";
-  }
-
-  String _generateAvailabilityResponse() {
-    _currentState.conversationStep = 5;
-    return "Perfect! I now have all the information needed to create your service request. Let me prepare a summary for you.";
-  }
-
-  String _generateContinuationResponse(String input) {
-    return "Thank you for the additional information. Is there anything else you'd like to add about your service needs?";
-  }
-
-  String _buildContextPrompt() {
-    String context = "Current conversation step: ${_currentState.conversationStep}\n";
     if (_currentState.serviceCategory != null) {
-      context += "Service category: ${_currentState.serviceCategory}\n";
+      context += "- Service Category: ${_currentState.serviceCategory}\n";
     }
     if (_currentState.serviceDescription != null) {
-      context += "Service description: ${_currentState.serviceDescription}\n";
+      context += "- Service Description: ${_currentState.serviceDescription}\n";
     }
     if (_currentState.problemDescription != null) {
-      context += "Problem details: ${_currentState.problemDescription}\n";
+      context += "- Problem Details: ${_currentState.problemDescription}\n";
+    }
+    
+    context += "- Photo Upload Requested: ${_currentState.photoUploadRequested}\n";
+    context += "- Photos Uploaded: ${_currentState.photosUploaded}\n";
+    context += "- Calendar Requested: ${_currentState.calendarRequested}\n";
+    context += "- Availability Set: ${_currentState.availabilitySet}\n";
+    
+    if (_currentState.mediaUrls.isNotEmpty) {
+      context += "- Photos: ${_currentState.mediaUrls.length} uploaded\n";
+    }
+    
+    // Add recent conversation history (last 3 exchanges)
+    if (_conversationContext.length > 1) {
+      context += "\nRECENT CONVERSATION:\n";
+      final recentMessages = _conversationContext.take(_conversationContext.length).toList();
+      for (var i = math.max(0, recentMessages.length - 6); i < recentMessages.length; i++) {
+        final message = recentMessages[i];
+        if (message['role'] != 'system') {
+          context += "${message['role']}: ${message['content']}\n";
+        }
+      }
     }
     
     return context;
   }
 
-  void _updateConversationState(String aiResponse, String userInput) {
-    // Parse AI response to extract structured information
-    // This would be enhanced with better parsing logic
+  String _buildContextualUserMessage(String input) {
+    String contextualMessage = input;
     
-    if (_currentState.serviceCategory == null) {
-      _currentState.serviceCategory = _intelligentServiceCategorization(userInput.toLowerCase());
-      _currentState.serviceDescription = userInput;
+    // Add step context for Gemini to understand flow
+    switch (_currentState.conversationStep) {
+      case 0:
+        contextualMessage += " [User is starting conversation - needs service discovery]";
+        break;
+      case 1:
+        contextualMessage += " [User has described service need - gather more details]";
+        break;
+      case 2:
+        contextualMessage += " [User provided details - suggest photo upload]";
+        break;
+      case 3:
+        contextualMessage += " [User responding about photos - may need scheduling next]";
+        break;
+      case 4:
+        contextualMessage += " [User discussing scheduling - prepare for summary]";
+        break;
+      default:
+        contextualMessage += " [Continue conversation naturally]";
     }
     
-    // Update conversation step based on response content
-    if (aiResponse.contains('picture') || aiResponse.contains('photo')) {
+    return contextualMessage;
+  }
+
+  void _advanceConversationStep(String response) {
+    String lowerResponse = response.toLowerCase();
+    
+    // Advance step based on response content
+    if (_currentState.conversationStep < 2 && 
+        (lowerResponse.contains('tell me more') || lowerResponse.contains('details') || lowerResponse.contains('specific'))) {
+      _currentState.conversationStep = 2;
+    } else if (_currentState.conversationStep < 3 && 
+               (lowerResponse.contains('photo') || lowerResponse.contains('upload') || lowerResponse.contains('picture'))) {
       _currentState.conversationStep = 3;
-    } else if (aiResponse.contains('availability') || aiResponse.contains('schedule')) {
+    } else if (_currentState.conversationStep < 4 && 
+               (lowerResponse.contains('schedule') || lowerResponse.contains('availability') || lowerResponse.contains('time'))) {
       _currentState.conversationStep = 4;
-    } else if (aiResponse.contains('summary') || aiResponse.contains('request')) {
+    } else if (_currentState.conversationStep < 5 && 
+               (lowerResponse.contains('summary') || lowerResponse.contains('request'))) {
       _currentState.conversationStep = 5;
     }
   }
 
+  // Test method for Gemini API connectivity with enhanced testing
+  static Future<bool> testGeminiConnection() async {
+    if (!ApiConfig.isGeminiConfigured) {
+      print('Gemini API not configured');
+      return false;
+    }
+    
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.geminiBaseUrl}?key=${ApiConfig.geminiApiKey}'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'contents': [
+            {
+              "role": "user",
+              "parts": [{"text": "Hello Gemini, this is a connection test for Magic Home app. Please respond with 'Test successful' to confirm you're working."}]
+            }
+          ],
+          'generationConfig': {
+            'temperature': 0.1,
+            'maxOutputTokens': 20,
+          },
+        }),
+      ).timeout(ApiConfig.apiTimeout);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+          final responseText = data['candidates'][0]['content']['parts'][0]['text'];
+          print('Gemini test response: $responseText');
+          return true;
+        }
+      }
+      
+      print('Gemini test failed with status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+      return false;
+      
+    } catch (e) {
+      print('Gemini test connection error: $e');
+      return false;
+    }
+  }
+
+  Future<String> _generateMockResponse(String input) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    String lowerInput = input.toLowerCase();
+    
+    // Use step-based progression when no AI is configured
+    if (!ApiConfig.isAnyAiConfigured) {
+      return _generateStepBasedResponse(input, lowerInput);
+    }
+    
+    // Enhanced mock responses that mirror Gemini style (when AI is configured but fails)
+    if (_currentState.conversationStep < 2) {
+      if (_currentState.serviceCategory == null) {
+        _currentState.serviceCategory = _detectServiceCategory(lowerInput);
+        _currentState.serviceDescription = input;
+        _currentState.conversationStep = 1;
+        
+        return "Perfect! I understand you need ${_currentState.serviceCategory} service. Could you tell me more details about what specifically needs to be done?";
+      } else {
+        _currentState.problemDescription = input;
+        _currentState.conversationStep = 2;
+        
+        return "Got it! That gives me a clear picture. Would you like to upload some photos? They really help our service providers give you the most accurate quote.";
+      }
+    }
+    
+    // Continue with existing mock flow
+    if (_currentState.conversationStep == 2) {
+      // Always show photo upload, regardless of user response
+      _currentState.photoUploadRequested = true;
+      _currentState.conversationStep = 3;
+      return "Great! You can upload photos now to help providers give accurate quotes.";
+    }
+    
+    if (_currentState.conversationStep == 3) {
+      _currentState.photosUploaded = true;
+      _currentState.conversationStep = 4;
+      return "Excellent photos! Now let's set up your availability. When works best for you?";
+    }
+    
+    if (_currentState.conversationStep == 4) {
+      _currentState.calendarRequested = true;
+      _currentState.conversationStep = 5;
+      return "Perfect! Please select your preferred dates and times. You can choose multiple options for flexibility.";
+    }
+    
+    if (_currentState.conversationStep == 5) {
+      _currentState.availabilitySet = true;
+      _currentState.conversationStep = 6;
+      return "Excellent! I have all the information needed. Here's your complete service request summary.";
+    }
+    
+    return "Thank you for that information! Is there anything else you'd like to add to your service request?";
+  }
+
+  String _generateStepBasedResponse(String input, String lowerInput) {
+    // Step-based progression for when no AI is configured
+    switch (_currentState.conversationStep) {
+      case 0:
+        // Initial service discovery
+        _currentState.serviceCategory = _detectServiceCategory(lowerInput);
+        _currentState.serviceDescription = input;
+        _currentState.conversationStep = 1;
+        return "Thank you! I understand you need ${_currentState.serviceCategory ?? 'home service'} help. Could you provide more details about what specifically needs to be done?";
+        
+      case 1:
+        // Gathering details
+        _currentState.problemDescription = input;
+        _currentState.conversationStep = 2;
+        return "Got it! Now I have a better understanding of your needs. Would you like to upload some photos to help our service providers?";
+        
+      case 2:
+        // Photo upload - always show regardless of user response
+        _currentState.conversationStep = 3;
+        return "Great! Please upload your photos. This will help providers give you accurate quotes.";
+        
+      case 3:
+        // After photo upload (this will be triggered by UI, but we need a response)
+        _currentState.conversationStep = 4;
+        return "Perfect! Your photos have been uploaded. Now let's schedule your service. When would work best for you?";
+        
+      case 4:
+        // After calendar selection
+        _currentState.conversationStep = 5;
+        return "Excellent! I have your availability preferences. Let me prepare a summary of your service request.";
+        
+      case 5:
+        // Summary phase
+        _currentState.conversationStep = 6;
+        return "Your service request is complete! Here's a summary of everything we discussed.";
+        
+      default:
+        return "Thank you! Is there anything else you'd like to add or modify in your service request?";
+    }
+  }
+
+  String _detectServiceCategory(String input) {
+    // Use scoring system for better category detection
+    final categoryScores = _calculateCategoryScores(input);
+    
+    // Find the category with the highest score
+    String? bestCategory;
+    double highestScore = 0.0;
+    
+    categoryScores.forEach((category, score) {
+      if (score > highestScore) {
+        highestScore = score;
+        bestCategory = category;
+      }
+    });
+    
+    // Return best category if confidence is high enough, otherwise default to Handyman
+    return (highestScore > 0.3) ? bestCategory! : 'Handyman';
+  }
+
+  Map<String, double> _calculateCategoryScores(String input) {
+    String lowerInput = input.toLowerCase();
+    Map<String, double> scores = {};
+    
+    // Define keywords and their weights for each category
+    Map<String, Map<String, double>> categoryKeywords = {
+      'Cleaning': {
+        'clean': 1.0, 'dirty': 0.8, 'dust': 0.7, 'vacuum': 0.9, 'maid': 1.0, 'tidy': 0.8,
+        'sanitize': 0.9, 'scrub': 0.8, 'sweep': 0.7, 'mop': 0.8, 'disinfect': 0.9,
+        'housekeeping': 1.0, 'spotless': 0.8, 'polish': 0.7, 'organize': 0.6
+      },
+      'Plumbing': {
+        'leak': 1.0, 'pipe': 0.9, 'drain': 0.9, 'toilet': 0.8, 'faucet': 0.8, 'plumb': 1.0,
+        'water': 0.6, 'sink': 0.7, 'shower': 0.8, 'bathtub': 0.8, 'clog': 0.9,
+        'pressure': 0.7, 'hot water': 0.8, 'cold water': 0.7, 'sewer': 0.9
+      },
+      'Electrical': {
+        'electric': 1.0, 'power': 0.8, 'outlet': 0.9, 'light': 0.7, 'wiring': 1.0, 'switch': 0.8,
+        'circuit': 0.9, 'breaker': 0.9, 'voltage': 0.8, 'amperage': 0.8, 'shock': 0.7,
+        'electrician': 1.0, 'generator': 0.8, 'panel': 0.8, 'meter': 0.7
+      },
+      'HVAC': {
+        'heat': 0.8, 'cool': 0.8, 'hvac': 1.0, 'furnace': 0.9, 'air conditioning': 1.0, 'ac': 0.8,
+        'temperature': 0.7, 'thermostat': 0.9, 'duct': 0.8, 'ventilation': 0.9,
+        'filter': 0.7, 'humidity': 0.7, 'refrigerant': 0.9, 'compressor': 0.8
+      },
+      'Appliance Repair': {
+        'appliance': 1.0, 'refrigerator': 0.9, 'washer': 0.9, 'dryer': 0.9, 'dishwasher': 0.9, 'oven': 0.8,
+        'microwave': 0.8, 'stove': 0.8, 'freezer': 0.8, 'garbage disposal': 0.9,
+        'repair': 0.7, 'broken': 0.6, 'not working': 0.7, 'malfunctioning': 0.8
+      },
+      'Landscaping': {
+        'lawn': 0.9, 'garden': 0.9, 'yard': 0.8, 'tree': 0.7, 'landscape': 1.0, 'grass': 0.8,
+        'mowing': 0.9, 'trimming': 0.8, 'pruning': 0.8, 'weeds': 0.7, 'mulch': 0.7,
+        'irrigation': 0.8, 'sprinkler': 0.8, 'hedge': 0.7, 'bushes': 0.7
+      },
+      'Pest Control': {
+        'pest': 1.0, 'bug': 0.8, 'ant': 0.8, 'roach': 0.9, 'exterminate': 1.0,
+        'insect': 0.8, 'mice': 0.9, 'rat': 0.9, 'termite': 0.9, 'spider': 0.7,
+        'cockroach': 0.9, 'infestation': 1.0, 'fumigation': 1.0, 'poison': 0.7
+      },
+      'Roofing': {
+        'roof': 1.0, 'gutter': 0.8, 'shingle': 0.9, 'leak': 0.7, 'tile': 0.7,
+        'rafter': 0.8, 'chimney': 0.7, 'flashing': 0.8, 'eaves': 0.7, 'downspout': 0.8
+      },
+      'Painting': {
+        'paint': 1.0, 'wall': 0.7, 'color': 0.6, 'brush': 0.8, 'roller': 0.8,
+        'primer': 0.9, 'ceiling': 0.7, 'trim': 0.7, 'exterior': 0.8, 'interior': 0.8
+      },
+      'Handyman': {
+        'fix': 0.8, 'repair': 0.7, 'install': 0.8, 'replace': 0.7, 'maintenance': 0.8,
+        'broken': 0.6, 'assembly': 0.7, 'mounting': 0.7, 'general': 0.6
+      }
+    };
+    
+    // Initialize all category scores to 0
+    categoryKeywords.keys.forEach((category) {
+      scores[category] = 0.0;
+    });
+    
+    // Calculate scores based on keyword matches
+    categoryKeywords.forEach((category, keywords) {
+      keywords.forEach((keyword, weight) {
+        if (lowerInput.contains(keyword)) {
+          scores[category] = scores[category]! + weight;
+          
+          // Bonus for exact word matches (not just substring)
+          List<String> words = lowerInput.split(' ');
+          if (words.contains(keyword)) {
+            scores[category] = scores[category]! + (weight * 0.5);
+          }
+        }
+      });
+      
+      // Normalize score by number of keywords to prevent bias toward categories with more keywords
+      if (keywords.isNotEmpty) {
+        scores[category] = scores[category]! / keywords.length;
+      }
+    });
+    
+    // Apply category-specific rules and bonuses
+    _applyCategoryRules(lowerInput, scores);
+    
+    return scores;
+  }
+
+  void _applyCategoryRules(String lowerInput, Map<String, double> scores) {
+    // Specific rules to improve detection accuracy
+    
+    // Water-related issues could be plumbing
+    if (lowerInput.contains('water') && (lowerInput.contains('leak') || lowerInput.contains('drip') || lowerInput.contains('flow'))) {
+      scores['Plumbing'] = scores['Plumbing']! + 0.5;
+    }
+    
+    // Electrical safety keywords
+    if (lowerInput.contains('spark') || lowerInput.contains('shock') || lowerInput.contains('burn')) {
+      scores['Electrical'] = scores['Electrical']! + 0.3;
+    }
+    
+    // HVAC temperature issues
+    if ((lowerInput.contains('hot') || lowerInput.contains('cold')) && 
+        (lowerInput.contains('house') || lowerInput.contains('room') || lowerInput.contains('temperature'))) {
+      scores['HVAC'] = scores['HVAC']! + 0.4;
+    }
+    
+    // Outdoor work likely landscaping
+    if (lowerInput.contains('outdoor') || lowerInput.contains('outside') || lowerInput.contains('backyard') || lowerInput.contains('front yard')) {
+      scores['Landscaping'] = scores['Landscaping']! + 0.3;
+    }
+    
+    // Kitchen appliances
+    if (lowerInput.contains('kitchen') && 
+        (lowerInput.contains('appliance') || lowerInput.contains('not working') || lowerInput.contains('broken'))) {
+      scores['Appliance Repair'] = scores['Appliance Repair']! + 0.4;
+    }
+    
+    // General maintenance tasks default to handyman
+    if (lowerInput.contains('small') || lowerInput.contains('minor') || lowerInput.contains('quick')) {
+      scores['Handyman'] = scores['Handyman']! + 0.2;
+    }
+  }
+
+  // Method to get category scores for debugging or display
+  Map<String, double> getCategoryScores(String input) {
+    return _calculateCategoryScores(input);
+  }
+
+  void _updateConversationState(String input, String response) {
+    String lowerResponse = response.toLowerCase();
+    String lowerInput = input.toLowerCase();
+    
+    // Enhanced state detection
+    if (!_currentState.photoUploadRequested && 
+        (lowerResponse.contains('upload') || lowerResponse.contains('photo') || lowerResponse.contains('picture'))) {
+      _currentState.photoUploadRequested = true;
+    }
+    
+    if (!_currentState.calendarRequested && 
+        (lowerResponse.contains('schedule') || lowerResponse.contains('availability') || 
+         lowerResponse.contains('time') || lowerResponse.contains('calendar'))) {
+      _currentState.calendarRequested = true;
+    }
+    
+    if (!_currentState.availabilitySet && 
+        (lowerResponse.contains('summary') || lowerResponse.contains('complete') ||
+         lowerResponse.contains('all the information'))) {
+      _currentState.availabilitySet = true;
+    }
+    
+    // Update problem description if user provides more details
+    if (_currentState.conversationStep >= 1 && _currentState.problemDescription == null && 
+        input.length > 10 && !lowerInput.contains('yes') && !lowerInput.contains('no')) {
+      _currentState.problemDescription = input;
+    }
+  }
+
   String _generateFallbackResponse(String input) {
-    return "I understand you need help with your home service request. Could you please tell me more about what specific work you need done?";
+    // More intelligent fallback based on conversation state
+    if (_currentState.serviceCategory == null) {
+      return "I'd love to help you with your home service needs! Could you tell me what type of service you're looking for?";
+    } else {
+      return "I want to make sure I help you get the best ${_currentState.serviceCategory} service. Could you share a bit more about what you need?";
+    }
   }
 
-  void addMediaUrl(String url) {
-    _currentState.mediaUrls.add(url);
+  // Enhanced callback methods with Gemini integration
+  void onPhotoUploaded(String photoUrl) {
+    _currentState.mediaUrls.add(photoUrl);
+    if (!_currentState.photosUploaded) {
+      _currentState.photosUploaded = true;
+      _currentState.conversationStep = 4;
+      
+      // Add contextual AI message
+      _addMessage(ChatMessage(
+        content: "Perfect! I can see your photo. This will really help our service providers understand your needs. Now let's set up your availability!",
+        type: MessageType.ai,
+        timestamp: DateTime.now(),
+      ));
+    }
   }
 
-  void setAvailability(Map<String, dynamic> availability) {
+  void onAvailabilitySelected(Map<String, dynamic> availability) {
     _currentState.availability = availability;
+    if (!_currentState.availabilitySet) {
+      _currentState.availabilitySet = true;
+      _currentState.conversationStep = 5;
+      
+      // Add contextual AI message
+      _addMessage(ChatMessage(
+        content: "Excellent! I have your availability preferences. You're all set! Here's your complete service request summary.",
+        type: MessageType.ai,
+        timestamp: DateTime.now(),
+      ));
+    }
   }
 
-  Map<String, dynamic> generateServiceRequestSummary() {
-    // Generate price estimate based on service type
-    Map<String, dynamic> priceEstimate = _generatePriceEstimate();
-    
+  // Enhanced service request summary
+  Map<String, dynamic> getServiceRequestSummary() {
     return {
-      'description': _currentState.serviceDescription ?? 'Service request',
-      'details': _currentState.problemDescription ?? 'Additional details provided',
-      'category': _currentState.serviceCategory ?? 'general',
-      'serviceType': _currentState.serviceCategory ?? 'general',
-      'tags': _currentState.tags,
+      'serviceCategory': _currentState.serviceCategory ?? 'General Service',
+      'serviceDescription': _currentState.serviceDescription ?? '',
+      'problemDescription': _currentState.problemDescription ?? '',
       'mediaUrls': _currentState.mediaUrls,
-      'availability': _currentState.availability,
-      'priceEstimate': priceEstimate,
-      'priority': _currentState.tags.contains('Emergency') ? 'high' : 'medium',
+      'availability': _currentState.availability ?? {},
+      'location': _currentState.location ?? '',
+      'tags': _currentState.tags,
+      'extractedInfo': _currentState.extractedInfo,
+      'conversationStep': _currentState.conversationStep,
+      'timestamp': DateTime.now().toIso8601String(),
+      'isComplete': _currentState.availabilitySet && _currentState.serviceCategory != null,
     };
-  }
-
-  Map<String, dynamic> _generatePriceEstimate() {
-    // Simple price estimation based on service category
-    Map<String, Map<String, dynamic>> priceRanges = {
-      'cleaning': {'min': 80, 'max': 200, 'unit': 'visit'},
-      'plumbing': {'min': 150, 'max': 400, 'unit': 'job'},
-      'electrical': {'min': 100, 'max': 300, 'unit': 'job'},
-      'hvac': {'min': 100, 'max': 500, 'unit': 'service'},
-      'appliance': {'min': 80, 'max': 250, 'unit': 'repair'},
-      'handyman': {'min': 60, 'max': 200, 'unit': 'hour'},
-      'landscaping': {'min': 100, 'max': 300, 'unit': 'job'},
-    };
-
-    String category = _currentState.serviceCategory ?? 'handyman';
-    Map<String, dynamic> range = priceRanges[category] ?? priceRanges['handyman']!;
-    
-    return {
-      'min': range['min'],
-      'max': range['max'],
-      'unit': range['unit'],
-      'confidence': 0.7,
-      'factors': ['Service complexity', 'Materials needed', 'Time required'],
-    };
-  }
-
-  ServiceCategory _getServiceCategory(String id) {
-    // Return service category by ID - simplified version
-    Map<String, ServiceCategory> categories = {
-      'cleaning': ServiceCategory(
-        id: 'cleaning',
-        name: 'Cleaning Services',
-        description: 'Professional cleaning for your home',
-        keywords: ['clean', 'dirty', 'messy'],
-        followUpQuestions: [],
-        priceRange: {},
-        icon: 'cleaning_services',
-        color: Colors.blue,
-      ),
-      'plumbing': ServiceCategory(
-        id: 'plumbing',
-        name: 'Plumbing',
-        description: 'Water, pipes, and drainage services',
-        keywords: ['leak', 'pipe', 'water'],
-        followUpQuestions: [],
-        priceRange: {},
-        icon: 'plumbing',
-        color: Colors.blue,
-      ),
-      // Add other categories as needed
-    };
-    
-    return categories[id] ?? categories['cleaning']!;
-  }
-
-  String _getRandomFollowUpQuestion(ServiceCategory category) {
-    List<String> questions = [
-      "What specific work do you need done?",
-      "Can you describe the current situation?",
-      "What are the main issues you're experiencing?",
-    ];
-    
-    return questions[Random().nextInt(questions.length)];
   }
 } 

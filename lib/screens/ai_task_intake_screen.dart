@@ -208,7 +208,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         });
         
         final String downloadUrl = await _uploadImageToFirebase(File(image.path));
-        _aiService.addMediaUrl(downloadUrl);
+        _aiService.onPhotoUploaded(downloadUrl);
         
         // Add system message about photo upload
         setState(() {
@@ -274,7 +274,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       'notes': 'Available on selected dates',
     };
     
-    _aiService.setAvailability(availabilityData);
+    _aiService.onAvailabilitySelected(availabilityData);
     
     setState(() {
       _isLoading = true;
@@ -311,20 +311,20 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         _isLoading = true;
       });
       
-      final summary = _aiService.generateServiceRequestSummary();
+      final summary = _aiService.getServiceRequestSummary();
       
       // Create service request in Firestore
       await FirebaseFirestore.instance.collection('service_requests').add({
         'user_id': widget.user?.uid ?? 'anonymous',
-        'description': summary['description'],
-        'details': summary['details'],
-        'category': summary['category'],
-        'service_type': summary['serviceType'],
+        'description': summary['serviceDescription'],
+        'details': summary['problemDescription'],
+        'category': summary['serviceCategory'],
+        'service_type': summary['serviceCategory'],
         'tags': summary['tags'],
         'media_urls': summary['mediaUrls'],
         'availability': summary['availability'],
-        'price_estimate': summary['priceEstimate'],
-        'priority': summary['priority'],
+        'price_estimate': {'min': 100, 'max': 500, 'average': 300}, // Default estimate
+        'priority': 'medium',
         'status': 'pending',
         'created_at': FieldValue.serverTimestamp(),
         'location_masked': 'User location', // Will be updated with actual location
@@ -752,8 +752,8 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   }
 
   Widget _buildSummarySection() {
-    final summary = _aiService.generateServiceRequestSummary();
-    final priceEstimate = summary['priceEstimate'] as Map<String, dynamic>;
+    final summary = _aiService.getServiceRequestSummary();
+    final priceEstimate = {'min': 100, 'max': 500, 'average': 300}; // Default estimate since not provided by service
     
     return Container(
       margin: const EdgeInsets.all(16),
@@ -801,13 +801,13 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  summary['description'] ?? 'No description provided',
+                  summary['serviceDescription'] ?? 'No description provided',
                   style: const TextStyle(fontSize: 14),
                 ),
-                if (summary['details'] != null && summary['details'].isNotEmpty) ...[
+                if (summary['problemDescription'] != null && summary['problemDescription'].isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
-                    summary['details'],
+                    summary['problemDescription'],
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ],
