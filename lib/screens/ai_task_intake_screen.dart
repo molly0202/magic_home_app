@@ -166,12 +166,12 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         _showCalendar = false;
         _showSummary = false;
         
-        // Check if we need to show special UI elements
-        if (_aiService.currentState.conversationStep == 3) {
+        // Check if we need to show special UI elements based on new 8-step flow
+        if (_aiService.currentState.conversationStep == 3 || _aiService.currentState.conversationStep == 4) {
           _showPhotoUpload = true;
-        } else if (_aiService.currentState.conversationStep == 4) {
-          _showCalendar = true;
         } else if (_aiService.currentState.conversationStep == 5) {
+          _showCalendar = true;
+        } else if (_aiService.currentState.conversationStep == 8 || _aiService.currentState.conversationStep == 9) {
           _showSummary = true;
         }
       });
@@ -208,7 +208,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         });
         
         final String downloadUrl = await _uploadImageToFirebase(File(image.path));
-        _aiService.addMediaUrl(downloadUrl);
+        _aiService.onPhotoUploaded(downloadUrl);
         
         // Add system message about photo upload
         setState(() {
@@ -226,11 +226,10 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         setState(() {
           _showPhotoUpload = false;
           _isLoading = false;
-          // Check if we need to show next step
+          // Check if we need to show next step based on 8-step flow
           if (_aiService.currentState.conversationStep == 4) {
+            // After photo upload, move to step 5 (availability)
             _showCalendar = true;
-          } else if (_aiService.currentState.conversationStep == 5) {
-            _showSummary = true;
           }
         });
         
@@ -274,7 +273,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       'notes': 'Available on selected dates',
     };
     
-    _aiService.setAvailability(availabilityData);
+    _aiService.onAvailabilitySelected(availabilityData);
     
     setState(() {
       _isLoading = true;
@@ -287,10 +286,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       
       setState(() {
         _isLoading = false;
-        // Check if we need to show summary
-        if (_aiService.currentState.conversationStep == 5) {
-          _showSummary = true;
-        }
+        // Summary will show at step 8 via the main UI logic
       });
       
     } catch (e) {
@@ -311,26 +307,30 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         _isLoading = true;
       });
       
-      final summary = _aiService.generateServiceRequestSummary();
-      
-      // Create service request in Firestore
-      await FirebaseFirestore.instance.collection('service_requests').add({
-        'user_id': widget.user?.uid ?? 'anonymous',
-        'description': summary['description'],
-        'details': summary['details'],
-        'category': summary['category'],
-        'service_type': summary['serviceType'],
-        'tags': summary['tags'],
-        'media_urls': summary['mediaUrls'],
-        'availability': summary['availability'],
-        'price_estimate': summary['priceEstimate'],
-        'priority': summary['priority'],
+      // Create UserRequest object according to new schema
+      final userRequest = {
+        'userId': widget.user?.uid ?? 'anonymous',
+        'serviceCategory': _aiService.currentState.serviceCategory ?? 'General Service',
+        'description': _aiService.currentState.description ?? '',
+        'mediaUrls': _aiService.currentState.mediaUrls,
+        'tags': _aiService.currentState.tags,
+        'address': _aiService.currentState.address ?? '',
+        'phoneNumber': _aiService.currentState.phoneNumber ?? '',
+        'location': _aiService.currentState.location,
+        'userAvailability': _aiService.currentState.userAvailability ?? {},
+        'preferences': _aiService.currentState.preferences,
+        'priority': _aiService.currentState.priority ?? 3,
+        'createdAt': FieldValue.serverTimestamp(),
         'status': 'pending',
-        'created_at': FieldValue.serverTimestamp(),
-        'location_masked': 'User location', // Will be updated with actual location
+        // Additional fields for backward compatibility
         'customer_name': widget.user?.displayName ?? 'Anonymous User',
         'customer_photo_url': widget.user?.photoURL,
-      });
+        'service_answers': _aiService.currentState.serviceAnswers,
+        'price_estimate': _aiService.currentState.priceEstimate,
+      };
+      
+      // Store in Firebase using the new schema
+      await FirebaseFirestore.instance.collection('user_requests').add(userRequest);
       
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -752,8 +752,8 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   }
 
   Widget _buildSummarySection() {
-    final summary = _aiService.generateServiceRequestSummary();
-    final priceEstimate = summary['priceEstimate'] as Map<String, dynamic>;
+    final state = _aiService.currentState;
+    final priceEstimate = state.priceEstimate ?? {'min': 100, 'max': 500};
     
     return Container(
       margin: const EdgeInsets.all(16),
@@ -773,7 +773,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Thank you for the information. Here\'s a summary of your request.',
+            'Service Request Summary',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -782,111 +782,49 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           ),
           const SizedBox(height: 16),
           
-          // Problem Summary
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Problem Summary',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  summary['description'] ?? 'No description provided',
-                  style: const TextStyle(fontSize: 14),
-                ),
-                if (summary['details'] != null && summary['details'].isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    summary['details'],
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
-                ],
-              ],
-            ),
-          ),
+          // Service Information
+          _buildSummaryItem('Service Type', state.serviceCategory ?? 'General Service'),
+          _buildSummaryItem('Description', state.description ?? 'No description provided'),
           
+          // Service Details
+          if (state.serviceAnswers.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text('Service Details:', style: TextStyle(fontWeight: FontWeight.bold)),
+            ...state.serviceAnswers.entries.map((entry) => 
+              Padding(
+                padding: const EdgeInsets.only(left: 16, top: 4),
+                child: Text('• ${entry.value}', style: const TextStyle(fontSize: 14)),
+              ),
+            ),
+          ],
+          
+          // Media
+          if (state.mediaUrls.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text('Photos/Videos: ${state.mediaUrls.length} uploaded', 
+                 style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+          
+          // Availability
+          if (state.userAvailability != null) ...[
+            const SizedBox(height: 12),
+            _buildSummaryItem('Availability', state.userAvailability!['preference']?.toString() ?? 'Not specified'),
+          ],
+          
+          // Location
+          if (state.address != null && state.address!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _buildSummaryItem('Service Address', state.address!),
+          ],
+          
+          // Contact Information
+          if (state.phoneNumber != null && state.phoneNumber!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _buildSummaryItem('Phone Number', state.phoneNumber!),
+          ],
+          
+          // Price Estimate
           const SizedBox(height: 16),
-          
-          // Tags
-          if (summary['tags'] != null && (summary['tags'] as List).isNotEmpty) ...[
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: (summary['tags'] as List<String>).map((tag) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFBB04C).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    tag,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFFBB04C),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 16),
-          ],
-          
-          // Images
-          if (summary['mediaUrls'] != null && (summary['mediaUrls'] as List).isNotEmpty) ...[
-            const Text(
-              'Images',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 80,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: (summary['mediaUrls'] as List).length,
-                itemBuilder: (context, index) {
-                  final url = (summary['mediaUrls'] as List)[index];
-                  return Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        url,
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            width: 80,
-                            height: 80,
-                            color: Colors.grey[300],
-                            child: const Icon(Icons.image_not_supported),
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          
-          // Estimated Price
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -912,13 +850,6 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                     color: Colors.green,
                   ),
                 ),
-                Text(
-                  'Average: \$${priceEstimate['average']}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                  ),
-                ),
               ],
             ),
           ),
@@ -926,7 +857,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           const SizedBox(height: 16),
           
           const Text(
-            'Is there anything you\'d like to correct in the summary? You can click next if everything looks correct.',
+            'Please review the information above. You can make changes by typing corrections or submit the request as is.',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey,
@@ -952,12 +883,35 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Text(
-                    'Submit Request',
+                    'Submit Service Request',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSummaryItem(String title, String content) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            content,
+            style: const TextStyle(fontSize: 14),
           ),
         ],
       ),
