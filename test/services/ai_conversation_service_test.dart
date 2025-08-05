@@ -63,7 +63,9 @@ void main() {
       expect(aiService.currentState.photosUploaded, true);
     });
 
-    test('should handle availability selection callback', () {
+    test('should handle availability callbacks correctly', () {
+      aiService.startConversation();
+      
       final testAvailability = {
         'selectedDates': ['2024-01-15', '2024-01-16'],
         'preferredTime': 'morning',
@@ -71,7 +73,7 @@ void main() {
       
       aiService.onAvailabilitySelected(testAvailability);
       
-      expect(aiService.currentState.availability, testAvailability);
+      expect(aiService.currentState.userAvailability, testAvailability);
       expect(aiService.currentState.availabilitySet, true);
     });
 

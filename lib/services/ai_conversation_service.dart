@@ -24,14 +24,31 @@ class ChatMessage {
 }
 
 class ConversationState {
-  String? serviceCategory;
-  String? serviceDescription;
-  String? problemDescription;
-  List<String> mediaUrls;
-  Map<String, dynamic>? availability;
-  String? location;
-  Map<String, dynamic>? priceEstimate;
-  List<String> tags;
+  // Core Identifiers
+  String? requestId;              // Firestore document ID
+  String? userId;                 // Customer's user ID
+  
+  // Service Information  
+  String? serviceCategory;        // AI-categorized service type
+  String? description;            // AI-refined description
+  List<String> mediaUrls;         // Photos/videos from intake
+  List<String>? tags;             // AI-generated tags
+  
+  // Customer Details
+  String? address;                // Full service address
+  String? phoneNumber;            // Contact number
+  Map<String, dynamic>? location; // GPS coordinates + formatted address
+  
+  // Availability & Scheduling
+  Map<String, dynamic>? userAvailability; // Calendar + time slots
+  
+  // Preferences & Metadata
+  Map<String, dynamic>? preferences; // Budget, quality, timing
+  int? priority;                  // 1-5 urgency level
+  DateTime? createdAt;            // Creation timestamp
+  String? status;                 // Workflow status
+  
+  // Additional fields for conversation flow
   int conversationStep;
   Map<String, dynamic> extractedInfo;
   List<Map<String, String>> conversationHistory;
@@ -39,16 +56,29 @@ class ConversationState {
   bool photosUploaded;
   bool calendarRequested;
   bool availabilitySet;
+  List<String> serviceQuestions;
+  Map<String, String> serviceAnswers;
+  String? serviceDescription;
+  String? problemDescription;
+  String? customerName;
+  Map<String, dynamic>? locationDetails;
+  Map<String, dynamic>? priceEstimate;
 
   ConversationState({
+    this.requestId,
+    this.userId,
     this.serviceCategory,
-    this.serviceDescription,
-    this.problemDescription,
+    this.description,
     List<String>? mediaUrls,
-    this.availability,
+    this.tags,
+    this.address,
+    this.phoneNumber,
     this.location,
-    this.priceEstimate,
-    List<String>? tags,
+    this.userAvailability,
+    this.preferences,
+    this.priority,
+    this.createdAt,
+    this.status,
     this.conversationStep = 0,
     Map<String, dynamic>? extractedInfo,
     List<Map<String, String>>? conversationHistory,
@@ -56,10 +86,18 @@ class ConversationState {
     this.photosUploaded = false,
     this.calendarRequested = false,
     this.availabilitySet = false,
+    List<String>? serviceQuestions,
+    Map<String, String>? serviceAnswers,
+    this.serviceDescription,
+    this.problemDescription,
+    this.customerName,
+    this.locationDetails,
+    this.priceEstimate,
   }) : mediaUrls = mediaUrls ?? <String>[],
-       tags = tags ?? <String>[],
        extractedInfo = extractedInfo ?? <String, dynamic>{},
-       conversationHistory = conversationHistory ?? <Map<String, String>>[];
+       conversationHistory = conversationHistory ?? <Map<String, String>>[],
+       serviceQuestions = serviceQuestions ?? <String>[],
+       serviceAnswers = serviceAnswers ?? <String, String>{};
 }
 
 class AIConversationService {
@@ -157,7 +195,7 @@ Remember: You're helping create a service request that will connect them with qu
       String lowerInput = input.toLowerCase();
       _currentState.serviceCategory = _detectServiceCategory(lowerInput);
       if (_currentState.serviceCategory != null) {
-        _currentState.serviceDescription = input;
+        _currentState.description = input;
         // Don't advance step here - let _generateStepBasedResponse handle step progression
       }
     }
@@ -463,44 +501,155 @@ Remember: You're helping create a service request that will connect them with qu
   }
 
   String _generateStepBasedResponse(String input, String lowerInput) {
-    // Step-based progression for when no AI is configured
+    // 8-step progression for when no AI is configured
     switch (_currentState.conversationStep) {
       case 0:
-        // Initial service discovery
+        // Step 1: Greeting User
         _currentState.serviceCategory = _detectServiceCategory(lowerInput);
-        _currentState.serviceDescription = input;
+        _currentState.description = input;
         _currentState.conversationStep = 1;
-        return "Thank you! I understand you need ${_currentState.serviceCategory ?? 'home service'} help. Could you provide more details about what specifically needs to be done?";
+        return "Hi! Thank you for choosing Magic Home services. I understand you need ${_currentState.serviceCategory ?? 'home service'} help. Let me gather some details to connect you with the right professional.";
         
       case 1:
-        // Gathering details
-        _currentState.problemDescription = input;
+        // Step 2: Service Details - Category-specific structured questions
         _currentState.conversationStep = 2;
-        return "Got it! Now I have a better understanding of your needs. Would you like to upload some photos to help our service providers?";
+        return _getServiceSpecificQuestions();
         
       case 2:
-        // Photo upload - always show regardless of user response
-        _currentState.conversationStep = 3;
-        return "Great! Please upload your photos. This will help providers give you accurate quotes.";
+        // Continue collecting service details
+        _currentState.serviceAnswers[_getCurrentQuestionKey()] = input;
+        if (_needMoreServiceDetails()) {
+          return _getNextServiceQuestion();
+        } else {
+          _currentState.conversationStep = 3;
+          return "Perfect! Now let's do a visual assessment. Would you like to upload photos or a short video (max 30 seconds) to help our professionals better understand your needs? This is optional but highly recommended.";
+        }
         
       case 3:
-        // After photo upload (this will be triggered by UI, but we need a response)
+        // Step 3: Visual Assessment - Photo/Video uploads
         _currentState.conversationStep = 4;
-        return "Perfect! Your photos have been uploaded. Now let's schedule your service. When would work best for you?";
+        return "Great! You can upload your media now. After that, let's discuss your availability.";
         
       case 4:
-        // After calendar selection
+        // Step 4: Availability - Time preferences
         _currentState.conversationStep = 5;
-        return "Excellent! I have your availability preferences. Let me prepare a summary of your service request.";
+        return "When would you prefer to have this service done? Please let me know your preferences - for example: 'Morning preferred', 'Flexible between Mon-Fri', 'Weekend only', or 'Urgent - ASAP'.";
         
       case 5:
-        // Summary phase
+        // Step 5: Location Information
+        _currentState.userAvailability = {'preference': input, 'timestamp': DateTime.now().toIso8601String()};
         _currentState.conversationStep = 6;
-        return "Your service request is complete! Here's a summary of everything we discussed.";
+        return "Perfect! Now I need the service location details. Please provide: 1) Full address where the service is needed, 2) Any accessibility notes (stairs, parking, gate codes, etc.)";
+        
+      case 6:
+        // Step 6: Contact Information
+        _currentState.address = input;
+        _currentState.conversationStep = 7;
+        return "Thank you! Finally, I need your contact information for coordination. Please provide: 1) Your full name, 2) Phone number for the service professional to reach you.";
+        
+      case 7:
+        // Step 7: Market Price Range Estimation
+        _extractContactInfo(input);
+        _currentState.conversationStep = 8;
+        _currentState.priceEstimate = _generateMockPriceEstimate();
+        return "Excellent! Based on your ${_currentState.serviceCategory} request in your area, the estimated price range is ${_formatPriceRange(_currentState.priceEstimate!)}. Let me prepare a summary of your service request.";
+        
+      case 8:
+        // Step 8: Summary & Confirmation
+        _currentState.conversationStep = 9;
+        return "Here's your complete service request summary. Please review and confirm if everything looks correct, or let me know what needs to be updated.";
         
       default:
-        return "Thank you! Is there anything else you'd like to add or modify in your service request?";
+        return "Thank you! Your service request is ready to be submitted. Is there anything else you'd like to modify?";
     }
+  }
+
+  String _getServiceSpecificQuestions() {
+    // This method would typically return a list of questions based on _currentState.serviceCategory
+    // For now, it's a placeholder. In a real app, you'd have a more sophisticated mapping.
+    switch (_currentState.serviceCategory) {
+      case 'Cleaning':
+        return "What specific areas or rooms need cleaning? (e.g., living room, kitchen, bathroom)";
+      case 'Plumbing':
+        return "What type of plumbing issue are you experiencing? (e.g., leak, clog, water pressure)";
+      case 'Electrical':
+        return "What specific electrical issue are you facing? (e.g., power outage, flickering lights, wiring)";
+      case 'HVAC':
+        return "What type of HVAC service is needed? (e.g., heating, cooling, maintenance)";
+      case 'Appliance Repair':
+        return "What appliance is not working? (e.g., refrigerator, washer, dryer)";
+      case 'Landscaping':
+        return "What landscaping service is required? (e.g., mowing, trimming, planting)";
+      case 'Pest Control':
+        return "What type of pest control is needed? (e.g., ants, mice, termites)";
+      case 'Roofing':
+        return "What roofing issue are you experiencing? (e.g., leak, shingle damage, gutter clog)";
+      case 'Painting':
+        return "What surfaces need painting? (e.g., walls, ceiling, doors)";
+      case 'Handyman':
+        return "What general maintenance or repair task do you need? (e.g., fixing a leaky faucet, installing a new light switch)";
+      default:
+        return "Could you please specify the type of service you need?";
+    }
+  }
+
+  String _getCurrentQuestionKey() {
+    // This method would typically return the key for the current question in serviceAnswers
+    // For now, it's a placeholder.
+    return 'question_${_currentState.conversationStep}';
+  }
+
+  bool _needMoreServiceDetails() {
+    // This method would typically check if more details are needed for the current question
+    // For now, it's a placeholder.
+    return _currentState.serviceAnswers[_getCurrentQuestionKey()] == null || _currentState.serviceAnswers[_getCurrentQuestionKey()]!.isEmpty;
+  }
+
+  String _getNextServiceQuestion() {
+    // This method would typically return the next question to ask
+    // For now, it's a placeholder.
+    return _getServiceSpecificQuestions();
+  }
+
+  void _extractContactInfo(String input) {
+    // This method would typically extract contact information from the user's input
+    // For now, it's a placeholder.
+    _currentState.phoneNumber = input;
+  }
+
+  Map<String, dynamic> _generateMockPriceEstimate() {
+    // This method would typically generate a mock price estimate based on service category
+    // For now, it's a placeholder.
+    switch (_currentState.serviceCategory) {
+      case 'Cleaning':
+        return {'min': 50, 'max': 150};
+      case 'Plumbing':
+        return {'min': 100, 'max': 300};
+      case 'Electrical':
+        return {'min': 150, 'max': 400};
+      case 'HVAC':
+        return {'min': 200, 'max': 600};
+      case 'Appliance Repair':
+        return {'min': 100, 'max': 300};
+      case 'Landscaping':
+        return {'min': 50, 'max': 150};
+      case 'Pest Control':
+        return {'min': 100, 'max': 250};
+      case 'Roofing':
+        return {'min': 200, 'max': 800};
+      case 'Painting':
+        return {'min': 150, 'max': 400};
+      case 'Handyman':
+        return {'min': 50, 'max': 150};
+      default:
+        return {'min': 100, 'max': 300};
+    }
+  }
+
+  String _formatPriceRange(Map<String, dynamic> priceEstimate) {
+    // This method would typically format the price range for display
+    // For now, it's a placeholder.
+    return '\$${priceEstimate['min']}-\$${priceEstimate['max']}';
   }
 
   String _detectServiceCategory(String input) {
@@ -704,7 +853,7 @@ Remember: You're helping create a service request that will connect them with qu
   }
 
   void onAvailabilitySelected(Map<String, dynamic> availability) {
-    _currentState.availability = availability;
+    _currentState.userAvailability = availability;
     if (!_currentState.availabilitySet) {
       _currentState.availabilitySet = true;
       _currentState.conversationStep = 5;
@@ -725,8 +874,8 @@ Remember: You're helping create a service request that will connect them with qu
       'serviceDescription': _currentState.serviceDescription ?? '',
       'problemDescription': _currentState.problemDescription ?? '',
       'mediaUrls': _currentState.mediaUrls,
-      'availability': _currentState.availability ?? {},
-      'location': _currentState.location ?? '',
+      'availability': _currentState.userAvailability ?? {},
+      'location': _currentState.address ?? '',
       'tags': _currentState.tags,
       'extractedInfo': _currentState.extractedInfo,
       'conversationStep': _currentState.conversationStep,
