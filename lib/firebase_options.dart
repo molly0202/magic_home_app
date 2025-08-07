@@ -45,12 +45,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCrGV9lHlov4eAbU6X3HQIES_ui71_GtYo',
-    appId: '1:441732602904:ios:8a9b9a78156f261d97776d',
+    apiKey: 'AIzaSyDorx7D540DjpjCiy_V9Cx-XEjpy4FImwI',
+    appId: '1:441732602904:ios:79a7dfb2345678af',
     messagingSenderId: '441732602904',
     projectId: 'magic-home-01',
     storageBucket: 'magic-home-01.firebasestorage.app',
-    iosClientId: '441732602904-ib5itb3on72gkv6qffdjv6g58kgvmpnf.apps.googleusercontent.com',
-    // Add any other required options here
+    iosBundleId: 'com.meijia.MagicHomeApp',
   );
 } 
