@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "magic-home-01"
-  }
+    "default": "magic-home-01",
+    "staging": "magic-home-01"
+  },
+  "targets": {},
+  "etags": {}
 }

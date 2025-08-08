@@ -1204,7 +1204,7 @@ PODS:
   - BoringSSL-GRPC/Implementation (0.0.37):
     - BoringSSL-GRPC/Interface (= 0.0.37)
   - BoringSSL-GRPC/Interface (0.0.37)
-  - cloud_firestore (5.6.8):
+  - cloud_firestore (5.6.9):
     - Firebase/Firestore (= 11.13.0)
     - firebase_core
     - Flutter
@@ -1546,7 +1546,7 @@ SPEC CHECKSUMS:
   AppAuth: d4f13a8fe0baf391b2108511793e4b479691fb73
   AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
   BoringSSL-GRPC: dded2a44897e45f28f08ae87a55ee4bcd19bc508
-  cloud_firestore: 41c1ea0ea7b3f9b50a8fe27a59009b65b7ce7404
+  cloud_firestore: ded01e29d440fa7ba52bc855f27d2fc7a1bcf4be
   CwlCatchException: 7acc161b299a6de7f0a46a6ed741eae2c8b4d75a
   CwlCatchExceptionSupport: 54ccab8d8c78907b57f99717fb19d4cc3bce02dc
   Firebase: 3435bc66b4d494c2f22c79fd3aae4c1db6662327
@@ -1586,6 +1586,6 @@ SPEC CHECKSUMS:
   url_launcher_ios: 5334b05cef931de560670eeae103fd3e431ac3fe
   video_player_avfoundation: 7c6c11d8470e1675df7397027218274b6d2360b3
 
-PODFILE CHECKSUM: 42f838bc778e76b73b2a5a8502715a5881bd0956
+PODFILE CHECKSUM: 0b250028c19b536826d5952e6f5a86ac5a4aec13
 
 COCOAPODS: 1.16.2

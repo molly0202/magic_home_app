@@ -1,8 +1,5 @@
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart';
-// Remove Firebase imports
-// import 'package:firebase_core/firebase_core.dart';
-// import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 
 class User {
   final String id;
@@ -38,7 +35,7 @@ void log(String message) {
 }
 
 class AuthService {
-  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+  final firebase_auth.FirebaseAuth _firebaseAuth = firebase_auth.FirebaseAuth.instance;
 
   // Singleton pattern
   static final AuthService _instance = AuthService._internal();
@@ -50,7 +47,7 @@ class AuthService {
   }
   
   // Mock mode only
-  bool _useFirebase = false;
+  bool _useFirebase = true;
   // firebase_auth.FirebaseAuth? _firebaseAuth;
   
   // User stream to notify about authentication changes
@@ -69,7 +66,34 @@ class AuthService {
   
   // Initialize the service
   void _initializeService() {
-    _setupMockAuth();
+    if (_useFirebase) {
+      _setupFirebaseAuth();
+    } else {
+      _setupMockAuth();
+    }
+  }
+  
+  // Set up Firebase authentication
+  void _setupFirebaseAuth() {
+    log('Using Firebase authentication');
+    
+    // Listen to Firebase auth state changes
+    _firebaseAuth.authStateChanges().listen((firebase_auth.User? firebaseUser) {
+      if (firebaseUser != null) {
+        _currentUser = User(
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName ?? 'User',
+          email: firebaseUser.email ?? '',
+          phoneNumber: firebaseUser.phoneNumber ?? '',
+          role: 'user',
+        );
+        log('Firebase user signed in: ${_currentUser!.name}');
+      } else {
+        _currentUser = null;
+        log('Firebase user signed out');
+      }
+      _userController.add(_currentUser);
+    });
   }
   
   // Set up mock authentication when Firebase is unavailable
@@ -94,8 +118,24 @@ class AuthService {
     
     if (_useFirebase) {
       try {
-        // Mock Firebase login response since Firebase is removed
-        log('Firebase login failed: Firebase is not available');
+        final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        
+        if (userCredential.user != null) {
+          final firebaseUser = userCredential.user!;
+          _currentUser = User(
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName ?? 'User',
+            email: firebaseUser.email ?? '',
+            phoneNumber: firebaseUser.phoneNumber ?? '',
+            role: 'user',
+          );
+          _userController.add(_currentUser);
+          log('Firebase login successful for user: ${_currentUser!.name}');
+          return _currentUser;
+        }
         return null;
       } catch (e) {
         log('Firebase login error: $e');
@@ -141,8 +181,28 @@ class AuthService {
     
     if (_useFirebase) {
       try {
-        // Mock Firebase registration since Firebase is removed
-        log('Firebase registration failed: Firebase is not available');
+        final userCredential = await _firebaseAuth.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        
+        if (userCredential.user != null) {
+          final firebaseUser = userCredential.user!;
+          
+          // Update display name
+          await firebaseUser.updateDisplayName(name);
+          
+          _currentUser = User(
+            id: firebaseUser.uid,
+            name: name,
+            email: email,
+            phoneNumber: phoneNumber,
+            role: 'user',
+          );
+          _userController.add(_currentUser);
+          log('Firebase registration successful for user: $name');
+          return _currentUser;
+        }
         return null;
       } catch (e) {
         log('Firebase registration error: $e');
@@ -190,8 +250,10 @@ class AuthService {
     
     if (_useFirebase) {
       try {
-        // Mock Firebase logout since Firebase is removed
-        log('Firebase logout failed: Firebase is not available');
+        await _firebaseAuth.signOut();
+        _currentUser = null;
+        _userController.add(null);
+        log('Firebase logout successful');
       } catch (e) {
         log('Firebase logout error: $e');
       }
@@ -207,8 +269,8 @@ class AuthService {
   Future<void> verifyPhoneNumber({
     required String phoneNumber,
     required Function(String verificationId, int? resendToken) onCodeSent,
-    required Function(FirebaseAuthException error) onVerificationFailed,
-    required Function(PhoneAuthCredential credential) onVerificationCompleted,
+    required Function(firebase_auth.FirebaseAuthException error) onVerificationFailed,
+    required Function(firebase_auth.PhoneAuthCredential credential) onVerificationCompleted,
     int? forceResendingToken,
   }) async {
     await _firebaseAuth.verifyPhoneNumber(
@@ -223,23 +285,23 @@ class AuthService {
   }
 
   // Create credential from code
-  PhoneAuthCredential getCredential({
+  firebase_auth.PhoneAuthCredential getCredential({
     required String verificationId,
     required String smsCode,
   }) {
-    return PhoneAuthProvider.credential(
+    return firebase_auth.PhoneAuthProvider.credential(
       verificationId: verificationId,
       smsCode: smsCode,
     );
   }
 
   // Link phone credential to current user
-  Future<void> linkWithPhoneCredential(PhoneAuthCredential credential) async {
+  Future<void> linkWithPhoneCredential(firebase_auth.PhoneAuthCredential credential) async {
     await _firebaseAuth.currentUser?.linkWithCredential(credential);
   }
 
   // Sign in with phone credential (if not already signed in)
-  Future<UserCredential> signInWithPhoneCredential(PhoneAuthCredential credential) async {
+  Future<firebase_auth.UserCredential> signInWithPhoneCredential(firebase_auth.PhoneAuthCredential credential) async {
     return await _firebaseAuth.signInWithCredential(credential);
   }
   

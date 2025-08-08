@@ -180,7 +180,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       }
     } on FirebaseAuthException catch (e) {
       setState(() {
-        _errorMessage = 'Verification failed: [${e.message}]';
+        _errorMessage = 'Verification failed:  [${e.toString()}]';
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -214,7 +214,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           
           setState(() {
             _isLoading = false;
-            _errorMessage = 'Failed to resend code: [${error.message}]';
+            _errorMessage = 'Failed to resend code: [${error.toString()}]';
           });
         },
         onVerificationCompleted: (credential) {

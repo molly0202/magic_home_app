@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>441732602904-ib5itb3on72gkv6qffdjv6g58kgvmpnf.apps.googleusercontent.com</string>
+	<string>441732602904-rvfcj0mu29lnp0ifs62emki322mbcsv0.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.441732602904-ib5itb3on72gkv6qffdjv6g58kgvmpnf</string>
+	<string>com.googleusercontent.apps.441732602904-rvfcj0mu29lnp0ifs62emki322mbcsv0</string>
 	<key>API_KEY</key>
 	<string>AIzaSyCrGV9lHlov4eAbU6X3HQIES_ui71_GtYo</string>
 	<key>GCM_SENDER_ID</key>
@@ -13,22 +13,22 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.example.magichome.magicHomeFlutter</string>
+	<string>com.meijia.MagicHomeApp</string>
 	<key>PROJECT_ID</key>
 	<string>magic-home-01</string>
 	<key>STORAGE_BUCKET</key>
 	<string>magic-home-01.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
-	<false></false>
+	<false/>
 	<key>IS_ANALYTICS_ENABLED</key>
-	<false></false>
+	<false/>
 	<key>IS_APPINVITE_ENABLED</key>
-	<true></true>
+	<true/>
 	<key>IS_GCM_ENABLED</key>
-	<true></true>
+	<true/>
 	<key>IS_SIGNIN_ENABLED</key>
-	<true></true>
+	<true/>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:441732602904:ios:8a9b9a78156f261d97776d</string>
+	<string>1:441732602904:ios:aac3b3508fe7a8de97776d</string>
 </dict>
 </plist>

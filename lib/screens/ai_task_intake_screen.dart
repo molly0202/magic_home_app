@@ -249,19 +249,65 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
 
   Future<String> _uploadImageToFirebase(File imageFile) async {
     try {
+      final String? uid = widget.user?.uid ?? FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        throw Exception('Please sign in to upload photos');
+      }
+
       final String fileName = 'service_attachment_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final Reference ref = FirebaseStorage.instance
           .ref()
           .child('service_attachments')
-          .child(widget.user?.uid ?? 'anonymous')
+          .child(uid)
           .child(fileName);
-      
-      final UploadTask uploadTask = ref.putFile(imageFile);
-      final TaskSnapshot snapshot = await uploadTask;
-      final String downloadUrl = await snapshot.ref.getDownloadURL();
-      
+
+      // Debug diagnostics
+      final int fileSizeBytes = await imageFile.length();
+      // ignore: avoid_print
+      print('Uploading to Firebase Storage path: ${ref.fullPath} (bucket: ${ref.bucket}), uid: $uid, size: ${fileSizeBytes}B');
+      if (fileSizeBytes <= 0) {
+        throw Exception('Selected image file is empty');
+      }
+
+      final SettableMetadata metadata = SettableMetadata(contentType: 'image/jpeg');
+
+      // Read bytes explicitly to avoid platform-specific file handle issues
+      final Uint8List bytes = await imageFile.readAsBytes();
+      final UploadTask uploadTask = ref.putData(bytes, metadata);
+
+      TaskSnapshot snapshot = await uploadTask;
+      // ignore: avoid_print
+      print('Upload completed. State: ${snapshot.state}, bytesTransferred: ${snapshot.bytesTransferred}');
+
+      // Retry getDownloadURL a few times in case of eventual consistency
+      String? downloadUrl;
+      for (int attempt = 1; attempt <= 5; attempt++) {
+        try {
+          downloadUrl = await ref.getDownloadURL();
+          // ignore: avoid_print
+          print('getDownloadURL succeeded on attempt $attempt');
+          break;
+        } catch (e) {
+          // ignore: avoid_print
+          print('getDownloadURL failed (attempt $attempt): $e');
+          await Future.delayed(const Duration(milliseconds: 700));
+        }
+      }
+
+      if (downloadUrl == null) {
+        // List objects under the user's folder to aid debugging
+        try {
+          final ListResult listing = await ref.parent!.listAll();
+          final names = listing.items.map((i) => i.name).toList();
+          // ignore: avoid_print
+          print('Folder listing for service_attachments/$uid: ${names.isEmpty ? '[empty]' : names}');
+        } catch (_) {}
+        throw Exception('Failed to retrieve download URL after upload');
+      }
+
       return downloadUrl;
     } catch (e) {
+      // ignore: avoid_print
       print('Error uploading image to Firebase: $e');
       rethrow;
     }

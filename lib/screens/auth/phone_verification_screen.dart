@@ -53,7 +53,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
         onVerificationFailed: (error) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Verification failed: ${error.message}')),
+            SnackBar(content: Text('Verification failed: ${error.toString()}')),
           );
         },
         onVerificationCompleted: (credential) async {

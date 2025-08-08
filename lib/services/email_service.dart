@@ -102,9 +102,7 @@ class EmailService {
       final fileName = '${documentType}_${userId}_$timestamp.jpg';
       
       // Initialize Firebase Storage with explicit bucket
-      final storage = FirebaseStorage.instanceFor(
-        bucket: 'magic-home-01.firebasestorage.app'
-      );
+      final storage = FirebaseStorage.instance;
       
       // Get the storage reference with a simpler path structure
       final storageRef = storage
