@@ -72,3 +72,15 @@ functions/venv/
 functions/__pycache__/
 *.pyc
 .env
+
+# Local docs (ignored)
+AI_INTAKE_AGENT_PRD.md
+APPLE_DEVELOPER_SETUP_GUIDE.md
+XCODE_DIRECT_BUILD_GUIDE.md
+iOS_BUILD_CONFIGURATION.md
+iOS_PUSH_SETUP.md
+SETUP_AUTH.md
+MATCHING_ALGORITHM_SUMMARY.md
+
+# Sensitive local config
+lib/config/secrets.dart
