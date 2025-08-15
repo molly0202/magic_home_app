@@ -46,6 +46,16 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	
+	<!-- Background Modes for Push Notifications -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	
+	<!-- Firebase AppDelegate Proxying -->
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<true/>
+	
 	<!-- Google Sign-in Section -->
 	<key>GIDClientID</key>
 	<string>441732602904-rvfcj0mu29lnp0ifs62emki322mbcsv0.apps.googleusercontent.com</string>

@@ -1,16 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'services/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+
+// Top-level function to handle background messages
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Initialize Firebase in background handler
+  await Firebase.initializeApp();
+  print('Handling a background message: ${message.messageId}');
+  print('Background message data: ${message.data}');
+  
+  // You can perform additional background processing here
+  // For example, update local database, show notification, etc.
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   print('Initializing Firebase...');
   await Firebase.initializeApp();
   print('Firebase initialized successfully');
+  
+  // Set the background messaging handler early on
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  
   runApp(const MagicHomeApp());
 }
 

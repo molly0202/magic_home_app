@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -380,59 +381,290 @@ Thank you.
 
   // Initialize Push Notifications
   static Future<void> initializePushNotifications(String providerId) async {
-    // Request permission from user
-    NotificationSettings settings = await _firebaseMessaging.requestPermission(
-      alert: true,
-      announcement: false,
-      badge: true,
-      carPlay: false,
-      criticalAlert: false,
-      provisional: false,
-      sound: true,
-    );
+    try {
+      print('🚀 Starting push notification initialization for provider: $providerId');
+      
+      // Request permission from user
+      NotificationSettings settings = await _firebaseMessaging.requestPermission(
+        alert: true,
+        announcement: false,
+        badge: true,
+        carPlay: false,
+        criticalAlert: false,
+        provisional: false,
+        sound: true,
+      );
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('User granted permission for push notifications');
-      // Get the FCM token
-      String? fcmToken = await _firebaseMessaging.getToken();
-      if (fcmToken != null) {
-        print('FCM Token: $fcmToken');
-        // Save the token to Firestore
-        await _saveTokenToDatabase(providerId, fcmToken);
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        print('✅ User granted permission for push notifications');
+        
+        // For iOS, we need to wait for APNS token to be available
+        if (Platform.isIOS) {
+          print('📱 Waiting for APNS token (iOS)...');
+          String? apnsToken = await _firebaseMessaging.getAPNSToken();
+          print('📱 First APNS attempt: ${apnsToken != null ? "SUCCESS" : "FAILED"}');
+          
+          if (apnsToken != null) {
+            print('📱 APNS Token received: ${apnsToken.substring(0, 20)}...');
+          } else {
+            print('⚠️  APNS token not immediately available, will retry in 3 seconds...');
+            // Wait a bit and try again
+            await Future.delayed(const Duration(seconds: 3));
+            apnsToken = await _firebaseMessaging.getAPNSToken();
+            print('📱 Second APNS attempt: ${apnsToken != null ? "SUCCESS" : "FAILED"}');
+            
+            if (apnsToken != null) {
+              print('📱 APNS Token received after retry: ${apnsToken.substring(0, 20)}...');
+            } else {
+              print('❌ APNS Token STILL not available after retry!');
+              print('❌ This indicates Push Notifications capability issue in Xcode');
+              // Don't return here, let's try to get FCM token anyway
+            }
+          }
+        }
+        
+        // Now get the FCM token
+        print('🔑 Getting FCM token...');
+        String? fcmToken = await _firebaseMessaging.getToken();
+        if (fcmToken != null) {
+          print('🔑 FCM Token received: ${fcmToken.substring(0, 50)}...');
+          // Save the token to Firestore
+          await _saveTokenToDatabase(providerId, fcmToken);
+        } else {
+          print('❌ Failed to get FCM token');
+        }
+
+        // Listen for token refresh
+        _firebaseMessaging.onTokenRefresh.listen((newToken) {
+          print('🔄 FCM token refreshed: ${newToken.substring(0, 50)}...');
+          _saveTokenToDatabase(providerId, newToken);
+        });
+      } else {
+        print('❌ User declined or has not accepted permission: ${settings.authorizationStatus}');
       }
-
-      // Listen for token refresh
-      _firebaseMessaging.onTokenRefresh.listen((newToken) {
-        _saveTokenToDatabase(providerId, newToken);
-      });
-    } else {
-      print('User declined or has not accepted permission');
+    } catch (e) {
+      print('❌ Error initializing push notifications: $e');
     }
     
-    // Handle foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('Got a message whilst in the foreground!');
-      print('Message data: ${message.data}');
+      // Handle foreground messages
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    print('Got a message whilst in the foreground!');
+    print('Message data: ${message.data}');
 
-      if (message.notification != null) {
-        print('Message also contained a notification: ${message.notification}');
-        // Here you could show an in-app notification dialog or snackbar
-        // For now, we'll just print it.
+    if (message.notification != null) {
+      print('Message also contained a notification: ${message.notification}');
+      
+      // Handle different notification types
+      final notificationType = message.data['type'];
+      if (notificationType == 'status_update') {
+        _handleStatusUpdateNotification(message);
       }
-    });
+    }
+  });
+
+  // Handle background message taps (when app is in background but not terminated)
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    print('A new onMessageOpenedApp event was published!');
+    _handleNotificationTap(message);
+  });
+
+  // Check if app was opened from a terminated state due to notification
+  FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
+    if (message != null) {
+      print('App opened from terminated state via notification');
+      _handleNotificationTap(message);
+    }
+  });
   }
 
   // Save FCM token to the provider's document
   static Future<void> _saveTokenToDatabase(String providerId, String token) async {
     try {
-      await FirebaseFirestore.instance
+      print('🔐 Starting FCM token save process...');
+      print('Provider ID: $providerId');
+      print('FCM Token: $token');
+      
+      // First check if the provider document exists
+      final docRef = FirebaseFirestore.instance.collection('providers').doc(providerId);
+      final docSnapshot = await docRef.get();
+      
+      if (!docSnapshot.exists) {
+        print('⚠️  Provider document does not exist! Creating with FCM token...');
+        // Create the document with basic fields and FCM token
+        await docRef.set({
+          'fcmTokens': [token],
+          'createdAt': FieldValue.serverTimestamp(),
+          'status': 'pending',
+        });
+        print('✅ Created new provider document with FCM token');
+      } else {
+        print('📄 Provider document exists, adding FCM token...');
+        // Use set with merge to add the FCM token
+        await docRef.set({
+          'fcmTokens': FieldValue.arrayUnion([token]),
+          'lastTokenUpdate': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        print('✅ Added FCM token to existing provider document');
+      }
+      
+      // Verify the token was saved
+      final updatedDoc = await docRef.get();
+      if (updatedDoc.exists) {
+        final data = updatedDoc.data()!;
+        final tokens = data['fcmTokens'] as List<dynamic>?;
+        print('🔍 Verification: Document now has ${tokens?.length ?? 0} FCM token(s)');
+        if (tokens != null) {
+          print('🔍 Tokens: $tokens');
+        }
+      }
+      
+    } catch (e) {
+      print('❌ Error saving FCM token to database: $e');
+      print('Stack trace: ${StackTrace.current}');
+    }
+  }
+
+  // Handle status update notifications when app is in foreground
+  static void _handleStatusUpdateNotification(RemoteMessage message) {
+    final status = message.data['status'];
+    final providerId = message.data['provider_id'];
+    
+    if (status == 'verified' || status == 'active') {
+      _showForegroundVerificationNotification(message);
+    } else if (status == 'rejected') {
+      _showForegroundRejectionNotification(message);
+    }
+  }
+
+  // Handle notification tap (from background or terminated state)
+  static void _handleNotificationTap(RemoteMessage message) {
+    final notificationType = message.data['type'];
+    final status = message.data['status'];
+    final providerId = message.data['provider_id'];
+
+    if (notificationType == 'status_update') {
+      // Navigate to appropriate screen based on status
+      if (status == 'verified' || status == 'active') {
+        print('Navigating to provider dashboard due to verification success');
+        // In a real app, you'd use a navigation service here
+        // NavigationService.navigateToProviderDashboard();
+      } else if (status == 'rejected') {
+        print('Navigating to help/support due to application rejection');
+        // NavigationService.navigateToSupport();
+      }
+    }
+  }
+
+  // Show foreground notification for verification success
+  static void _showForegroundVerificationNotification(RemoteMessage message) {
+    // This would typically use an overlay or dialog service
+    // For now, we'll use a simple print statement
+    print('🎉 FOREGROUND NOTIFICATION: Account Verified!');
+    print('You can now start accepting service requests.');
+    
+    // In a real implementation, you could show a banner notification
+    // or update the app's badge/notification icon
+  }
+
+  // Show foreground notification for rejection
+  static void _showForegroundRejectionNotification(RemoteMessage message) {
+    print('❌ FOREGROUND NOTIFICATION: Application Update');
+    print('Please check your email for details about your application.');
+  }
+
+  // Test notification function for admins
+  static Future<String> sendTestNotification(String providerId, String testStatus) async {
+    try {
+      // Get provider data
+      final providerDoc = await FirebaseFirestore.instance
           .collection('providers')
           .doc(providerId)
-          .update({
-        'fcmTokens': FieldValue.arrayUnion([token]),
+          .get();
+      
+      if (!providerDoc.exists) {
+        return 'Error: Provider not found';
+      }
+      
+      final providerData = providerDoc.data()!;
+      final fcmTokens = providerData['fcmTokens'] as List<dynamic>?;
+      
+      if (fcmTokens == null || fcmTokens.isEmpty) {
+        return 'Error: No FCM tokens found for provider';
+      }
+      
+      // Create test notification data
+      final notificationData = {
+        'type': 'test_notification',
+        'status': testStatus,
+        'provider_id': providerId,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+      
+      // Store notification for testing
+      await FirebaseFirestore.instance
+          .collection('test_notifications')
+          .add({
+        'providerId': providerId,
+        'testStatus': testStatus,
+        'fcmTokenCount': fcmTokens.length,
+        'data': notificationData,
+        'timestamp': FieldValue.serverTimestamp(),
       });
+      
+      return 'Test notification prepared for ${fcmTokens.length} tokens';
+      
     } catch (e) {
-      print('Error saving FCM token to database: $e');
+      return 'Error: $e';
+    }
+  }
+
+  // Get provider's current notification settings
+  static Future<Map<String, dynamic>> getNotificationSettings(String providerId) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('providers')
+          .doc(providerId)
+          .get();
+      
+      if (!doc.exists) {
+        return {'error': 'Provider not found'};
+      }
+      
+      final data = doc.data()!;
+      return {
+        'fcmTokens': data['fcmTokens'] ?? [],
+        'notificationEnabled': data['notificationEnabled'] ?? true,
+        'emailNotificationEnabled': data['emailNotificationEnabled'] ?? true,
+        'status': data['status'] ?? 'unknown',
+      };
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  // Update notification preferences
+  static Future<void> updateNotificationSettings(String providerId, {
+    bool? pushNotifications,
+    bool? emailNotifications,
+  }) async {
+    try {
+      final updateData = <String, dynamic>{};
+      
+      if (pushNotifications != null) {
+        updateData['notificationEnabled'] = pushNotifications;
+      }
+      if (emailNotifications != null) {
+        updateData['emailNotificationEnabled'] = emailNotifications;
+      }
+      
+      if (updateData.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('providers')
+            .doc(providerId)
+            .update(updateData);
+      }
+    } catch (e) {
+      print('Error updating notification settings: $e');
     }
   }
 } 

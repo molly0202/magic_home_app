@@ -2596,6 +2596,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                     ),
                   ),
                   const Spacer(),
+
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.pop(context),
