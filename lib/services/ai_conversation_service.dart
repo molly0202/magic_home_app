@@ -105,41 +105,45 @@ class AIConversationService {
   factory AIConversationService() => _instance;
   AIConversationService._internal();
   
+  // Callbacks for UI interactions
+  Function(Map<String, dynamic>)? onServiceRequestComplete;
+  VoidCallback? onPhotoUploadRequested;
+  VoidCallback? onCalendarRequested;
+  
   // Enhanced system prompt optimized for Gemini and Magic Home app
   static const String _systemPrompt = '''
-You are Gemini, the AI assistant for Magic Home - a premium home services platform. Your role is to help users create detailed service requests through natural conversation.
+You are Magic Home assistant. Help users create service requests efficiently.
 
-CONVERSATION FLOW:
-1. GREETING & DISCOVERY (Steps 0-1): Understand what home service they need
-2. DETAILS GATHERING (Step 2): Get specific details about their problem
-3. VISUAL DOCUMENTATION (Step 3): Encourage photo uploads for better quotes
-4. SCHEDULING (Step 4): Help them set availability preferences
-5. SUMMARY & CONFIRMATION (Step 5): Present complete service request
+CONVERSATION FLOW - FOLLOW STRICTLY:
+1. DISCOVER (Step 0-1): What service do you need?
+2. DETAILS (Step 2): Get specific problem details
+3. PHOTOS (Step 3): Guide to photo upload - MAX 2 attempts then proceed
+4. SCHEDULE (Step 4): Set availability - MAX 2 attempts then proceed  
+5. CONFIRM (Step 5): Show summary
 
 SERVICE CATEGORIES: Cleaning, Plumbing, Electrical, HVAC, Appliance Repair, Handyman, Landscaping, Pest Control, Roofing, Painting
 
-CONVERSATION GUIDELINES:
-- Be conversational, helpful, and professional
-- Ask ONE focused question at a time
-- Use the user's name when provided
-- For photo uploads: "Great! You can upload photos now to help providers give accurate quotes."
-- For scheduling: "Perfect! Let's set up your availability. You can select preferred dates and times."
-- Keep responses under 2 sentences for mobile users
-- Use encouraging language like "Perfect!", "Great!", "Excellent!"
+RULES:
+- Keep responses SHORT (1 sentence max)
+- Ask ONE question at a time
+- NEVER repeat the same question
+- Progress steps automatically after 2 attempts
+- Step 3: Say "Photos help! Upload now or we'll continue" then TRIGGER photo upload
+- Step 4: Say "When works for you?" then TRIGGER calendar
+- If user says "skip" or "later" - move to next step immediately
 
-CONTEXT AWARENESS:
-- Track conversation step and adapt responses accordingly
-- Reference previous information shared by the user
-- Maintain context across the entire conversation
-- If user mentions urgency, acknowledge it in responses
+STEP TRIGGERS:
+- Step 3: After asking about photos MAX 2 times, automatically call photo upload UI
+- Step 4: After asking about schedule MAX 2 times, automatically call calendar UI
+- Step 5: Auto-generate summary
 
 RESPONSE STYLE:
-- Professional yet friendly tone
-- Mobile-optimized (concise but complete)
-- Action-oriented when appropriate
-- Empathetic to user's service needs
+- Concise and direct
+- Friendly but brief
+- No repetition
+- Progress conversation forward
 
-Remember: You're helping create a service request that will connect them with qualified professionals. Focus on gathering the essential information to ensure they get the best possible service experience.
+Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
 ''';
 
   ConversationState _currentState = ConversationState();
@@ -149,7 +153,7 @@ Remember: You're helping create a service request that will connect them with qu
   List<ChatMessage> get messages => _messages;
   ConversationState get currentState => _currentState;
 
-  void startConversation() {
+  void   startConversation() {
     _currentState = ConversationState();
     _messages.clear();
     _conversationContext.clear();
@@ -161,7 +165,7 @@ Remember: You're helping create a service request that will connect them with qu
     });
     
     _addMessage(ChatMessage(
-      content: "Hi! I'm your Magic Home assistant. I'm here to help you connect with the perfect service professional. What kind of home service do you need today?",
+      content: "Hi! What home service do you need?",
       type: MessageType.ai,
       timestamp: DateTime.now(),
     ));
@@ -216,6 +220,11 @@ Remember: You're helping create a service request that will connect them with qu
 
     // Update conversation state based on response content
     _updateConversationState(input, response);
+
+    // Check if conversation is complete and trigger summary
+    if (isConversationComplete()) {
+      _onConversationComplete();
+    }
 
     return response;
   }
@@ -356,25 +365,35 @@ Remember: You're helping create a service request that will connect them with qu
   String _buildContextualUserMessage(String input) {
     String contextualMessage = input;
     
-    // Add step context for Gemini to understand flow
+    // Track attempts for this step
+    String stepKey = 'step_${_currentState.conversationStep}_attempts';
+    int attempts = _currentState.extractedInfo[stepKey] ?? 0;
+    
+    // Add concise step context
     switch (_currentState.conversationStep) {
       case 0:
-        contextualMessage += " [User is starting conversation - needs service discovery]";
+        contextualMessage += " [Step 0: Identify service - be brief]";
         break;
       case 1:
-        contextualMessage += " [User has described service need - gather more details]";
+        contextualMessage += " [Step 1: Get details - ask 1 question only, attempt $attempts/2]";
         break;
       case 2:
-        contextualMessage += " [User provided details - suggest photo upload]";
+        contextualMessage += " [Step 2: Move to photos immediately - be brief]";
         break;
       case 3:
-        contextualMessage += " [User responding about photos - may need scheduling next]";
+        contextualMessage += " [Step 3: Photo upload - attempt $attempts/2, if >=2 say 'Photos help! Upload now or continue?' and trigger upload]";
         break;
       case 4:
-        contextualMessage += " [User discussing scheduling - prepare for summary]";
+        contextualMessage += " [Step 4: Scheduling - attempt $attempts/2, if >=2 say 'When works?' and trigger calendar]";
         break;
-      default:
-        contextualMessage += " [Continue conversation naturally]";
+      case 5:
+        contextualMessage += " [Step 5: Show summary immediately]";
+        break;
+    }
+    
+    // Add force progression hints
+    if (attempts >= 2) {
+      contextualMessage += " [MAX ATTEMPTS REACHED - PROGRESS TO NEXT STEP]";
     }
     
     return contextualMessage;
@@ -383,19 +402,47 @@ Remember: You're helping create a service request that will connect them with qu
   void _advanceConversationStep(String response) {
     String lowerResponse = response.toLowerCase();
     
-    // Advance step based on response content
-    if (_currentState.conversationStep < 2 && 
-        (lowerResponse.contains('tell me more') || lowerResponse.contains('details') || lowerResponse.contains('specific'))) {
-      _currentState.conversationStep = 2;
-    } else if (_currentState.conversationStep < 3 && 
-               (lowerResponse.contains('photo') || lowerResponse.contains('upload') || lowerResponse.contains('picture'))) {
-      _currentState.conversationStep = 3;
-    } else if (_currentState.conversationStep < 4 && 
-               (lowerResponse.contains('schedule') || lowerResponse.contains('availability') || lowerResponse.contains('time'))) {
-      _currentState.conversationStep = 4;
-    } else if (_currentState.conversationStep < 5 && 
-               (lowerResponse.contains('summary') || lowerResponse.contains('request'))) {
-      _currentState.conversationStep = 5;
+    // Track attempts to prevent repetition
+    String stepKey = 'step_${_currentState.conversationStep}_attempts';
+    int attempts = _currentState.extractedInfo[stepKey] ?? 0;
+    attempts++;
+    _currentState.extractedInfo[stepKey] = attempts;
+    
+    // Force progression after max attempts
+    switch (_currentState.conversationStep) {
+      case 0:
+        if (_currentState.serviceCategory != null) {
+          _currentState.conversationStep = 1;
+        }
+        break;
+      case 1:
+        if (lowerResponse.contains('tell me more') || lowerResponse.contains('details') || attempts >= 2) {
+          _currentState.conversationStep = 2;
+        }
+        break;
+      case 2:
+        // Always move to photo after details
+        _currentState.conversationStep = 3;
+        _currentState.photoUploadRequested = true;
+        break;
+      case 3:
+        // Force move to scheduling after 2 photo attempts OR if user wants to skip
+        if (attempts >= 2 || lowerResponse.contains('skip') || lowerResponse.contains('later') || 
+            lowerResponse.contains('schedule') || lowerResponse.contains('continue')) {
+          _currentState.conversationStep = 4;
+          _currentState.calendarRequested = true;
+          // Trigger photo upload UI if not triggered yet
+          _triggerPhotoUpload();
+        }
+        break;
+      case 4:
+        // Force move to summary after 2 scheduling attempts OR if availability is set
+        if (attempts >= 2 || _currentState.availabilitySet || lowerResponse.contains('summary')) {
+          _currentState.conversationStep = 5;
+          // Trigger calendar UI if not triggered yet
+          _triggerCalendar();
+        }
+        break;
     }
   }
 
@@ -463,38 +510,52 @@ Remember: You're helping create a service request that will connect them with qu
         _currentState.conversationStep = 1;
         
         return "Perfect! I understand you need ${_currentState.serviceCategory} service. Could you tell me more details about what specifically needs to be done?";
-      } else {
-        _currentState.problemDescription = input;
-        _currentState.conversationStep = 2;
-        
-        return "Got it! That gives me a clear picture. Would you like to upload some photos? They really help our service providers give you the most accurate quote.";
-      }
+              } else {
+          _currentState.problemDescription = input;
+          _currentState.conversationStep = 2;
+          
+          return "Got it! Photos help with accurate quotes. Upload some?";
+        }
     }
     
-    // Continue with existing mock flow
+    // More concise mock flow with attempt tracking
+    String stepKey = 'step_${_currentState.conversationStep}_attempts';
+    int attempts = _currentState.extractedInfo[stepKey] ?? 0;
+    
     if (_currentState.conversationStep == 2) {
-      // Always show photo upload, regardless of user response
       _currentState.photoUploadRequested = true;
       _currentState.conversationStep = 3;
-      return "Great! You can upload photos now to help providers give accurate quotes.";
+      return "Got it! Photos help providers quote accurately. Upload now?";
     }
     
     if (_currentState.conversationStep == 3) {
-      _currentState.photosUploaded = true;
-      _currentState.conversationStep = 4;
-      return "Excellent photos! Now let's set up your availability. When works best for you?";
+      if (attempts >= 2 || lowerInput.contains('skip') || lowerInput.contains('later')) {
+        _currentState.conversationStep = 4;
+        _currentState.calendarRequested = true;
+        _triggerPhotoUpload(); // Trigger the actual photo upload UI
+        return "When works for you?";
+      } else {
+        _triggerPhotoUpload();
+        return "Photos help! Upload now or we'll continue.";
+      }
     }
     
     if (_currentState.conversationStep == 4) {
-      _currentState.calendarRequested = true;
-      _currentState.conversationStep = 5;
-      return "Perfect! Please select your preferred dates and times. You can choose multiple options for flexibility.";
+      if (attempts >= 2 || _currentState.availabilitySet) {
+        _currentState.userAvailability = {'preference': input, 'timestamp': DateTime.now().toIso8601String()};
+        _currentState.availabilitySet = true;
+        _currentState.conversationStep = 5;
+        _triggerCalendar(); // Trigger the actual calendar UI
+        String summary = _generateServiceRequestSummary();
+        return "Perfect! Here's your summary:\n\n$summary";
+      } else {
+        _triggerCalendar();
+        return "When works best? Morning, afternoon, weekend?";
+      }
     }
     
     if (_currentState.conversationStep == 5) {
-      _currentState.availabilitySet = true;
-      _currentState.conversationStep = 6;
-      return "Excellent! I have all the information needed. Here's your complete service request summary.";
+      return "All set! Ready to connect with professionals.";
     }
     
     return "Thank you for that information! Is there anything else you'd like to add to your service request?";
@@ -508,7 +569,7 @@ Remember: You're helping create a service request that will connect them with qu
         _currentState.serviceCategory = _detectServiceCategory(lowerInput);
         _currentState.description = input;
         _currentState.conversationStep = 1;
-        return "Hi! Thank you for choosing Magic Home services. I understand you need ${_currentState.serviceCategory ?? 'home service'} help. Let me gather some details to connect you with the right professional.";
+        return "Hi! I understand you need ${_currentState.serviceCategory ?? 'home service'} help. What specifically needs to be done?";
         
       case 1:
         // Step 2: Service Details - Category-specific structured questions
@@ -526,20 +587,48 @@ Remember: You're helping create a service request that will connect them with qu
         }
         
       case 3:
-        // Step 3: Visual Assessment - Photo/Video uploads
-        _currentState.conversationStep = 4;
-        return "Great! You can upload your media now. After that, let's discuss your availability.";
+        // Step 3: Visual Assessment - Photo/Video uploads with attempts tracking
+        String stepKey = 'step_3_attempts';
+        int attempts = _currentState.serviceAnswers[stepKey] != null ? int.parse(_currentState.serviceAnswers[stepKey]!) : 0;
+        attempts++;
+        _currentState.serviceAnswers[stepKey] = attempts.toString();
+        
+        _currentState.photoUploadRequested = true;
+        if (attempts >= 2 || input.toLowerCase().contains('skip') || input.toLowerCase().contains('later')) {
+          _currentState.conversationStep = 4;
+          _triggerPhotoUpload();
+          return "When works for you?";
+        } else {
+          _triggerPhotoUpload();
+          return "Photos help! Upload now or continue?";
+        }
         
       case 4:
-        // Step 4: Availability - Time preferences
-        _currentState.conversationStep = 5;
-        return "When would you prefer to have this service done? Please let me know your preferences - for example: 'Morning preferred', 'Flexible between Mon-Fri', 'Weekend only', or 'Urgent - ASAP'.";
+        // Step 4: Availability with attempts tracking
+        String stepKey4 = 'step_4_attempts';
+        int attempts4 = _currentState.serviceAnswers[stepKey4] != null ? int.parse(_currentState.serviceAnswers[stepKey4]!) : 0;
+        attempts4++;
+        _currentState.serviceAnswers[stepKey4] = attempts4.toString();
+        
+        if (attempts4 >= 2) {
+          _currentState.userAvailability = {'preference': input, 'timestamp': DateTime.now().toIso8601String()};
+          _currentState.availabilitySet = true;
+          _currentState.conversationStep = 5;
+          _triggerCalendar();
+          String summary = _generateServiceRequestSummary();
+          return "Perfect! Here's your summary:\n\n$summary";
+        } else {
+          _triggerCalendar();
+          return "When works best? Morning, afternoon, or weekend?";
+        }
         
       case 5:
-        // Step 5: Location Information
+        // Step 5: Complete
         _currentState.userAvailability = {'preference': input, 'timestamp': DateTime.now().toIso8601String()};
+        _currentState.availabilitySet = true;
         _currentState.conversationStep = 6;
-        return "Perfect! Now I need the service location details. Please provide: 1) Full address where the service is needed, 2) Any accessibility notes (stairs, parking, gate codes, etc.)";
+        String summary = _generateServiceRequestSummary();
+        return "All set! Here's your summary:\n\n$summary";
         
       case 6:
         // Step 6: Contact Information
@@ -565,31 +654,30 @@ Remember: You're helping create a service request that will connect them with qu
   }
 
   String _getServiceSpecificQuestions() {
-    // This method would typically return a list of questions based on _currentState.serviceCategory
-    // For now, it's a placeholder. In a real app, you'd have a more sophisticated mapping.
+    // Concise questions for each service category
     switch (_currentState.serviceCategory) {
       case 'Cleaning':
-        return "What specific areas or rooms need cleaning? (e.g., living room, kitchen, bathroom)";
+        return "Which areas need cleaning?";
       case 'Plumbing':
-        return "What type of plumbing issue are you experiencing? (e.g., leak, clog, water pressure)";
+        return "What's the plumbing issue?";
       case 'Electrical':
-        return "What specific electrical issue are you facing? (e.g., power outage, flickering lights, wiring)";
+        return "What electrical problem?";
       case 'HVAC':
-        return "What type of HVAC service is needed? (e.g., heating, cooling, maintenance)";
+        return "Heating or cooling issue?";
       case 'Appliance Repair':
-        return "What appliance is not working? (e.g., refrigerator, washer, dryer)";
+        return "Which appliance is broken?";
       case 'Landscaping':
-        return "What landscaping service is required? (e.g., mowing, trimming, planting)";
+        return "What yard work is needed?";
       case 'Pest Control':
-        return "What type of pest control is needed? (e.g., ants, mice, termites)";
+        return "What pest problem?";
       case 'Roofing':
-        return "What roofing issue are you experiencing? (e.g., leak, shingle damage, gutter clog)";
+        return "What's the roof issue?";
       case 'Painting':
-        return "What surfaces need painting? (e.g., walls, ceiling, doors)";
+        return "What needs painting?";
       case 'Handyman':
-        return "What general maintenance or repair task do you need? (e.g., fixing a leaky faucet, installing a new light switch)";
+        return "What needs fixing?";
       default:
-        return "Could you please specify the type of service you need?";
+        return "What specific service?";
     }
   }
 
@@ -802,7 +890,7 @@ Remember: You're helping create a service request that will connect them with qu
     String lowerResponse = response.toLowerCase();
     String lowerInput = input.toLowerCase();
     
-    // Enhanced state detection
+    // Enhanced state detection with step-based logic
     if (!_currentState.photoUploadRequested && 
         (lowerResponse.contains('upload') || lowerResponse.contains('photo') || lowerResponse.contains('picture'))) {
       _currentState.photoUploadRequested = true;
@@ -814,16 +902,22 @@ Remember: You're helping create a service request that will connect them with qu
       _currentState.calendarRequested = true;
     }
     
-    if (!_currentState.availabilitySet && 
-        (lowerResponse.contains('summary') || lowerResponse.contains('complete') ||
-         lowerResponse.contains('all the information'))) {
-      _currentState.availabilitySet = true;
+    // Update customer name if provided
+    if (_currentState.customerName == null && _detectCustomerName(input) != null) {
+      _currentState.customerName = _detectCustomerName(input);
     }
     
     // Update problem description if user provides more details
     if (_currentState.conversationStep >= 1 && _currentState.problemDescription == null && 
         input.length > 10 && !lowerInput.contains('yes') && !lowerInput.contains('no')) {
       _currentState.problemDescription = input;
+    }
+    
+    // Update service description with more context
+    if (_currentState.conversationStep >= 2 && input.length > 20 && !lowerInput.contains('yes') && !lowerInput.contains('no')) {
+      if (_currentState.serviceDescription == null || _currentState.serviceDescription!.length < input.length) {
+        _currentState.serviceDescription = input;
+      }
     }
   }
 
@@ -843,12 +937,15 @@ Remember: You're helping create a service request that will connect them with qu
       _currentState.photosUploaded = true;
       _currentState.conversationStep = 4;
       
-      // Add contextual AI message
+      // Add contextual AI message - more concise
       _addMessage(ChatMessage(
-        content: "Perfect! I can see your photo. This will really help our service providers understand your needs. Now let's set up your availability!",
+        content: "Great photo! When works for you?",
         type: MessageType.ai,
         timestamp: DateTime.now(),
       ));
+      
+      // Trigger calendar after photo upload
+      _triggerCalendar();
     }
   }
 
@@ -858,12 +955,20 @@ Remember: You're helping create a service request that will connect them with qu
       _currentState.availabilitySet = true;
       _currentState.conversationStep = 5;
       
-      // Add contextual AI message
+      // Generate comprehensive summary
+      String summary = _generateServiceRequestSummary();
+      
+      // Add contextual AI message with summary - more concise
       _addMessage(ChatMessage(
-        content: "Excellent! I have your availability preferences. You're all set! Here's your complete service request summary.",
+        content: "Perfect! Here's your summary:\n\n$summary\n\nReady to connect with professionals!",
         type: MessageType.ai,
         timestamp: DateTime.now(),
       ));
+      
+      // Trigger conversation completion which calls getServiceRequestSummary()
+      if (isConversationComplete()) {
+        _onConversationComplete();
+      }
     }
   }
 
@@ -876,6 +981,7 @@ Remember: You're helping create a service request that will connect them with qu
       'mediaUrls': _currentState.mediaUrls,
       'availability': _currentState.userAvailability ?? {},
       'location': _currentState.address ?? '',
+      'customerName': _currentState.customerName ?? '',
       'tags': _currentState.tags,
       'extractedInfo': _currentState.extractedInfo,
       'conversationStep': _currentState.conversationStep,
@@ -883,4 +989,168 @@ Remember: You're helping create a service request that will connect them with qu
       'isComplete': _currentState.availabilitySet && _currentState.serviceCategory != null,
     };
   }
+  
+  // Generate formatted summary for display
+  String _generateServiceRequestSummary() {
+    String summary = "📋 **SERVICE REQUEST SUMMARY**\n\n";
+    
+    // Service Information
+    summary += "🔧 **Service Type:** ${_currentState.serviceCategory ?? 'General Service'}\n";
+    
+    if (_currentState.serviceDescription != null && _currentState.serviceDescription!.isNotEmpty) {
+      summary += "📝 **Description:** ${_currentState.serviceDescription}\n";
+    }
+    
+    if (_currentState.problemDescription != null && _currentState.problemDescription!.isNotEmpty) {
+      summary += "❗ **Details:** ${_currentState.problemDescription}\n";
+    }
+    
+    // Media Information
+    if (_currentState.mediaUrls.isNotEmpty) {
+      summary += "📸 **Photos:** ${_currentState.mediaUrls.length} photo(s) uploaded\n";
+    } else if (_currentState.photoUploadRequested) {
+      summary += "📸 **Photos:** Ready for upload\n";
+    }
+    
+    // Availability Information
+    if (_currentState.userAvailability != null && _currentState.userAvailability!.isNotEmpty) {
+      summary += "📅 **Availability:** ${_formatAvailability(_currentState.userAvailability!)}\n";
+    }
+    
+    // Customer Information
+    if (_currentState.customerName != null && _currentState.customerName!.isNotEmpty) {
+      summary += "👤 **Customer:** ${_currentState.customerName}\n";
+    }
+    
+    if (_currentState.address != null && _currentState.address!.isNotEmpty) {
+      summary += "📍 **Location:** ${_currentState.address}\n";
+    }
+    
+    summary += "\n✅ **Status:** Ready for professional matching";
+    
+    return summary;
+  }
+  
+  // Helper method to detect customer name from input
+  String? _detectCustomerName(String input) {
+    String lowerInput = input.toLowerCase();
+    
+    // Look for patterns like "I'm John", "My name is Sarah", "This is Mike"
+    List<RegExp> namePatterns = [
+      RegExp(r"i'?m\s+([a-z]+)", caseSensitive: false),
+      RegExp(r"my name is\s+([a-z]+)", caseSensitive: false),
+      RegExp(r"this is\s+([a-z]+)", caseSensitive: false),
+      RegExp(r"call me\s+([a-z]+)", caseSensitive: false),
+    ];
+    
+    for (RegExp pattern in namePatterns) {
+      Match? match = pattern.firstMatch(lowerInput);
+      if (match != null && match.group(1) != null) {
+        String name = match.group(1)!;
+        // Capitalize first letter
+        return name[0].toUpperCase() + name.substring(1).toLowerCase();
+      }
+    }
+    
+    return null;
+  }
+  
+  // Helper method to format availability for display
+  String _formatAvailability(Map<String, dynamic> availability) {
+    if (availability.isEmpty) return "Not specified";
+    
+    String formatted = "";
+    
+    if (availability.containsKey('preference')) {
+      formatted = availability['preference'].toString();
+    } else if (availability.containsKey('selectedDates')) {
+      formatted = "Selected dates provided";
+    } else if (availability.containsKey('timeSlots')) {
+      formatted = "Time slots selected";
+    } else {
+      formatted = "Availability preferences set";
+    }
+    
+    return formatted;
+  }
+  
+  // Check if conversation is complete
+  bool isConversationComplete() {
+    return _currentState.conversationStep >= 5 && 
+           _currentState.serviceCategory != null &&
+           _currentState.availabilitySet;
+  }
+  
+  // Called when conversation reaches completion
+  void _onConversationComplete() {
+    print('🎉 Conversation Complete! Generating final summary...');
+    
+    // Get the structured summary data
+    final summaryData = getServiceRequestSummary();
+    
+    // Log or emit the summary (you can modify this based on your needs)
+    print('📋 Final Service Request Summary: $summaryData');
+    
+    // Optional: Emit event or callback for UI
+    onServiceRequestComplete?.call(summaryData);
+  }
+  
+  // Public method to manually trigger completion check and summary generation
+  Map<String, dynamic>? tryCompleteConversation() {
+    if (isConversationComplete()) {
+      _onConversationComplete();
+      return getServiceRequestSummary();
+    }
+    return null;
+  }
+  
+  // Trigger photo upload UI - this should be connected to your photo upload widget
+  void _triggerPhotoUpload() {
+    print('📷 Triggering photo upload UI...');
+    // Set flag that photo upload UI should be shown
+    _currentState.photoUploadRequested = true;
+    
+    // Emit callback for UI to show photo upload
+    onPhotoUploadRequested?.call();
+  }
+  
+  // Trigger calendar UI - this should be connected to your calendar widget  
+  void _triggerCalendar() {
+    print('📅 Triggering calendar UI...');
+    // Set flag that calendar UI should be shown
+    _currentState.calendarRequested = true;
+    
+    // Emit callback for UI to show calendar
+    onCalendarRequested?.call();
+  }
+  
+  // Setup method to connect UI callbacks
+  void setupUICallbacks({
+    VoidCallback? onPhotoUpload,
+    VoidCallback? onCalendar,
+    Function(Map<String, dynamic>)? onComplete,
+  }) {
+    onPhotoUploadRequested = onPhotoUpload;
+    onCalendarRequested = onCalendar;
+    onServiceRequestComplete = onComplete;
+  }
+  
+  // Force photo upload UI to show (call this from your UI)
+  void showPhotoUpload() {
+    _triggerPhotoUpload();
+  }
+  
+  // Force calendar UI to show (call this from your UI)  
+  void showCalendar() {
+    _triggerCalendar();
+  }
+  
+  // Get current conversation step for UI state management
+  int get currentStep => _currentState.conversationStep;
+  
+  // Check if photo upload should be shown
+  bool get shouldShowPhotoUpload => _currentState.conversationStep == 3 && _currentState.photoUploadRequested;
+  
+  // Check if calendar should be shown
+  bool get shouldShowCalendar => _currentState.conversationStep == 4 && _currentState.calendarRequested;
 } 
