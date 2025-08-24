@@ -8,6 +8,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'dart:io';
 import '../services/ai_conversation_service.dart';
+import '../services/user_request_service.dart';
 
 class AITaskIntakeScreen extends StatefulWidget {
   final User? user;
@@ -352,35 +353,47 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         _isLoading = true;
       });
       
-      // Create UserRequest object according to new schema
-      final userRequest = {
-        'userId': widget.user?.uid ?? 'anonymous',
-        'serviceCategory': _aiService.currentState.serviceCategory ?? 'General Service',
+      if (widget.user?.uid == null) {
+        throw Exception('User must be logged in to submit a request');
+      }
+      
+      // Prepare AI intake data in the format expected by UserRequestService
+      final aiIntakeData = {
+        'serviceCategory': _aiService.currentState.serviceCategory ?? 'general',
         'description': _aiService.currentState.description ?? '',
-        'mediaUrls': _aiService.currentState.mediaUrls,
-        'tags': _aiService.currentState.tags,
+        'mediaUrls': _aiService.currentState.mediaUrls ?? [],
         'address': _aiService.currentState.address ?? '',
         'phoneNumber': _aiService.currentState.phoneNumber ?? '',
         'location': _aiService.currentState.location,
         'userAvailability': _aiService.currentState.userAvailability ?? {},
-        'preferences': _aiService.currentState.preferences,
+        'preferences': _aiService.currentState.preferences ?? {},
+        'tags': _aiService.currentState.tags ?? [],
         'priority': _aiService.currentState.priority ?? 3,
-        'createdAt': FieldValue.serverTimestamp(),
-        'status': 'pending',
-        // Additional fields for backward compatibility
-        'customer_name': widget.user?.displayName ?? 'Anonymous User',
-        'customer_photo_url': widget.user?.photoURL,
-        'service_answers': _aiService.currentState.serviceAnswers,
-        'price_estimate': _aiService.currentState.priceEstimate,
+        'aiPriceEstimation': _aiService.currentState.priceEstimate != null ? {
+          'suggestedRange': _aiService.currentState.priceEstimate,
+          'aiModel': 'ai-conversation-v1',
+          'confidenceLevel': 'medium',
+          'generatedAt': DateTime.now().toIso8601String(),
+        } : null,
+        // Additional metadata for debugging
+        'serviceAnswers': _aiService.currentState.serviceAnswers,
       };
       
-      // Store in Firebase using the new schema
-      await FirebaseFirestore.instance.collection('user_requests').add(userRequest);
+      print('🚀 Submitting service request via UserRequestService...');
+      print('📋 AI Intake Data: $aiIntakeData');
+      
+      // Use the proper UserRequestService to process the request
+      final result = await UserRequestService.processUserRequest(
+        userId: widget.user!.uid,
+        aiIntakeData: aiIntakeData,
+      );
+      
+      print('✅ Service request processed successfully: $result');
       
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Service request submitted successfully!'),
+          content: Text('Service request submitted and providers are being matched!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -389,9 +402,12 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       Navigator.pop(context);
       
     } catch (e) {
-      print('Error submitting service request: $e');
+      print('❌ Error submitting service request: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error submitting request: $e')),
+        SnackBar(
+          content: Text('Error submitting request: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       setState(() {

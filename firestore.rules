@@ -33,6 +33,40 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == resource.data.user_id;
     }
     
+    // User requests - new unified collection
+    match /user_requests/{requestId} {
+      allow create: if request.auth != null;
+      // Users can read their own requests, providers can read requests in certain statuses
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         resource.data.status in ['pending', 'matched', 'bidding', 'assigned']); 
+      // Users can update their own requests, system can update for matching/bidding
+      allow update: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         resource.data.status in ['pending', 'matched', 'bidding', 'assigned']);
+      allow write: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
+    // Service bids - providers can create bids, users can read bids for their requests
+    match /service_bids/{bidId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.providerId || 
+         request.auth.uid == resource.data.userId);
+      allow update: if request.auth != null && 
+        (request.auth.uid == resource.data.providerId || 
+         request.auth.uid == resource.data.userId);
+    }
+    
+    // Bidding sessions - users and providers can read sessions for their requests
+    match /bidding_sessions/{sessionId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.uid in resource.data.notifiedProviders);
+      allow update: if request.auth != null;
+    }
+    
     // Service orders - both customer and provider can access
     match /service_orders/{orderId} {
       allow read, write: if request.auth != null && 

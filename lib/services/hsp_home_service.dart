@@ -210,6 +210,21 @@ class HspHomeService {
     throw UnimplementedError('Quote submission not yet implemented - use bidding system instead');
   }
 
+  // Get assigned tasks (user requests with status 'assigned' to this provider)
+  static Stream<List<UserRequest>> getAssignedTasks(String providerId) {
+    return _firestore
+        .collection('user_requests')
+        .where('status', isEqualTo: 'assigned')
+        .where('assignedProviderId', isEqualTo: providerId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return UserRequest.fromFirestore(doc);
+      }).toList();
+    });
+  }
+
   // Get completed tasks for a provider
   static Stream<List<ServiceOrder>> getCompletedTasks(String providerId) {
     return _firestore

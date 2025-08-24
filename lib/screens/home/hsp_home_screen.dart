@@ -8,7 +8,7 @@ import '../../services/hsp_home_service.dart';
 import '../../models/provider_stats.dart';
 import '../../models/service_order.dart';
 
-import 'package:video_player/video_player.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../debug/function_test_screen.dart';
@@ -16,7 +16,10 @@ import '../debug/token_debug_screen.dart';
 import '../bidding/provider_bid_screen.dart';
 import '../bidding/service_request_detail_screen.dart';
 import '../../services/bidding_service.dart';
+import '../../services/user_task_service.dart';
 import '../../models/user_request.dart';
+import '../tasks/assigned_task_detail_screen.dart';
+import '../../services/reviews_service.dart';
 
 class HspHomeScreen extends StatefulWidget {
   final firebase_auth.User user;
@@ -1835,64 +1838,779 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     );
   }
 
-  Widget _buildServiceProviderFeed() {
-    final posts = [
-      {
-        'name': 'Shayla',
-        'service': 'SweetHome',
-        'rating': '⭐⭐⭐⭐⭐',
-        'type': 'provider',
-        'images': [
-          'https://images.unsplash.com/photo-1560472354-8b77cccf8f59?w=400',
-        ],
-        'review': 'They\'ve really done a great job on my garden!!',
-        'avatar': 'https://images.unsplash.com/photo-1494790108755-2616b612e5e3?w=100',
-        'time': '2 hours ago',
-      },
-      {
-        'name': 'Mikaela',
-        'service': 'HomeLovely',
-        'rating': '⭐⭐⭐⭐⭐',
-        'type': 'user',
-        'images': [
-          'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
-        ],
-        'review': 'I was recommended by a friend. I can\'t believe the turnout! It\'s so goooood! Definitely would recommend <3',
-        'avatar': 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100',
-        'time': '5 hours ago',
-      },
-      {
-        'name': 'Jiwon',
-        'service': '',
-        'rating': '⭐⭐⭐⭐⭐',
-        'type': 'user',
-        'images': [
-          'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400',
-        ],
-        'review': '',
-        'avatar': 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100',
-        'time': '1 day ago',
-      },
-      {
-        'name': 'Liyuan',
-        'service': '',
-        'rating': '⭐⭐⭐⭐⭐',
-        'type': 'provider',
-        'images': [
-          'https://images.unsplash.com/photo-1571066811602-716837d681de?w=400',
-        ],
-        'review': '',
-        'avatar': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100',
-        'time': '2 days ago',
-      },
-    ];
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        children: posts.map((post) => _buildProviderPost(post)).toList(),
+
+  Widget _buildAssignedTaskCard(UserRequest task) {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: UserTaskService.getUserDetails(task.userId),
+      builder: (context, userSnapshot) {
+        final userData = userSnapshot.data;
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.green.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Header with user contact info
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.05),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'QUOTE ACCEPTED',
+                          style: TextStyle(
+                            color: Colors.green[700],
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          _formatDateTime(task.createdAt),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // User contact information
+                    if (userData != null) ...[
+                      Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Center(
+                              child: Text(
+                                (userData['displayName'] ?? userData['email'] ?? 'U')
+                                    .substring(0, 1)
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  userData['displayName'] ?? 'User',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                if (task.phoneNumber.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  GestureDetector(
+                                    onTap: () => _makePhoneCall(task.phoneNumber),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.phone,
+                                          size: 14,
+                                          color: Colors.green[700],
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          task.phoneNumber,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.green[700],
+                                            decoration: TextDecoration.underline,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _makePhoneCall(task.phoneNumber),
+                            icon: Icon(
+                              Icons.phone,
+                              color: Colors.green[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              
+              // Task details
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.description,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    // Address
+                    Row(
+                      children: [
+                        Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            task.address,
+                            style: TextStyle(
+                              color: Colors.grey[700],
+                              fontSize: 14,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => _openMaps(task.address),
+                          icon: Icon(
+                            Icons.directions,
+                            color: Colors.blue[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    // Availability
+                    if (task.userAvailability.isNotEmpty && 
+                        task.userAvailability['preferredTime'] != null) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Available: ${task.userAvailability['preferredTime']}',
+                            style: TextStyle(
+                              color: Colors.grey[700],
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Action buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _viewTaskDetails(task),
+                            icon: const Icon(Icons.visibility, size: 16),
+                            label: const Text('View Details'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _markTaskCompleted(task),
+                            icon: const Icon(Icons.done, size: 16),
+                            label: const Text('Mark Complete'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _makePhoneCall(String phoneNumber) async {
+    final uri = Uri.parse('tel:$phoneNumber');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  void _openMaps(String address) async {
+    final encodedAddress = Uri.encodeComponent(address);
+    final uri = Uri.parse('https://maps.google.com/?q=$encodedAddress');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _viewTaskDetails(UserRequest task) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AssignedTaskDetailScreen(task: task),
       ),
     );
+  }
+
+  void _markTaskCompleted(UserRequest task) {
+    // TODO: Implement task completion logic
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Mark Task Complete'),
+        content: const Text('Are you sure you want to mark this task as completed?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              // TODO: Update task status to completed
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Task marked as completed!'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            child: const Text('Complete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServiceProviderFeed() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Recent Customer Reviews',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+              Row(
+                children: [
+                  Icon(
+                    Icons.location_on,
+                    size: 16,
+                    color: Colors.grey[600],
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Nearby',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: _loadProviderReviews(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: CircularProgressIndicator(
+                      color: Color(0xFFFBB04C),
+                    ),
+                  ),
+                );
+              }
+
+              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.rate_review_outlined,
+                        size: 48,
+                        color: Colors.grey[500],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No Reviews Yet',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Customer reviews will appear here to help you understand market trends',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return Column(
+                children: snapshot.data!
+                    .map((review) => _buildReviewCard(review))
+                    .toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _loadProviderReviews() async {
+    try {
+      // Get current provider's location for distance calculation
+      String? providerLocation = _currentAddress;
+
+      // Fetch recent reviews with distance sorting
+      return await ReviewsService.getRecentReviewsWithDistance(
+        currentUserLocation: providerLocation,
+        limit: 15,
+      );
+    } catch (e) {
+      print('Error loading provider reviews: $e');
+      return [];
+    }
+  }
+
+  Widget _buildReviewCard(Map<String, dynamic> review) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with customer info and rating
+            Row(
+              children: [
+                // Customer avatar
+                CircleAvatar(
+                  radius: 20,
+                  backgroundImage: review['customerAvatar'] != null
+                      ? NetworkImage(review['customerAvatar'])
+                      : null,
+                  backgroundColor: Colors.grey[300],
+                  child: review['customerAvatar'] == null
+                      ? Icon(Icons.person, color: Colors.grey[600])
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              review['customerName'] ?? 'Anonymous',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            review['ratingStars'] ?? '⭐⭐⭐⭐⭐',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.business,
+                            size: 12,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              review['providerName'] ?? 'Provider',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          if (review['distanceText'] != null) ...[
+                            Icon(
+                              Icons.location_on,
+                              size: 12,
+                              color: Colors.grey[500],
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              review['distanceText'],
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Service category
+            if (review['serviceCategory'] != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFBB04C).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  review['serviceCategory'],
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFFFBB04C),
+                  ),
+                ),
+              ),
+            
+            const SizedBox(height: 8),
+            
+            // Review text
+            if (review['reviewText'] != null && review['reviewText'].isNotEmpty)
+              Text(
+                review['reviewText'],
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[800],
+                  height: 1.4,
+                ),
+              ),
+            
+            // Photos section (Instagram style)
+            if (review['photoUrls'] != null && (review['photoUrls'] as List).isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _buildPhotoGrid(review['photoUrls'] as List<dynamic>),
+            ],
+            
+            const SizedBox(height: 12),
+            
+            // Footer with time and photo indicator
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  review['timeAgo'] ?? 'Recently',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                  ),
+                ),
+                if (review['hasPhotos'] == true)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.photo_camera,
+                        size: 12,
+                        color: Colors.grey[500],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${review['photoCount']} photo${review['photoCount'] == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhotoGrid(List<dynamic> photoUrls) {
+    final urls = photoUrls.cast<String>();
+    
+    if (urls.isEmpty) return const SizedBox.shrink();
+    
+    // Instagram-style photo layout
+    if (urls.length == 1) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Image.network(
+            urls[0],
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Container(
+              color: Colors.grey[300],
+              child: const Icon(Icons.image_not_supported),
+            ),
+          ),
+        ),
+      );
+    } else if (urls.length == 2) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          height: 200,
+          child: Row(
+            children: [
+              Expanded(
+                child: Image.network(
+                  urls[0],
+                  fit: BoxFit.cover,
+                  height: 200,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.image_not_supported),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                child: Image.network(
+                  urls[1],
+                  fit: BoxFit.cover,
+                  height: 200,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.image_not_supported),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (urls.length == 3) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          height: 200,
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Image.network(
+                  urls[0],
+                  fit: BoxFit.cover,
+                  height: 200,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.image_not_supported),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Image.network(
+                        urls[1],
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.image_not_supported),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Expanded(
+                      child: Image.network(
+                        urls[2],
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.image_not_supported),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      // 4+ photos: show first 3 and "+X more" overlay
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          height: 200,
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Image.network(
+                  urls[0],
+                  fit: BoxFit.cover,
+                  height: 200,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.image_not_supported),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Image.network(
+                        urls[1],
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.image_not_supported),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Image.network(
+                            urls[2],
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            errorBuilder: (context, error, stackTrace) => Container(
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.image_not_supported),
+                            ),
+                          ),
+                          if (urls.length > 3)
+                            Container(
+                              color: Colors.black.withOpacity(0.6),
+                              child: Center(
+                                child: Text(
+                                  '+${urls.length - 3}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildProviderPost(Map<String, dynamic> post) {
@@ -2044,44 +2762,454 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
   }
 
   Widget _buildMyTasks() {
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-                     children: [
-             // Header
-             Container(
-               width: double.infinity,
-               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-               decoration: const BoxDecoration(
-                 color: Color(0xFFFBB04C),
-               ),
-               child: GestureDetector(
-                 onTap: _updateProviderAddress,
-                 child: Row(
-                   children: [
-                     const Icon(Icons.location_on, color: Colors.white),
-                     const SizedBox(width: 8),
-                     Text(
-                       _currentAddress,
-                       style: const TextStyle(
-                         color: Colors.white,
-                         fontSize: 16,
-                         fontWeight: FontWeight.w500,
-                       ),
-                     ),
-                     const SizedBox(width: 4),
-                     const Icon(Icons.edit, color: Colors.white70, size: 16),
-                   ],
-                 ),
-               ),
-             ),
-             
-             const SizedBox(height: 20),
-             
-                         // Tasks List - Only confirmed and completed service orders
-           _buildUpcomingTasks(),
-           _buildCompletedTasks(),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        backgroundColor: Colors.grey[50],
+        appBar: AppBar(
+          title: const Text(
+            'My Tasks',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          bottom: const TabBar(
+            labelColor: Color(0xFFFBB04C),
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: Color(0xFFFBB04C),
+            indicatorWeight: 3,
+            labelStyle: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+            unselectedLabelStyle: TextStyle(
+              fontWeight: FontWeight.normal,
+              fontSize: 16,
+            ),
+            tabs: [
+              Tab(text: 'Assigned'),
+              Tab(text: 'Upcoming'),
+              Tab(text: 'Completed'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            _buildAssignedTasksTab(),
+            _buildUpcomingTasksTab(),
+            _buildCompletedTasksTab(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAssignedTasksTab() {
+    return StreamBuilder<List<UserRequest>>(
+      stream: HspHomeService.getAssignedTasks(widget.user.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFFFBB04C),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          print('❌ Error loading assigned tasks: ${snapshot.error}');
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading assigned tasks',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final assignedTasks = snapshot.data ?? [];
+
+        if (assignedTasks.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.assignment_turned_in_outlined,
+                  size: 64,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No Assigned Tasks',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Tasks will appear here when customers accept your quotes',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            // Trigger rebuild
+            setState(() {});
+            await Future.delayed(const Duration(milliseconds: 500));
+          },
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: assignedTasks.length,
+            itemBuilder: (context, index) {
+              return _buildAssignedTaskCard(assignedTasks[index]);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildUpcomingTasksTab() {
+    return StreamBuilder<List<ServiceOrder>>(
+      stream: HspHomeService.getUpcomingTasks(widget.user.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFFFBB04C),
+            ),
+          );
+        }
+
+        final upcomingTasks = snapshot.data ?? [];
+
+        if (upcomingTasks.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.schedule_outlined,
+                  size: 64,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No Upcoming Tasks',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Scheduled tasks will appear here',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            setState(() {});
+            await Future.delayed(const Duration(milliseconds: 500));
+          },
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: upcomingTasks.length,
+            itemBuilder: (context, index) {
+              return _buildUpcomingTaskCard(upcomingTasks[index]);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCompletedTasksTab() {
+    return StreamBuilder<List<ServiceOrder>>(
+      stream: HspHomeService.getCompletedTasks(widget.user.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFFFBB04C),
+            ),
+          );
+        }
+
+        final completedTasks = snapshot.data ?? [];
+
+        if (completedTasks.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 64,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No Completed Tasks',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Completed tasks will appear here',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            setState(() {});
+            await Future.delayed(const Duration(milliseconds: 500));
+          },
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: completedTasks.length,
+            itemBuilder: (context, index) {
+              return _buildCompletedTaskCard(completedTasks[index]);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildUpcomingTaskCard(ServiceOrder task) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
         ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.schedule,
+                  color: Colors.blue[700],
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'UPCOMING',
+                  style: TextStyle(
+                    color: Colors.blue[700],
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '\$${task.finalPrice.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              task.serviceDescription ?? 'Service Task',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  _formatDateTime(task.scheduledTime),
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    task.confirmedAddress,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompletedTaskCard(ServiceOrder task) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: Colors.green[700],
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'COMPLETED',
+                  style: TextStyle(
+                    color: Colors.green[700],
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '\$${task.finalPrice.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              task.serviceDescription ?? 'Service Task',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  _formatDateTime(task.scheduledTime),
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    task.confirmedAddress,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

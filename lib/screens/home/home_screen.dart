@@ -11,9 +11,11 @@ import '../bidding/bid_comparison_screen.dart';
 import '../../services/bidding_service.dart';
 import '../../models/user_request.dart';
 import '../../models/bidding_session.dart';
+import '../tasks/my_tasks_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import '../../services/reviews_service.dart';
 import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
@@ -55,6 +57,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     return null;
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -345,96 +349,441 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildServiceProviderFeed() {
-    final posts = [
-      {
-        'name': 'Shayla',
-        'service': 'SweetHome',
-        'rating': '⭐⭐⭐⭐⭐',
-        'type': 'provider', // provider or user
-        'images': [
-          'https://picsum.photos/400/300?random=1',
-          'https://picsum.photos/400/300?random=2',
-          'https://picsum.photos/400/300?random=3',
-        ],
-        'review': 'They\'ve really done a great job on my garden!!',
-        'avatar': 'https://picsum.photos/100/100?random=10',
-        'time': '2 hours ago',
-      },
-      {
-        'name': 'Mike Johnson',
-        'service': 'CleanPro',
-        'rating': '⭐⭐⭐⭐⭐',
-        'type': 'user', // This is a customer post
-        'images': [
-          'https://picsum.photos/400/300?random=4',
-          'https://picsum.photos/400/300?random=5',
-        ],
-        'review': 'Amazing cleaning service! My house has never looked better. The team was professional and thorough.',
-        'avatar': 'https://picsum.photos/100/100?random=11',
-        'time': '5 hours ago',
-      },
-      {
-        'name': 'Mikaela',
-        'service': 'HomeLovely',
-        'rating': '⭐⭐⭐⭐⭐',
-        'type': 'provider',
-        'images': [
-          'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400',
-          'https://images.unsplash.com/photo-1600566753151-384129cf4e3e?w=400',
-          'https://images.unsplash.com/photo-1560472354-8b77cccf8f59?w=400',
-        ],
-        'review': 'I was recommended by a friend. I can\'t believe the turnout! It\'s so goooood! Definitely would recommend <3',
-        'avatar': 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100',
-        'time': '1 day ago',
-      },
-      {
-        'name': 'Sarah Chen',
-        'service': 'GreenThumb',
-        'rating': '⭐⭐⭐⭐⭐',
-        'type': 'user',
-        'images': [
-          'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
-        ],
-        'review': 'Fantastic landscaping work! They transformed my backyard into a beautiful garden paradise.',
-        'avatar': 'https://picsum.photos/100/100?random=13',
-        'time': '2 days ago',
-      },
-      {
-        'name': 'Jiwon',
-        'service': 'RoofMaster',
-        'rating': '⭐⭐⭐⭐⭐',
-        'type': 'provider',
-        'images': [
-          'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=400',
-          'https://images.unsplash.com/photo-1571066811602-716837d681de?w=400',
-        ],
-        'review': 'Professional roofing service. Great quality work and attention to detail.',
-        'avatar': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100',
-        'time': '3 days ago',
-      },
-      {
-        'name': 'David Kim',
-        'service': 'PoolCare',
-        'rating': '⭐⭐⭐⭐⭐',
-        'type': 'user',
-        'images': [
-          'https://picsum.photos/400/300?random=6',
-          'https://picsum.photos/400/300?random=7',
-          'https://picsum.photos/400/300?random=8',
-          'https://picsum.photos/400/300?random=9',
-        ],
-        'review': 'Amazing pool cleaning and maintenance service. My pool is crystal clear now! Highly recommended!',
-        'avatar': 'https://picsum.photos/100/100?random=12',
-        'time': '1 week ago',
-      },
-    ];
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _loadRecentReviews(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: CircularProgressIndicator(
+                color: Color(0xFFFBB04C),
+              ),
+            ),
+          );
+        }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.rate_review_outlined,
+                  size: 48,
+                  color: Colors.grey[500],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'No Reviews Yet',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Be the first to share your experience!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          children: snapshot.data!
+              .map((review) => _buildInstagramStylePost(review))
+              .toList(),
+        );
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _loadRecentReviews() async {
+    try {
+      // Get current user's location for distance calculation
+      String? userLocation;
+      if (widget.firebaseUser != null) {
+        userLocation = await ReviewsService.getCurrentUserLocation(widget.firebaseUser!.uid);
+      }
+
+      // Fetch recent reviews with distance sorting
+      return await ReviewsService.getRecentReviewsWithDistance(
+        currentUserLocation: userLocation,
+        limit: 10,
+      );
+    } catch (e) {
+      print('Error loading recent reviews: $e');
+      return [];
+    }
+  }
+
+  Widget _buildInstagramStylePost(Map<String, dynamic> review) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      color: Colors.white,
       child: Column(
-        children: posts.map((post) => _buildProviderPost(post)).toList(),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header - User info and location
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                // Profile picture
+                CircleAvatar(
+                  radius: 18,
+                  backgroundImage: review['customerAvatar'] != null
+                      ? NetworkImage(review['customerAvatar'])
+                      : null,
+                  backgroundColor: Colors.grey[300],
+                  child: review['customerAvatar'] == null
+                      ? Icon(Icons.person, color: Colors.grey[600], size: 20)
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        review['customerName'] ?? 'Anonymous',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (review['distanceText'] != null)
+                        Text(
+                          review['distanceText'],
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                // Rating stars
+                Text(
+                  review['ratingStars'] ?? '⭐⭐⭐⭐⭐',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+          
+                        // Photos section (Instagram style)
+              Builder(
+                builder: (context) {
+                  print('🖼️ UI Check - photoUrls: ${review['photoUrls']}, hasPhotos: ${review['hasPhotos']}');
+                  if (review['photoUrls'] != null && 
+                      review['photoUrls'] is List && 
+                      (review['photoUrls'] as List).isNotEmpty) {
+                    print('✅ UI: Showing photos for review ${review['reviewId']}');
+                    return _buildPhotoGrid(review['photoUrls'] as List<dynamic>);
+                  } else {
+                    print('❌ UI: No photos condition failed for review ${review['reviewId']}');
+                    return Container(
+                      height: 200,
+                      color: Colors.grey[100],
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.image_outlined,
+                              size: 48,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'No photos',
+                              style: TextStyle(
+                                color: Colors.grey[500],
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+                },
+              ),
+          
+          // Action buttons (like Instagram)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Icon(Icons.favorite_border, size: 24, color: Colors.grey[700]),
+                const SizedBox(width: 16),
+                Icon(Icons.chat_bubble_outline, size: 24, color: Colors.grey[700]),
+                const SizedBox(width: 16),
+                Icon(Icons.share_outlined, size: 24, color: Colors.grey[700]),
+                const Spacer(),
+                if (review['serviceCategory'] != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFBB04C).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      review['serviceCategory'],
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFFBB04C),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          
+          // Caption and details
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Provider name
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(color: Colors.grey[800], fontSize: 14),
+                    children: [
+                      TextSpan(
+                        text: review['providerName'] ?? 'Provider',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const TextSpan(text: ' '),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                
+                // Review text
+                if (review['reviewText'] != null && review['reviewText'].isNotEmpty)
+                  Text(
+                    review['reviewText'],
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[800],
+                      height: 1.3,
+                    ),
+                  ),
+                
+                const SizedBox(height: 8),
+                
+                // Time ago
+                Text(
+                  review['timeAgo'] ?? 'Recently',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+        ],
       ),
     );
+  }
+
+  Widget _buildPhotoGrid(List<dynamic> photoUrls) {
+    try {
+      final urls = photoUrls.cast<String>();
+      
+      if (urls.isEmpty) return const SizedBox.shrink();
+    } catch (e) {
+      print('Error casting photoUrls: $e');
+      return const SizedBox.shrink();
+    }
+    
+    final urls = photoUrls.cast<String>();
+    
+    // Instagram-style photo layout (full width, no border radius)
+    if (urls.length == 1) {
+      return AspectRatio(
+        aspectRatio: 1.0, // Square aspect ratio like Instagram
+        child: Image.network(
+          urls[0],
+          fit: BoxFit.cover,
+          width: double.infinity,
+          errorBuilder: (context, error, stackTrace) => Container(
+            color: Colors.grey[300],
+            child: const Icon(Icons.image_not_supported),
+          ),
+        ),
+      );
+    } else if (urls.length == 2) {
+      return SizedBox(
+        height: 300,
+        child: Row(
+          children: [
+            Expanded(
+              child: Image.network(
+                urls[0],
+                fit: BoxFit.cover,
+                height: 300,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: Colors.grey[300],
+                  child: const Icon(Icons.image_not_supported),
+                ),
+              ),
+            ),
+            const SizedBox(width: 1),
+            Expanded(
+              child: Image.network(
+                urls[1],
+                fit: BoxFit.cover,
+                height: 300,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: Colors.grey[300],
+                  child: const Icon(Icons.image_not_supported),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (urls.length == 3) {
+      return SizedBox(
+        height: 300,
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: Image.network(
+                urls[0],
+                fit: BoxFit.cover,
+                height: 300,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: Colors.grey[300],
+                  child: const Icon(Icons.image_not_supported),
+                ),
+              ),
+            ),
+            const SizedBox(width: 1),
+            Expanded(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Image.network(
+                      urls[1],
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.image_not_supported),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Expanded(
+                    child: Image.network(
+                      urls[2],
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.image_not_supported),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // 4+ photos: show first 3 and "+X more" overlay
+      return SizedBox(
+        height: 300,
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: Image.network(
+                urls[0],
+                fit: BoxFit.cover,
+                height: 300,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: Colors.grey[300],
+                  child: const Icon(Icons.image_not_supported),
+                ),
+              ),
+            ),
+            const SizedBox(width: 1),
+            Expanded(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Image.network(
+                      urls[1],
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.image_not_supported),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Image.network(
+                          urls[2],
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.image_not_supported),
+                          ),
+                        ),
+                        if (urls.length > 3)
+                          Container(
+                            color: Colors.black.withOpacity(0.6),
+                            child: Center(
+                              child: Text(
+                                '+${urls.length - 3}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Widget _buildProviderPost(Map<String, dynamic> post) {
@@ -711,6 +1060,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTasksScreen() {
+    // Use the dedicated My Tasks screen
+    if (widget.firebaseUser != null) {
+      // Wrap in error boundary to catch any issues
+      return Builder(
+        builder: (context) {
+          try {
+            return MyTasksScreen(user: widget.firebaseUser!);
+          } catch (e) {
+            print('Error loading MyTasksScreen: $e');
+            // Fallback to original tasks screen
+            return _buildOriginalTasksScreen();
+          }
+        },
+      );
+    }
+    
+    // Fallback for when user is not authenticated
+    return const Center(
+      child: Text(
+        'Please log in to view your tasks',
+        style: TextStyle(
+          fontSize: 16,
+          color: Colors.grey,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOriginalTasksScreen() {
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -769,7 +1147,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Icon(Icons.pending_actions, color: Colors.white, size: 16),
                         SizedBox(width: 4),
                         Text(
-                          '3',
+                          '0',
                           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -1985,6 +2363,57 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildServiceRequestModal() {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.8,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+      children: [
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(top: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+        ),
+          const Padding(
+            padding: EdgeInsets.all(20),
+            child: Text(
+              'What service do you need?',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(
+            child: GridView.count(
+              padding: const EdgeInsets.all(20),
+              crossAxisCount: 2,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              children: [
+                _buildServiceCard('Cleaning', Icons.cleaning_services, Colors.blue),
+                _buildServiceCard('Plumbing', Icons.plumbing, Colors.orange),
+                _buildServiceCard('Electrical', Icons.electrical_services, Colors.yellow),
+                _buildServiceCard('Gardening', Icons.grass, Colors.green),
+                _buildServiceCard('Painting', Icons.format_paint, Colors.purple),
+                _buildServiceCard('Carpentry', Icons.carpenter, Colors.brown),
+                _buildServiceCard('HVAC', Icons.ac_unit, Colors.cyan),
+                _buildServiceCard('Other', Icons.more_horiz, Colors.grey),
+              ],
+            ),
+        ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildQuickActionCard({
     required IconData icon,
     required String title,
@@ -2031,6 +2460,43 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(
                 fontSize: 12,
                 color: color.withOpacity(0.8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildServiceCard(String title, IconData icon, Color color) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$title service selected!')),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 48,
+              color: color,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
               ),
             ),
           ],
@@ -2135,89 +2601,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildServiceRequestModal() {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.8,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-      children: [
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(top: 12),
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-        ),
-          const Padding(
-            padding: EdgeInsets.all(20),
-            child: Text(
-              'What service do you need?',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          Expanded(
-            child: GridView.count(
-              padding: const EdgeInsets.all(20),
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              children: [
-                _buildServiceCard('Cleaning', Icons.cleaning_services, Colors.blue),
-                _buildServiceCard('Plumbing', Icons.plumbing, Colors.orange),
-                _buildServiceCard('Electrical', Icons.electrical_services, Colors.yellow),
-                _buildServiceCard('Gardening', Icons.grass, Colors.green),
-                _buildServiceCard('Painting', Icons.format_paint, Colors.purple),
-                _buildServiceCard('Carpentry', Icons.carpenter, Colors.brown),
-                _buildServiceCard('HVAC', Icons.ac_unit, Colors.cyan),
-                _buildServiceCard('Other', Icons.more_horiz, Colors.grey),
-              ],
-            ),
-        ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildServiceCard(String title, IconData icon, Color color) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$title service request will be implemented soon')),
-        );
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 48, color: color),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-        ),
-      ],
-        ),
-      ),
-    );
-  }
 }
 
 class MyConnectionsScreen extends StatefulWidget {

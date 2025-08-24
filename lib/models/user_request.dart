@@ -16,6 +16,8 @@ class UserRequest {
   final List<String>? tags;
   final int? priority; // 1-5, where 5 is highest priority
   final Map<String, dynamic>? aiPriceEstimation; // AI-generated price estimation
+  final String? assignedProviderId; // Provider ID when task is assigned
+  final String? selectedBidId; // Bid ID that was selected
   
   UserRequest({
     this.requestId,
@@ -33,6 +35,8 @@ class UserRequest {
     this.tags,
     this.priority = 3,
     this.aiPriceEstimation,
+    this.assignedProviderId,
+    this.selectedBidId,
   }) : createdAt = createdAt ?? DateTime.now();
 
   // Create from AI intake service data
@@ -87,6 +91,8 @@ class UserRequest {
       aiPriceEstimation: data['aiPriceEstimation'] != null 
           ? Map<String, dynamic>.from(data['aiPriceEstimation']) 
           : null,
+      assignedProviderId: data['assignedProviderId'],
+      selectedBidId: data['selectedBidId'],
     );
   }
 
@@ -108,6 +114,8 @@ class UserRequest {
       'tags': tags,
       'priority': priority,
       'aiPriceEstimation': aiPriceEstimation,
+      'assignedProviderId': assignedProviderId,
+      'selectedBidId': selectedBidId,
     };
   }
 
@@ -128,6 +136,8 @@ class UserRequest {
     List<String>? tags,
     int? priority,
     Map<String, dynamic>? aiPriceEstimation,
+    String? assignedProviderId,
+    String? selectedBidId,
   }) {
     return UserRequest(
       requestId: requestId ?? this.requestId,
@@ -145,6 +155,8 @@ class UserRequest {
       tags: tags ?? this.tags,
       priority: priority ?? this.priority,
       aiPriceEstimation: aiPriceEstimation ?? this.aiPriceEstimation,
+      assignedProviderId: assignedProviderId ?? this.assignedProviderId,
+      selectedBidId: selectedBidId ?? this.selectedBidId,
     );
   }
 
