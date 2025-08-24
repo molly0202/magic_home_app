@@ -37,6 +37,7 @@ class UserRequestService {
         preferences: _extractPreferences(aiIntakeData),
         tags: _extractTags(aiIntakeData),
         priority: _determinePriority(aiIntakeData),
+        aiPriceEstimation: _extractAiPriceEstimation(aiIntakeData),
       );
       
       // Save to Firestore
@@ -76,11 +77,11 @@ class UserRequestService {
         maxResults: maxProviders,
       );
       
-      // Step 3: Update request status
-      await updateRequestStatus(userRequest.requestId!, 'matched');
-      
-      // Step 4: Store matching results
+      // Step 3: Store matching results FIRST (includes matchedProviders field)
       await _storeMatchingResults(userRequest.requestId!, matchingProviders);
+      
+      // Step 4: Update request status LAST to trigger bidding (after matchedProviders is saved)
+      await updateRequestStatus(userRequest.requestId!, 'matched');
       
       print('✅ Processing complete: ${matchingProviders.length} providers matched');
       
@@ -129,13 +130,22 @@ class UserRequestService {
   /// Update request status
   static Future<void> updateRequestStatus(String requestId, String status) async {
     try {
+      print('🔄 Attempting to update request $requestId status to: $status');
       await _firestore.collection('user_requests').doc(requestId).update({
         'status': status,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      print('✅ Updated request $requestId status to: $status');
+      print('✅ Successfully updated request $requestId status to: $status');
+      
+      // Verify the update worked
+      final doc = await _firestore.collection('user_requests').doc(requestId).get();
+      if (doc.exists) {
+        final currentStatus = doc.data()?['status'];
+        print('🔍 Verified current status in database: $currentStatus');
+      }
     } catch (e) {
-      print('❌ Error updating request status: $e');
+      print('❌ CRITICAL ERROR updating request status: $e');
+      rethrow; // Re-throw so we know if this is the problem
     }
   }
   
@@ -203,6 +213,9 @@ class UserRequestService {
     // Extract availability information
     if (data['availability'] is Map) {
       availability.addAll(Map<String, dynamic>.from(data['availability']));
+    } else if (data['availability'] is List) {
+      // Handle availability as array (e.g., ['This weekend', 'Available today'])
+      availability['timeSlots'] = List<String>.from(data['availability']);
     }
     
     // Extract urgency
@@ -250,14 +263,7 @@ class UserRequestService {
   static Map<String, dynamic> _extractPreferences(Map<String, dynamic> data) {
     final preferences = <String, dynamic>{};
     
-    // Extract budget/price preferences
-    if (data['budget'] != null) {
-      preferences['budget'] = data['budget'];
-    } else if (data['priceRange'] != null) {
-      preferences['priceRange'] = data['priceRange'];
-    } else if (data['price_range'] != null) {
-      preferences['priceRange'] = data['price_range'];
-    }
+    // NOTE: Budget/price preferences removed for MVP - providers set their own prices
     
     // Extract quality preferences
     if (data['qualityPreference'] != null) {
@@ -325,6 +331,7 @@ class UserRequestService {
   /// Store matching results for future reference
   static Future<void> _storeMatchingResults(String requestId, List<ProviderMatch> matches) async {
     try {
+      // Store detailed results in separate collection
       await _firestore.collection('matching_results').doc(requestId).set({
         'requestId': requestId,
         'matches': matches.map((m) => m.toMap()).toList(),
@@ -332,6 +339,17 @@ class UserRequestService {
         'topScore': matches.isNotEmpty ? matches.first.overallScore : 0.0,
         'createdAt': FieldValue.serverTimestamp(),
       });
+      
+      // CRITICAL: Update the user request with matchedProviders for bidding system
+      final matchedProviderIds = matches.map((m) => m.providerId).toList();
+      await _firestore.collection('user_requests').doc(requestId).update({
+        'matchedProviders': matchedProviderIds,
+        'matchCount': matches.length,
+        'topScore': matches.isNotEmpty ? matches.first.overallScore : 0.0,
+        'matchingCompletedAt': FieldValue.serverTimestamp(),
+      });
+      
+      print('✅ Stored ${matches.length} matching results and updated user request with provider IDs');
     } catch (e) {
       print('⚠️ Error storing matching results: $e');
     }
@@ -357,5 +375,22 @@ class UserRequestService {
       print('❌ Error getting matching results: $e');
       return [];
     }
+  }
+  
+  static Map<String, dynamic>? _extractAiPriceEstimation(Map<String, dynamic> data) {
+    if (data['aiPriceEstimation'] is Map) {
+      return Map<String, dynamic>.from(data['aiPriceEstimation']);
+    }
+    
+    // Also check alternative field names
+    if (data['priceEstimation'] is Map) {
+      return Map<String, dynamic>.from(data['priceEstimation']);
+    }
+    
+    if (data['ai_price_estimation'] is Map) {
+      return Map<String, dynamic>.from(data['ai_price_estimation']);
+    }
+    
+    return null;
   }
 } 

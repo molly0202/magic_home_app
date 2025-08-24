@@ -7,6 +7,10 @@ import '../../services/auth_service.dart';
 import '../../screens/auth/welcome_screen.dart';
 import '../../screens/ai_task_intake_screen.dart';
 import '../matching/provider_matching_test_screen.dart';
+import '../bidding/bid_comparison_screen.dart';
+import '../../services/bidding_service.dart';
+import '../../models/user_request.dart';
+import '../../models/bidding_session.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -777,6 +781,11 @@ class _HomeScreenState extends State<HomeScreen> {
             
             const SizedBox(height: 24),
             
+            // Active Bidding Sessions
+            _buildActiveBiddingSessions(),
+            
+            const SizedBox(height: 24),
+            
             // Provider Matching Test Lab
             _buildMatchingTestSection(),
             
@@ -790,6 +799,302 @@ class _HomeScreenState extends State<HomeScreen> {
             // Quick Actions
             _buildQuickActionsSection(),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveBiddingSessions() {
+    if (widget.firebaseUser == null) {
+      return SizedBox.shrink();
+    }
+
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: BiddingService.getUserBidHistory(widget.firebaseUser!.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildBiddingSectionHeader('⏰ Active Bidding', 0, true);
+        }
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return _buildNoBiddingSessionsCard();
+        }
+
+        // Filter for active sessions only
+        final activeSessions = snapshot.data!
+            .where((item) => item['session'].sessionStatus == 'active')
+            .toList();
+
+        if (activeSessions.isEmpty) {
+          return _buildNoBiddingSessionsCard();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildBiddingSectionHeader('⏰ Active Bidding', activeSessions.length, false),
+            const SizedBox(height: 12),
+            
+            // Active bidding sessions list
+            ...activeSessions.map((sessionData) {
+              final session = sessionData['session'] as BiddingSession;
+              final request = sessionData['request'] as UserRequest;
+              final bids = sessionData['bids'] as List;
+              final bidCount = sessionData['bidCount'] as int;
+              
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: _buildBiddingSessionCard(session, request, bidCount),
+              );
+            }).toList(),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildBiddingSectionHeader(String title, int count, bool isLoading) {
+    return Row(
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2D3748),
+          ),
+        ),
+        const Spacer(),
+        if (isLoading)
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFBB04C)),
+            ),
+          )
+        else if (count > 0)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Color(0xFFFBB04C),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '$count active',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildNoBiddingSessionsCard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildBiddingSectionHeader('⏰ Active Bidding', 0, false),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey[200]!),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Icon(
+                Icons.gavel_outlined,
+                size: 48,
+                color: Colors.grey[400],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No Active Bidding Sessions',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Create a service request to start receiving bids',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBiddingSessionCard(BiddingSession session, UserRequest request, int bidCount) {
+    final timeRemaining = session.timeRemaining;
+    final isExpiring = timeRemaining.inHours < 1;
+    final hasNewBids = bidCount > 0;
+
+    return GestureDetector(
+      onTap: () => _navigateToBidComparison(request),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isExpiring ? Colors.orange : Colors.grey[200]!,
+            width: isExpiring ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Color(0xFFFBB04C).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    request.serviceCategory.toUpperCase(),
+                    style: const TextStyle(
+                      color: Color(0xFFFBB04C),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                if (hasNewBids)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.fiber_new, size: 12, color: Colors.white),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$bidCount bid${bidCount != 1 ? 's' : ''}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Request description
+            Text(
+              request.description,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[800],
+                height: 1.3,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Status row
+            Row(
+              children: [
+                // Time remaining
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.schedule,
+                        size: 16,
+                        color: isExpiring ? Colors.orange : Colors.grey[600],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        BiddingService.formatTimeRemaining(timeRemaining),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isExpiring ? Colors.orange : Colors.grey[600],
+                          fontWeight: isExpiring ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Action button
+                ElevatedButton(
+                  onPressed: () => _navigateToBidComparison(request),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: hasNewBids ? Colors.green : Color(0xFFFBB04C),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    minimumSize: const Size(0, 0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    hasNewBids ? 'VIEW BIDS' : 'WAITING',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateToBidComparison(UserRequest request) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BidComparisonScreen(
+          requestId: request.requestId!,
+          userRequest: request,
         ),
       ),
     );

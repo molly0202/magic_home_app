@@ -4,11 +4,22 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../screens/bidding/provider_bid_screen.dart';
+import '../screens/bidding/bid_comparison_screen.dart';
+import '../models/user_request.dart';
 
 class NotificationService {
   static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   static const String _adminEmail = 'molly930202@gmail.com';
   
+  // Navigation callback for handling notification taps
+  static Function(String notificationType, Map<String, dynamic> data)? _navigationCallback;
+  
+  // Set navigation callback for notification taps
+  static void setNavigationCallback(Function(String notificationType, Map<String, dynamic> data) callback) {
+    _navigationCallback = callback;
+  }
+
   // Stream to listen for provider status changes
   static Stream<DocumentSnapshot> getProviderStatusStream(String providerId) {
     return FirebaseFirestore.instance
@@ -458,6 +469,13 @@ Thank you.
       final notificationType = message.data['type'];
       if (notificationType == 'status_update') {
         _handleStatusUpdateNotification(message);
+      } else if (notificationType == 'bidding_opportunity') {
+        _handleBiddingNotification(message);
+      } else if (notificationType == 'test_notification') {
+        _handleTestNotification(message);
+      } else {
+        // Handle any other notification types
+        _handleGenericNotification(message);
       }
     }
   });
@@ -524,6 +542,46 @@ Thank you.
     }
   }
 
+  // Handle bidding opportunity notifications
+  static void _handleBiddingNotification(RemoteMessage message) {
+    print('🎯 Bidding opportunity received!');
+    
+    // Extract notification details
+    final title = message.notification?.title ?? 'New Service Opportunity';
+    final body = message.notification?.body ?? 'A new bidding opportunity is available';
+    final urgency = message.data['urgency'] ?? 'normal';
+    final requestId = message.data['request_id'];
+    final notificationType = message.data['type'];
+    
+    print('🎯 Title: $title');
+    print('🎯 Body: $body');
+    print('🎯 Urgency: $urgency');
+    print('🎯 Request ID: $requestId');
+    print('🎯 Type: $notificationType');
+    
+    // Store notification data for later navigation if user taps
+    // This will be handled by _handleNotificationTap
+    print('🎯 Bidding notification handled - ready for navigation on tap');
+  }
+
+  // Handle test notifications
+  static void _handleTestNotification(RemoteMessage message) {
+    print('🧪 Test notification received!');
+    final title = message.notification?.title ?? 'Test';
+    final body = message.notification?.body ?? 'Test notification';
+    print('🧪 Title: $title');
+    print('🧪 Body: $body');
+  }
+
+  // Handle generic notifications
+  static void _handleGenericNotification(RemoteMessage message) {
+    print('📬 Generic notification received!');
+    final title = message.notification?.title ?? 'Notification';
+    final body = message.notification?.body ?? 'You have a new notification';
+    print('📬 Title: $title');
+    print('📬 Body: $body');
+  }
+
   // Handle status update notifications when app is in foreground
   static void _handleStatusUpdateNotification(RemoteMessage message) {
     final status = message.data['status'];
@@ -541,16 +599,34 @@ Thank you.
     final notificationType = message.data['type'];
     final status = message.data['status'];
     final providerId = message.data['provider_id'];
+    final requestId = message.data['request_id'];
+    final userId = message.data['user_id'];
 
+    print('🔔 Notification tapped: $notificationType');
+    
+    // Call navigation callback if set
+    if (_navigationCallback != null) {
+      _navigationCallback!(notificationType, message.data);
+      return;
+    }
+
+    // Fallback navigation (for debugging)
     if (notificationType == 'status_update') {
-      // Navigate to appropriate screen based on status
       if (status == 'verified' || status == 'active') {
-        print('Navigating to provider dashboard due to verification success');
-        // In a real app, you'd use a navigation service here
-        // NavigationService.navigateToProviderDashboard();
+        print('📱 Would navigate to provider dashboard due to verification success');
       } else if (status == 'rejected') {
-        print('Navigating to help/support due to application rejection');
-        // NavigationService.navigateToSupport();
+        print('📱 Would navigate to help/support due to application rejection');
+      }
+    } else if (notificationType == 'bidding_opportunity') {
+      print('📱 Would navigate to bidding screen for request: $requestId');
+    } else if (notificationType == 'new_bid_received') {
+      print('📱 Would navigate to bid comparison screen for request: $requestId');
+    } else if (notificationType == 'bid_result') {
+      final isWinner = message.data['is_winner'] == 'true';
+      if (isWinner) {
+        print('📱 Would navigate to job details screen - bid accepted!');
+      } else {
+        print('📱 Would navigate to provider dashboard - bid not selected');
       }
     }
   }

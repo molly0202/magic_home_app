@@ -15,6 +15,7 @@ class UserRequest {
   final String status; // 'pending', 'matched', 'assigned', 'completed'
   final List<String>? tags;
   final int? priority; // 1-5, where 5 is highest priority
+  final Map<String, dynamic>? aiPriceEstimation; // AI-generated price estimation
   
   UserRequest({
     this.requestId,
@@ -31,6 +32,7 @@ class UserRequest {
     this.status = 'pending',
     this.tags,
     this.priority = 3,
+    this.aiPriceEstimation,
   }) : createdAt = createdAt ?? DateTime.now();
 
   // Create from AI intake service data
@@ -46,6 +48,7 @@ class UserRequest {
     Map<String, dynamic>? preferences,
     List<String>? tags,
     int? priority,
+    Map<String, dynamic>? aiPriceEstimation,
   }) {
     return UserRequest(
       userId: userId,
@@ -59,6 +62,7 @@ class UserRequest {
       preferences: preferences ?? {},
       tags: tags ?? [],
       priority: priority ?? 3,
+      aiPriceEstimation: aiPriceEstimation,
     );
   }
 
@@ -80,12 +84,16 @@ class UserRequest {
       status: data['status'] ?? 'pending',
       tags: data['tags'] != null ? List<String>.from(data['tags']) : null,
       priority: data['priority'] ?? 3,
+      aiPriceEstimation: data['aiPriceEstimation'] != null 
+          ? Map<String, dynamic>.from(data['aiPriceEstimation']) 
+          : null,
     );
   }
 
   // Convert to Firestore document
   Map<String, dynamic> toFirestore() {
     return {
+      'requestId': requestId, // Include requestId in Firestore data
       'userId': userId,
       'serviceCategory': serviceCategory,
       'description': description,
@@ -99,6 +107,7 @@ class UserRequest {
       'status': status,
       'tags': tags,
       'priority': priority,
+      'aiPriceEstimation': aiPriceEstimation,
     };
   }
 
@@ -118,6 +127,7 @@ class UserRequest {
     String? status,
     List<String>? tags,
     int? priority,
+    Map<String, dynamic>? aiPriceEstimation,
   }) {
     return UserRequest(
       requestId: requestId ?? this.requestId,
@@ -134,6 +144,7 @@ class UserRequest {
       status: status ?? this.status,
       tags: tags ?? this.tags,
       priority: priority ?? this.priority,
+      aiPriceEstimation: aiPriceEstimation ?? this.aiPriceEstimation,
     );
   }
 

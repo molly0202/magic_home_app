@@ -7,10 +7,16 @@ import '../../services/notification_service.dart';
 import '../../services/hsp_home_service.dart';
 import '../../models/provider_stats.dart';
 import '../../models/service_order.dart';
-import '../../models/service_request.dart';
+
 import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../debug/function_test_screen.dart';
+import '../debug/token_debug_screen.dart';
+import '../bidding/provider_bid_screen.dart';
+import '../bidding/service_request_detail_screen.dart';
+import '../../services/bidding_service.dart';
+import '../../models/user_request.dart';
 
 class HspHomeScreen extends StatefulWidget {
   final firebase_auth.User user;
@@ -648,8 +654,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                   _buildStatusCard(providerData),
                   if (isVerified) ...[
                     _buildStatsDashboard(),
-                    _buildUpcomingTasks(),
-                    _buildPendingRequests(),
+                    _buildBiddingOpportunities(),
+                    // Removed _buildPendingRequests from Home tab - it was redundant with bidding opportunities
                   ],
                 ],
               ),
@@ -1047,7 +1053,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     }
   }
 
-  Widget _buildPendingRequests() {
+  Widget _buildCompletedTasks() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       padding: const EdgeInsets.all(20),
@@ -1066,86 +1072,88 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Pending Request',
+            'Completed Tasks',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Color(0xFFFBB04C),
+              color: Color(0xFF4CAF50),
             ),
           ),
-            const SizedBox(height: 16),
-            StreamBuilder<List<ServiceRequest>>(
-              stream: HspHomeService.getPendingRequests(widget.user.uid),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                
-                if (snapshot.hasError) {
-                  debugPrint('Firestore error: ${snapshot.error}');
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline, color: Colors.red, size: 40),
-                        const SizedBox(height: 8),
-                        Text('Something went wrong. Please try again later.',
-                            style: TextStyle(color: Colors.red, fontSize: 16)),
-                      ],
-                    ),
-                  );
-                }
-                
-                final requests = snapshot.data ?? [];
-                
-                if (requests.isEmpty) {
-                  return Container(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.pending_outlined,
-                          size: 48,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'No pending requests',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'New service requests will appear here',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[500],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                
-                return Column(
-                  children: requests.take(3).map((request) => _buildRequestItem(request)).toList(),
+          const SizedBox(height: 16),
+          StreamBuilder<List<ServiceOrder>>(
+            stream: HspHomeService.getCompletedTasks(widget.user.uid),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              if (snapshot.hasError) {
+                debugPrint('Firestore error: ${snapshot.error}');
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, color: Colors.red, size: 40),
+                      const SizedBox(height: 8),
+                      Text('Something went wrong. Please try again later.',
+                          style: TextStyle(color: Colors.red, fontSize: 16)),
+                    ],
+                  ),
                 );
-              },
-            ),
+              }
+              
+              final tasks = snapshot.data ?? [];
+              
+              if (tasks.isEmpty) {
+                return Container(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.check_circle_outline,
+                        size: 48,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No completed tasks',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Your completed tasks will appear here',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              
+              return Column(
+                children: tasks.take(5).map((task) => _buildTaskItem(task)).toList(),
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildRequestItem(ServiceRequest request) {
+  Widget _buildRequestItem(UserRequest request) {
+    final isBiddingRequest = request.status == 'bidding';
+    
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PendingRequestDetailScreen(request: request),
+            builder: (context) => ServiceRequestDetailScreen(userRequest: request),
           ),
         );
       },
@@ -1153,15 +1161,22 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.orange[50],
+          color: isBiddingRequest ? Colors.blue[50] : Colors.orange[50],
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.orange[200]!),
+          border: Border.all(
+            color: isBiddingRequest ? Colors.blue[200]! : Colors.orange[200]!,
+            width: isBiddingRequest ? 2 : 1,
+          ),
         ),
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
             Row(
               children: [
+                if (isBiddingRequest) ...[
+                  Icon(Icons.gavel, color: Colors.blue[700], size: 18),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: Text(
                     request.description,
@@ -1176,13 +1191,15 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: isBiddingRequest 
+                        ? Colors.blue.withOpacity(0.1)
+                        : Colors.orange.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text(
-                    'Pending',
+                  child: Text(
+                    isBiddingRequest ? 'Bidding' : 'Pending',
                     style: TextStyle(
-                      color: Colors.orange,
+                      color: isBiddingRequest ? Colors.blue : Colors.orange,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1190,14 +1207,33 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 ),
               ],
             ),
+            if (isBiddingRequest && request.preferences != null && 
+                request.preferences!['price_range'] != null &&
+                request.preferences!['price_range'].toString().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.attach_money, size: 16, color: Colors.green[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Budget: ${request.preferences!['price_range']}',
+                    style: TextStyle(
+                      color: Colors.green[700],
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                Icon(Icons.category, size: 16, color: Colors.grey[600]),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    'Preferred: ${request.preferredTime}',
+                    'Category: ${request.serviceCategory}',
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 14,
@@ -1208,7 +1244,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  request.priceRange,
+                  request.preferences?['price_range'] ?? 'No budget set',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -1224,7 +1260,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    request.locationMasked,
+                    request.address,
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 14,
@@ -1249,7 +1285,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 ),
                 const Spacer(),
                 ElevatedButton(
-                  onPressed: () => _showAcceptRequestDialog(request),
+                  onPressed: () => _navigateToAcceptRequest(request),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange,
                     foregroundColor: Colors.white,
@@ -1265,183 +1301,13 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     );
   }
 
-  void _showAcceptRequestDialog(ServiceRequest request) {
-    final priceController = TextEditingController();
-    final dateController = TextEditingController();
-    final addressController = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          bool isLoadingAddress = true;
-          String? customerAddress;
-          
-          // Fetch customer's address from their user profile
-          void fetchCustomerAddress() async {
-            try {
-              final userDoc = await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(request.userId)
-                  .get();
-              
-              if (userDoc.exists) {
-                final userData = userDoc.data()!;
-                customerAddress = userData['address'] as String?;
-                if (customerAddress != null && customerAddress!.isNotEmpty) {
-                  addressController.text = customerAddress!;
-                } else {
-                  customerAddress = 'No address provided by customer';
-                  addressController.text = customerAddress!;
-                }
-              } else {
-                customerAddress = 'Customer profile not found';
-                addressController.text = customerAddress!;
-              }
-            } catch (e) {
-              customerAddress = 'Error loading customer address';
-              addressController.text = customerAddress!;
-              print('Error fetching customer address: $e');
-            } finally {
-              setState(() {
-                isLoadingAddress = false;
-              });
-            }
-          }
-          
-          // Start fetching address if not already done
-          if (isLoadingAddress && addressController.text.isEmpty) {
-            fetchCustomerAddress();
-          }
-          
-          return AlertDialog(
-            title: const Text('Accept Service Request'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Service: ${request.description}'),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: priceController,
-                    decoration: const InputDecoration(
-                      labelText: 'Final Price (\$)',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: dateController,
-                    decoration: const InputDecoration(
-                      labelText: 'Scheduled Date & Time',
-                      border: OutlineInputBorder(),
-                    ),
-                    readOnly: true,
-                    onTap: () async {
-                      final date = await showDatePicker(
-                        context: context,
-                        initialDate: DateTime.now().add(const Duration(days: 1)),
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (date != null) {
-                        final time = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.now(),
-                        );
-                        if (time != null) {
-                          final scheduledDateTime = DateTime(
-                            date.year,
-                            date.month,
-                            date.day,
-                            time.hour,
-                            time.minute,
-                          );
-                          dateController.text = scheduledDateTime.toIso8601String();
-                        }
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: addressController,
-                    decoration: InputDecoration(
-                      labelText: 'Customer\'s Home Address',
-                      border: const OutlineInputBorder(),
-                      helperText: 'This address is from the customer\'s profile',
-                      suffixIcon: isLoadingAddress 
-                          ? const SizedBox(
-                              width: 20, 
-                              height: 20, 
-                              child: CircularProgressIndicator(strokeWidth: 2)
-                            )
-                          : const Icon(Icons.location_on),
-                    ),
-                    maxLines: 2,
-                    readOnly: true, // Make it read-only since it comes from customer profile
-                  ),
-                  if (isLoadingAddress)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 8),
-                      child: Text(
-                        'Loading customer address...',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (priceController.text.isEmpty ||
-                      dateController.text.isEmpty ||
-                      addressController.text.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please fill in all fields')),
-                    );
-                    return;
-                  }
-                  
-                  if (isLoadingAddress) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please wait for address to load')),
-                    );
-                    return;
-                  }
-                  
-                  try {
-                    final price = double.parse(priceController.text);
-                    final scheduledDateTime = DateTime.parse(dateController.text);
-                    
-                    await HspHomeService.acceptServiceRequest(
-                      request.requestId,
-                      widget.user.uid,
-                      price,
-                      scheduledDateTime,
-                      addressController.text,
-                    );
-                    
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Request accepted successfully!')),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e')),
-                    );
-                  }
-                },
-                child: const Text('Accept'),
-              ),
-            ],
-          );
-        },
+
+
+  void _navigateToAcceptRequest(UserRequest request) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ServiceRequestDetailScreen(userRequest: request),
       ),
     );
   }
@@ -1603,11 +1469,367 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               ),
             ),
             
-            const SizedBox(height: 30),
+            const SizedBox(height: 20),
             
             // Service Provider Feed
             _buildServiceProviderFeed(),
         ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBiddingOpportunities() {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: BiddingService.getProviderBiddingOpportunities(widget.user.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '🔥 Bidding Opportunities',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFFBB04C),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '🔥 Bidding Opportunities',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.work_outline,
+                        size: 48,
+                        color: Colors.grey[500],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No Active Bidding Opportunities',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'We\'ll notify you when customers post requests matching your skills',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final opportunities = snapshot.data!;
+        
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                                  Text(
+                  '🔥 Bidding Opportunities',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.refresh, color: Colors.grey[600]),
+                  onPressed: () {
+                    setState(() {}); // Force rebuild to refresh stream
+                  },
+                ),
+                const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Color(0xFFFBB04C),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${opportunities.length} available',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              
+              // Bidding opportunities list
+              Container(
+                height: 200,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: opportunities.length,
+                  itemBuilder: (context, index) {
+                    final opportunity = opportunities[index];
+                    final request = opportunity['request'] as UserRequest;
+                    final deadline = opportunity['deadline'] as DateTime?;
+                    final timeRemaining = opportunity['timeRemaining'] as Duration?;
+                    
+                    return Container(
+                      width: 280,
+                      margin: EdgeInsets.only(right: 12),
+                      child: _buildOpportunityCard(request, deadline, timeRemaining),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildOpportunityCard(UserRequest request, DateTime? deadline, Duration? timeRemaining) {
+    final isUrgent = timeRemaining != null && timeRemaining.inHours < 1;
+    
+    return GestureDetector(
+      onTap: () => _navigateToBidding(request, deadline),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isUrgent ? Colors.red : Color(0xFFFBB04C),
+            width: isUrgent ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.2),
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Card(
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with urgency indicator
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isUrgent ? Colors.red : Color(0xFFFBB04C),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        request.serviceCategory.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    if (isUrgent)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'URGENT',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // Description
+                Text(
+                  request.description,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[800],
+                    height: 1.3,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                
+                const SizedBox(height: 8),
+                
+                // Location
+                Row(
+                  children: [
+                    Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        request.address.split(',').first, // Show just city
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                const Spacer(),
+                
+                // Price estimation from AI
+                if (request.aiPriceEstimation != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.insights, size: 12, color: Colors.blue),
+                        const SizedBox(width: 4),
+                        Text(
+                          'AI Price: \$${request.aiPriceEstimation!['suggestedRange']?['min']?.toInt() ?? ''}-\$${request.aiPriceEstimation!['suggestedRange']?['max']?.toInt() ?? ''}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.blue,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                
+                // Time remaining and action button
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Time Remaining',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          Text(
+                            timeRemaining != null 
+                                ? BiddingService.formatTimeRemaining(timeRemaining)
+                                : 'Unknown',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isUrgent ? Colors.red : Color(0xFFFBB04C),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => _navigateToBidding(request, deadline),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isUrgent ? Colors.red : Color(0xFFFBB04C),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        minimumSize: Size(0, 0),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text(
+                        'BID NOW',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _navigateToBidding(UserRequest request, DateTime? deadline) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProviderBidScreen(
+          requestId: request.requestId!,
+          userRequest: request,
+          deadline: deadline,
         ),
       ),
     );
@@ -1856,9 +2078,9 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
              
              const SizedBox(height: 20),
              
-             // Tasks List
-            _buildUpcomingTasks(),
-            _buildPendingRequests(),
+                         // Tasks List - Only confirmed and completed service orders
+           _buildUpcomingTasks(),
+           _buildCompletedTasks(),
         ],
         ),
       ),
@@ -2596,6 +2818,34 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                     ),
                   ),
                   const Spacer(),
+                  
+                  // Function Test Button
+                              IconButton(
+              icon: const Icon(Icons.code, color: Colors.purple),
+              tooltip: 'Test Functions',
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const FunctionTestScreen(),
+                  ),
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.bug_report, color: Colors.red),
+              tooltip: 'Debug FCM Tokens',
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TokenDebugScreen(),
+                  ),
+                );
+              },
+            ),
 
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -2924,525 +3174,3 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     );
   }
 }
-
-class PendingRequestDetailScreen extends StatefulWidget {
-  final ServiceRequest request;
-  const PendingRequestDetailScreen({super.key, required this.request});
-
-  @override
-  State<PendingRequestDetailScreen> createState() => _PendingRequestDetailScreenState();
-}
-
-class _PendingRequestDetailScreenState extends State<PendingRequestDetailScreen> {
-  final List<VideoPlayerController?> _videoControllers = [];
-
-  @override
-  void initState() {
-    super.initState();
-    for (final url in widget.request.mediaUrls) {
-      print('Media URL: $url'); // Debug print
-      if (_isVideo(url)) {
-        print('Initializing video controller for: $url');
-        final controller = VideoPlayerController.networkUrl(Uri.parse(url));
-        controller.initialize().then((_) {
-          print('Video initialized successfully: $url');
-          print('Video duration: ${controller.value.duration}');
-          print('Video size: ${controller.value.size}');
-          // Seek to first frame to ensure thumbnail is visible
-          controller.seekTo(Duration.zero);
-          setState(() {});
-        }).catchError((e) {
-          print('Video failed to initialize: $e');
-          print('Video URL: $url');
-          print('Error type: ${e.runtimeType}');
-          setState(() {});
-        });
-        _videoControllers.add(controller);
-      } else {
-        _videoControllers.add(null);
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final controller in _videoControllers) {
-      controller?.dispose();
-    }
-    super.dispose();
-  }
-
-  bool _isVideo(String url) {
-    final lower = url.toLowerCase();
-    print('Checking if video: $url');
-    
-    // Remove query parameters to check the actual file extension
-    final urlWithoutQuery = lower.split('?')[0];
-    print('URL without query: $urlWithoutQuery');
-    
-    final isMovFile = urlWithoutQuery.endsWith('.mov');
-    final isMp4File = urlWithoutQuery.endsWith('.mp4');
-    final isM4vFile = urlWithoutQuery.endsWith('.m4v');
-    
-    print('Is MOV: $isMovFile');
-    print('Is MP4: $isMp4File');
-    print('Is M4V: $isM4vFile');
-    
-    return isMovFile || isMp4File || isM4vFile;
-  }
-
-  void _openImageFullScreen(BuildContext context, String imageUrl) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          backgroundColor: Colors.black,
-          body: GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Center(
-              child: InteractiveViewer(
-                child: Image.network(imageUrl),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _openVideoFullScreen(BuildContext context, VideoPlayerController controller) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          backgroundColor: Colors.black,
-          body: SafeArea(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: controller.value.aspectRatio,
-                child: VideoPlayer(controller),
-              ),
-            ),
-          ),
-          floatingActionButton: FloatingActionButton(
-            backgroundColor: Colors.white,
-            onPressed: () {
-              controller.value.isPlaying ? controller.pause() : controller.play();
-            },
-            child: Icon(
-              controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
-              color: Colors.black,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final request = widget.request;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Request Details'),
-        backgroundColor: const Color(0xFFFBB04C),
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-            Text(
-              request.description,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Icon(Icons.location_on, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    request.locationMasked,
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'Preferred: ${request.preferredTime}',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  request.priceRange,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Colors.orange,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (request.mediaUrls.isNotEmpty) ...[
-              const Text('Media Documents:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 140,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: request.mediaUrls.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 12),
-                  itemBuilder: (context, index) {
-                    final url = request.mediaUrls[index];
-                    final videoController = _videoControllers[index];
-                    if (_isVideo(url)) {
-                      return GestureDetector(
-                        onTap: () {
-                          final controller = _videoControllers[index];
-                          if (controller != null && controller.value.isInitialized) {
-                            _openVideoFullScreen(context, controller);
-                          }
-                        },
-                        child: Stack(
-                          children: [
-                            Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                color: Colors.black,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: videoController != null && videoController.value.isInitialized
-                                    ? FittedBox(
-                                        fit: BoxFit.cover,
-                                        child: SizedBox(
-                                          width: videoController.value.size.width,
-                                          height: videoController.value.size.height,
-                                          child: VideoPlayer(videoController),
-                                        ),
-                                      )
-                                    : Container(
-                                        color: Colors.grey[900],
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.videocam, color: Colors.white, size: 24),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'VIDEO',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            Text(
-                                              _getFileExtension(url),
-                                              style: TextStyle(
-                                                color: _getFileExtension(url) == '.mov' ? Colors.yellow : Colors.white70,
-                                                fontSize: 8,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                              ),
-                            ),
-                            // Number badge
-                            Positioned(
-                              top: 8,
-                              left: 8,
-                              child: Container(
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  color: Colors.orange,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '${index + 1}',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Play button overlay
-                            if (videoController != null && videoController.value.isInitialized)
-                              Positioned(
-                                bottom: 8,
-                                right: 8,
-                                child: Container(
-                                  padding: EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black54,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    Icons.play_arrow,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
-                    } else {
-                      return GestureDetector(
-                        onTap: () => _openImageFullScreen(context, url),
-                        child: Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.network(
-                                url,
-                                width: 120,
-                                height: 120,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  width: 120,
-                                  height: 120,
-                                  decoration: BoxDecoration(
-                                    color: Colors.red[50],
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: Colors.red[300]!),
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.error_outline, color: Colors.red, size: 32),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'IMAGE\nFAILED',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: Colors.red,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      Text(
-                                        '404',
-                                        style: TextStyle(
-                                          color: Colors.red[700],
-                                          fontSize: 8,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                loadingBuilder: (context, child, loadingProgress) {
-                                  if (loadingProgress == null) return child;
-                                  return Container(
-                                    width: 120,
-                                    height: 120,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[200],
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Center(
-                                      child: CircularProgressIndicator(
-                                        value: loadingProgress.expectedTotalBytes != null
-                                            ? loadingProgress.cumulativeBytesLoaded /
-                                                loadingProgress.expectedTotalBytes!
-                                            : null,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            // Thumbnail number
-                            Positioned(
-                              top: 4,
-                              left: 4,
-                              child: Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: Colors.orange,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '${index + 1}',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              // Media URLs List
-              const Text('Media URLs:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: request.mediaUrls.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final url = entry.value;
-                    final isVideo = _isVideo(url);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: Colors.orange,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '${index + 1}',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Icon(
-                                isVideo ? Icons.videocam : Icons.image,
-                                size: 16,
-                                color: isVideo ? Colors.red : Colors.blue,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${isVideo ? 'Video' : 'Image'}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          GestureDetector(
-                            onTap: () async {
-                              final uri = Uri.parse(url);
-                              if (await canLaunchUrl(uri)) {
-                                await launchUrl(uri, mode: LaunchMode.externalApplication);
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Could not open URL')),
-                                );
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.blue[50],
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.blue[200]!),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.link, size: 16, color: Colors.blue),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      url,
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.blue,
-                                        fontFamily: 'monospace',
-                                        decoration: TextDecoration.underline,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 2,
-                                    ),
-                                  ),
-                                  Icon(Icons.open_in_new, size: 16, color: Colors.blue),
-                                ],
-                              ),
-                            ),
-                          ),
-                          if (index < request.mediaUrls.length - 1) 
-                            const Divider(height: 16),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-            Text('Request ID: ${request.requestId}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () {
-                // TODO: Implement quote/accept logic
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Quote/Accept feature coming soon!')),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-              ),
-              child: const Text('Provide Quote / Accept'),
-            ),
-        ],
-        ),
-      ),
-    );
-  }
-
-  String _getFileExtension(String url) {
-    final parts = url.split('.');
-    if (parts.isNotEmpty) {
-      return '.' + parts.last;
-    }
-    return '';
-  }
-} 

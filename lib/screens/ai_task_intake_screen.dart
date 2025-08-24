@@ -8,7 +8,6 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'dart:io';
 import '../services/ai_conversation_service.dart';
-import '../models/service_request.dart';
 
 class AITaskIntakeScreen extends StatefulWidget {
   final User? user;

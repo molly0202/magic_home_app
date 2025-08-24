@@ -33,7 +33,7 @@ class _ProviderMatchingTestScreenState extends State<ProviderMatchingTestScreen>
         'address': '1500 1st Avenue, Seattle, WA 98101', // Downtown Seattle
         'phoneNumber': '+1-555-0123',
         'mediaUrls': ['https://example.com/flood1.jpg', 'https://example.com/flood2.jpg'],
-        'budget': '\$200-400',
+
         'preferredTime': 'ASAP',
       }
     },
@@ -46,7 +46,7 @@ class _ProviderMatchingTestScreenState extends State<ProviderMatchingTestScreen>
         'address': '1200 Pine Street, Seattle, WA 98101', // Capitol Hill
         'phoneNumber': '+1-555-0124',
         'mediaUrls': [],
-        'budget': '\$100-150',
+
         'preferredTime': 'Weekends',
         'schedule': 'weekly',
       }
@@ -60,7 +60,7 @@ class _ProviderMatchingTestScreenState extends State<ProviderMatchingTestScreen>
         'address': '2000 NE 8th Street, Bellevue, WA 98004', // Bellevue
         'phoneNumber': '+1-555-0125',
         'mediaUrls': ['https://example.com/electrical1.jpg'],
-        'budget': '\$500-800',
+
         'preferredTime': 'Weekdays',
         'tags': ['professional_required', 'licensed'],
       }
@@ -74,7 +74,7 @@ class _ProviderMatchingTestScreenState extends State<ProviderMatchingTestScreen>
         'address': '2500 NW Market Street, Seattle, WA 98107', // Ballard
         'phoneNumber': '+1-555-0126',
         'mediaUrls': ['https://example.com/garden1.jpg', 'https://example.com/garden2.jpg'],
-        'budget': '\$1000-2000',
+
         'preferredTime': 'Spring/Summer',
         'tags': ['design', 'installation'],
       }
@@ -88,9 +88,18 @@ class _ProviderMatchingTestScreenState extends State<ProviderMatchingTestScreen>
         'address': '1500 15th Avenue E, Seattle, WA 98112', // Capitol Hill
         'phoneNumber': '+1-555-0127',
         'mediaUrls': ['https://example.com/repairs1.jpg'],
-        'budget': '\$150-300',
-        'preferredTime': 'Flexible',
+
+        'preferredTime': 'This weekend, 10am',
+        'availability': ['This weekend', 'Available today', 'Available tomorrow'],
         'tags': ['multiple_tasks'],
+        'aiPriceEstimation': {
+          'suggestedRange': {'min': 180.0, 'max': 280.0},
+          'marketAverage': 230.0,
+          'confidenceLevel': 'high',
+          'pricingFactors': ['Multiple tasks', 'Standard difficulty', 'Flexible timing'],
+          'generatedAt': DateTime.now().toIso8601String(),
+          'aiModel': 'test-scenario-v1',
+        }
       }
     },
   ];
@@ -674,7 +683,7 @@ class _ProviderMatchingTestScreenState extends State<ProviderMatchingTestScreen>
         // Extract results
         final requestData = result['userRequest'] as Map<String, dynamic>;
         _currentRequest = UserRequest(
-          requestId: requestData['requestId'] ?? 'test_request',
+          requestId: requestData['requestId'] ?? (throw Exception('Missing requestId in response')),
           userId: requestData['userId'] ?? '',
           serviceCategory: requestData['serviceCategory'] ?? '',
           description: requestData['description'] ?? '',
@@ -685,9 +694,10 @@ class _ProviderMatchingTestScreenState extends State<ProviderMatchingTestScreen>
           location: requestData['location'] != null ? Map<String, dynamic>.from(requestData['location']) : null,
           preferences: requestData['preferences'] != null ? Map<String, dynamic>.from(requestData['preferences']) : null,
           createdAt: DateTime.now(),
-          status: requestData['status'] ?? 'pending',
+          status: 'matched', // Show correct final status after processing
           tags: requestData['tags'] != null ? List<String>.from(requestData['tags']) : null,
           priority: requestData['priority'] ?? 3,
+          aiPriceEstimation: requestData['aiPriceEstimation'] != null ? Map<String, dynamic>.from(requestData['aiPriceEstimation']) : null,
         );
         
         final matchingData = result['matchingProviders'] as List;

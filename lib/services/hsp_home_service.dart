@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/provider_stats.dart';
 import '../models/service_order.dart';
-import '../models/service_request.dart';
+import '../models/user_request.dart';
 
 class HspHomeService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -102,35 +102,35 @@ class HspHomeService {
         });
   }
 
-  // Get pending requests (service requests that haven't been converted to orders)
-  static Stream<List<ServiceRequest>> getPendingRequests(String providerId) {
+  // Get pending requests (user requests that haven't been converted to orders)
+  static Stream<List<UserRequest>> getPendingRequests(String providerId) {
     return _firestore
-        .collection('service_requests')
-        .where('status', isEqualTo: 'pending')
-        .orderBy('created_at', descending: true)
+        .collection('user_requests')
+        .where('status', whereIn: ['pending', 'bidding'])
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs.map((doc) {
+          return snapshot.docs.where((doc) {
             final data = doc.data();
-            return ServiceRequest(
-              requestId: doc.id,
-              userId: data['user_id'] ?? '',
-              description: data['description'] ?? '',
-              mediaUrls: List<String>.from(data['media_urls'] ?? []),
-              preferredTime: data['preferred_time'] ?? '',
-              locationMasked: data['location_masked'] ?? '',
-              finalAddress: data['final_address'],
-              status: data['status'] ?? '',
-              createdAt: (data['created_at'] as Timestamp).toDate(),
-              priceRange: data['price_range'] ?? '',
-              customerName: data['customer_name'],
-              customerPhotoUrl: data['customer_photo_url'],
-            );
+            final status = data['status'] ?? '';
+            
+            // Include regular pending requests
+            if (status == 'pending') return true;
+            
+            // Include bidding requests only if this provider is in the bidding list
+            if (status == 'bidding') {
+              final biddingProviders = List<String>.from(data['bidding_providers'] ?? []);
+              return biddingProviders.contains(providerId);
+            }
+            
+            return false;
+          }).map((doc) {
+            return UserRequest.fromFirestore(doc);
           }).toList();
         });
   }
 
-  // Accept a service request (create a service order)
+  // Accept a user request (create a service order)
   static Future<void> acceptServiceRequest(
     String requestId,
     String providerId,
@@ -139,36 +139,36 @@ class HspHomeService {
     String confirmedAddress,
   ) async {
     try {
-      // Get the service request
+      // Get the user request
       final requestDoc = await _firestore
-          .collection('service_requests')
+          .collection('user_requests')
           .doc(requestId)
           .get();
 
       if (!requestDoc.exists) {
-        throw Exception('Service request not found');
+        throw Exception('User request not found');
       }
 
-      final requestData = requestDoc.data()!;
+      final userRequest = UserRequest.fromFirestore(requestDoc);
 
       // Create a new service order
       await _firestore.collection('service_orders').add({
         'request_id': requestId,
         'provider_id': providerId,
-        'user_id': requestData['user_id'],
+        'user_id': userRequest.userId,
         'final_price': finalPrice,
         'scheduled_time': Timestamp.fromDate(scheduledTime),
         'confirmed_address': confirmedAddress,
         'status': 'confirmed',
-        'service_description': requestData['description'],
-        'customer_name': requestData['customer_name'],
-        'customer_photo_url': requestData['customer_photo_url'],
+        'service_description': userRequest.description,
+        'customer_name': '', // Will be loaded from user profile if needed
+        'customer_photo_url': '', // Will be loaded from user profile if needed
         'created_at': FieldValue.serverTimestamp(),
       });
 
-      // Update the service request status
+      // Update the user request status
       await _firestore
-          .collection('service_requests')
+          .collection('user_requests')
           .doc(requestId)
           .update({
         'status': 'accepted',
@@ -195,5 +195,34 @@ class HspHomeService {
       print('Error updating order status: $e');
       rethrow;
     }
+  }
+
+  // Submit quote (placeholder for now)
+  static Future<void> submitQuote({
+    required String requestId,
+    required double price,
+    required String scheduledDate,
+    required String address,
+  }) async {
+    // TODO: Implement quote submission logic
+    print('Quote submitted: \$${price} for request ${requestId}');
+    // This would integrate with the bidding system
+    throw UnimplementedError('Quote submission not yet implemented - use bidding system instead');
+  }
+
+  // Get completed tasks for a provider
+  static Stream<List<ServiceOrder>> getCompletedTasks(String providerId) {
+    return _firestore
+        .collection('service_orders')
+        .where('provider_id', isEqualTo: providerId)
+        .where('status', isEqualTo: 'completed')
+        .orderBy('created_at', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            return ServiceOrder.fromMap(doc.id, data);
+          }).toList();
+        });
   }
 } 

@@ -5,8 +5,13 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'screens/home/hsp_home_screen.dart';
+import 'screens/bidding/provider_bid_screen.dart';
+import 'screens/bidding/bid_comparison_screen.dart';
 import 'services/notification_service.dart';
+import 'models/user_request.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Top-level function to handle background messages
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -19,6 +24,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // For example, update local database, show notification, etc.
 }
 
+// Global navigator key for navigation from anywhere
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   print('Initializing Firebase...');
@@ -27,6 +35,9 @@ void main() async {
   
   // Set the background messaging handler early on
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  
+  // Set up notification navigation callback
+  NotificationService.setNavigationCallback(_handleNotificationNavigation);
   
   runApp(const MagicHomeApp());
 }
@@ -79,6 +90,7 @@ class _MagicHomeAppState extends State<MagicHomeApp> {
     return MaterialApp(
       title: 'Magic Home',
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFBB04C)),
         useMaterial3: true,
@@ -243,5 +255,136 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
       ),
     );
+  }
+}
+
+// Handle notification navigation
+void _handleNotificationNavigation(String notificationType, Map<String, dynamic> data) async {
+  print('🔔 Handling notification navigation: $notificationType');
+  
+  final context = navigatorKey.currentContext;
+  if (context == null) {
+    print('❌ No navigator context available');
+    return;
+  }
+
+  try {
+    switch (notificationType) {
+      case 'bidding_opportunity':
+        await _navigateToProviderBidScreen(context, data);
+        break;
+      case 'new_bid_received':
+        await _navigateToBidComparisonScreen(context, data);
+        break;
+      case 'bid_result':
+        await _handleBidResultNavigation(context, data);
+        break;
+      case 'status_update':
+        await _handleStatusUpdateNavigation(context, data);
+        break;
+      default:
+        print('🤷 Unknown notification type: $notificationType');
+    }
+  } catch (e) {
+    print('❌ Error handling notification navigation: $e');
+  }
+}
+
+Future<void> _navigateToProviderBidScreen(BuildContext context, Map<String, dynamic> data) async {
+  final requestId = data['request_id'];
+  if (requestId == null) {
+    print('❌ Missing request_id for bidding opportunity');
+    return;
+  }
+
+  try {
+    // Get the UserRequest from Firestore
+    final doc = await FirebaseFirestore.instance
+        .collection('user_requests')
+        .doc(requestId)
+        .get();
+    
+    if (!doc.exists) {
+      print('❌ UserRequest not found: $requestId');
+      return;
+    }
+
+    final userRequest = UserRequest.fromFirestore(doc);
+    final deadlineTimestamp = data['deadline_timestamp'];
+    DateTime? deadline;
+    
+    if (deadlineTimestamp != null) {
+      deadline = DateTime.fromMillisecondsSinceEpoch(int.parse(deadlineTimestamp) * 1000);
+    }
+
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (context) => ProviderBidScreen(
+          requestId: requestId,
+          userRequest: userRequest,
+          deadline: deadline,
+        ),
+      ),
+    );
+  } catch (e) {
+    print('❌ Error navigating to bid screen: $e');
+  }
+}
+
+Future<void> _navigateToBidComparisonScreen(BuildContext context, Map<String, dynamic> data) async {
+  final requestId = data['request_id'];
+  if (requestId == null) {
+    print('❌ Missing request_id for bid comparison');
+    return;
+  }
+
+  try {
+    // Get the UserRequest from Firestore
+    final doc = await FirebaseFirestore.instance
+        .collection('user_requests')
+        .doc(requestId)
+        .get();
+    
+    if (!doc.exists) {
+      print('❌ UserRequest not found: $requestId');
+      return;
+    }
+
+    final userRequest = UserRequest.fromFirestore(doc);
+
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (context) => BidComparisonScreen(
+          requestId: requestId,
+          userRequest: userRequest,
+        ),
+      ),
+    );
+  } catch (e) {
+    print('❌ Error navigating to bid comparison: $e');
+  }
+}
+
+Future<void> _handleBidResultNavigation(BuildContext context, Map<String, dynamic> data) async {
+  final isWinner = data['is_winner'] == 'true';
+  
+  if (isWinner) {
+    print('🎉 Bid won! Would navigate to job details screen');
+    // TODO: Navigate to job details/management screen
+  } else {
+    print('😔 Bid not selected. Staying on current screen');
+    // Maybe show a snackbar or dialog
+  }
+}
+
+Future<void> _handleStatusUpdateNavigation(BuildContext context, Map<String, dynamic> data) async {
+  final status = data['status'];
+  
+  if (status == 'verified' || status == 'active') {
+    print('🎉 Account verified! Would navigate to provider dashboard');
+    // TODO: Navigate to provider dashboard
+  } else if (status == 'rejected') {
+    print('❌ Application rejected. Would navigate to support');
+    // TODO: Navigate to support/help screen
   }
 }
