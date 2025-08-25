@@ -31,13 +31,19 @@ class ConversationState {
   // Service Information  
   String? serviceCategory;        // AI-categorized service type
   String? description;            // AI-refined description
-  List<String> mediaUrls;         // Photos/videos from intake
+  List<String> mediaUrls;         // Photos from intake
   List<String>? tags;             // AI-generated tags
   
   // Customer Details
   String? address;                // Full service address
+  String? zipcode;                // Zip code
+  String? city;                   // City
+  String? state;                  // State
   String? phoneNumber;            // Contact number
+  String? email;                  // Email address
   Map<String, dynamic>? location; // GPS coordinates + formatted address
+  Map<String, dynamic>? locationForm;    // Complete location form data
+  Map<String, dynamic>? contactForm;     // Complete contact form data
   
   // Availability & Scheduling
   Map<String, dynamic>? userAvailability; // Calendar + time slots
@@ -63,6 +69,11 @@ class ConversationState {
   String? customerName;
   Map<String, dynamic>? locationDetails;
   Map<String, dynamic>? priceEstimate;
+  bool locationFormRequested;
+  bool locationFormCompleted;
+  bool contactFormRequested;
+  bool contactFormCompleted;
+  bool priceEstimationCompleted;
 
   ConversationState({
     this.requestId,
@@ -72,8 +83,14 @@ class ConversationState {
     List<String>? mediaUrls,
     this.tags,
     this.address,
+    this.zipcode,
+    this.city, 
+    this.state,
     this.phoneNumber,
+    this.email,
     this.location,
+    this.locationForm,
+    this.contactForm,
     this.userAvailability,
     this.preferences,
     this.priority,
@@ -93,6 +110,11 @@ class ConversationState {
     this.customerName,
     this.locationDetails,
     this.priceEstimate,
+    this.locationFormRequested = false,
+    this.locationFormCompleted = false,
+    this.contactFormRequested = false,
+    this.contactFormCompleted = false,
+    this.priceEstimationCompleted = false,
   }) : mediaUrls = mediaUrls ?? <String>[],
        extractedInfo = extractedInfo ?? <String, dynamic>{},
        conversationHistory = conversationHistory ?? <Map<String, String>>[],
@@ -109,33 +131,53 @@ class AIConversationService {
   Function(Map<String, dynamic>)? onServiceRequestComplete;
   VoidCallback? onPhotoUploadRequested;
   VoidCallback? onCalendarRequested;
+  VoidCallback? onLocationFormRequested;
+  VoidCallback? onContactFormRequested;
   
   // Enhanced system prompt optimized for Gemini and Magic Home app
   static const String _systemPrompt = '''
 You are Magic Home assistant. Help users create service requests efficiently.
 
+CUSTOMER PROFILE: Your customers are often new homeowners with limited knowledge about home construction, repairs, and maintenance. They need guidance and suggestions to properly describe their issues.
+
 CONVERSATION FLOW - FOLLOW STRICTLY:
 1. DISCOVER (Step 0-1): What service do you need?
-2. DETAILS (Step 2): Get specific problem details
+2. DETAILS (Step 2): Get specific problem details WITH GUIDED OPTIONS
 3. PHOTOS (Step 3): Guide to photo upload - MAX 2 attempts then proceed
-4. SCHEDULE (Step 4): Set availability - MAX 2 attempts then proceed  
-5. CONFIRM (Step 5): Show summary
+4. SCHEDULE (Step 4): Set availability - MAX 2 attempts then proceed
+5. LOCATION (Step 5): Collect location form - address, zipcode, city, state
+6. CONTACT (Step 6): Collect contact form - tel, email
+7. PRICING (Step 7): Show network-based price estimation
+8. CONFIRM (Step 8): Show complete summary
 
 SERVICE CATEGORIES: Cleaning, Plumbing, Electrical, HVAC, Appliance Repair, Handyman, Landscaping, Pest Control, Roofing, Painting
 
+GUIDANCE FOR NEW HOMEOWNERS:
+- Always provide 2-3 common issue examples for their service category
+- Use simple, non-technical language
+- Include location hints (kitchen sink, bathroom, basement, etc.)
+- Mention urgency levels (emergency, soon, when convenient)
+- Give helpful context about what professionals need to know
+
 RULES:
+- ONLY answer HOME SERVICE questions (repairs, maintenance, cleaning, etc.)
+- If asked about weather, politics, entertainment, etc. say: "I only help with home services. What do you need fixed?"
 - Keep responses SHORT (1 sentence max)
 - Ask ONE question at a time
 - NEVER repeat the same question
-- Progress steps automatically after 2 attempts
-- Step 3: Say "Photos help! Upload now or we'll continue" then TRIGGER photo upload
+- Progress to step 3 automatically for at most 5 rounds of complete conversations about what's going on (after that, user must explicitly say "done" to move to step 4)
+- Step 2: Always provide 2-3 SPECIFIC examples for the service category to guide new homeowners
+- Step 3: Say "Photos are helpful! Would you like to upload some?" then TRIGGER photo upload
 - Step 4: Say "When works for you?" then TRIGGER calendar
 - If user says "skip" or "later" - move to next step immediately
 
 STEP TRIGGERS:
 - Step 3: After asking about photos MAX 2 times, automatically call photo upload UI
 - Step 4: After asking about schedule MAX 2 times, automatically call calendar UI
-- Step 5: Auto-generate summary
+- Step 5: After availability set, trigger location form UI
+- Step 6: After location form completed, trigger contact form UI
+- Step 7: After contact form completed, calculate and show price estimation
+- Step 8: Auto-generate complete summary
 
 RESPONSE STYLE:
 - Concise and direct
@@ -165,7 +207,28 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     });
     
     _addMessage(ChatMessage(
-      content: "Hi! What home service do you need?",
+      content: "Hi! I'm here to help you with your home service needs. What can I assist you with today?",
+      type: MessageType.ai,
+      timestamp: DateTime.now(),
+    ));
+    
+    // Add service options as separate individual boxes
+    List<String> services = [
+      'Plumbing', 'Electrical', 'HVAC', 'Appliance Repair', 'Cleaning',
+      'Handyman', 'Landscaping', 'Pest Control', 'Roofing', 'Painting'
+    ];
+    
+    for (String service in services) {
+      _addMessage(ChatMessage(
+        content: service,
+        type: MessageType.ai,
+        timestamp: DateTime.now(),
+        metadata: {'isServiceBox': true, 'serviceType': service}, // Individual service box styling
+      ));
+    }
+    
+    _addMessage(ChatMessage(
+      content: "Select a service above or tell me what's going on!",
       type: MessageType.ai,
       timestamp: DateTime.now(),
     ));
@@ -194,14 +257,34 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
       'content': input,
     });
 
+    // Handle specific user messages for step progression  
+    String lowerInput = input.toLowerCase();
+    
+    // Check if the question is related to home services
+    if (!_isHomeServiceRelated(lowerInput)) {
+      return "I'm here to help you with home service requests only. Let's focus on getting you connected with the right professional for your home needs. What type of home service do you need help with?";
+    }
+    
+    if (lowerInput.contains('done') && lowerInput.contains('photo')) {
+      if (_currentState.conversationStep == 3) {
+        _currentState.conversationStep = 4; // Move to availability step
+        print('📸 User done with photos, moving to step 4 (availability)');
+      }
+    }
+
     // Detect and update service category if not already set
     if (_currentState.serviceCategory == null) {
-      String lowerInput = input.toLowerCase();
       _currentState.serviceCategory = _detectServiceCategory(lowerInput);
       if (_currentState.serviceCategory != null) {
         _currentState.description = input;
-        // Don't advance step here - let _generateStepBasedResponse handle step progression
+        // FORCE step advancement to prevent repetition
+        _currentState.conversationStep = 1;
+        print('🔧 Service category detected: ${_currentState.serviceCategory}, advancing to step 1');
       }
+    } else if (_currentState.conversationStep == 0) {
+      // If service category already set but still at step 0, force advance
+      _currentState.conversationStep = 1;
+      print('🔧 Service category already set, forcing advance from step 0 to 1');
     }
 
     String response = await _generateGeminiResponse(input);
@@ -375,19 +458,28 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         contextualMessage += " [Step 0: Identify service - be brief]";
         break;
       case 1:
-        contextualMessage += " [Step 1: Get details - ask 1 question only, attempt $attempts/2]";
+        contextualMessage += " [Step 1: Get details with GUIDED OPTIONS - provide 2-3 specific examples for ${_currentState.serviceCategory}, attempt $attempts/2]";
         break;
       case 2:
-        contextualMessage += " [Step 2: Move to photos immediately - be brief]";
+        contextualMessage += " [Step 2: Move to photo upload - be brief]";
         break;
       case 3:
-        contextualMessage += " [Step 3: Photo upload - attempt $attempts/2, if >=2 say 'Photos help! Upload now or continue?' and trigger upload]";
+        contextualMessage += " [Step 3: Photo upload - attempt $attempts/2, if >=2 say 'Photos are helpful! Upload some?' and trigger upload]";
         break;
       case 4:
         contextualMessage += " [Step 4: Scheduling - attempt $attempts/2, if >=2 say 'When works?' and trigger calendar]";
         break;
       case 5:
-        contextualMessage += " [Step 5: Show summary immediately]";
+        contextualMessage += " [Step 5: Location form - ask for address, zipcode, city, state]";
+        break;
+      case 6:
+        contextualMessage += " [Step 6: Contact form - ask for tel and email]";
+        break;
+      case 7:
+        contextualMessage += " [Step 7: Show price estimation based on network prices]";
+        break;
+      case 8:
+        contextualMessage += " [Step 8: Show complete summary]";
         break;
     }
     
@@ -408,7 +500,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     attempts++;
     _currentState.extractedInfo[stepKey] = attempts;
     
-    // Force progression after max attempts
+    // FORCE progression after 1 attempt to prevent repetition
     switch (_currentState.conversationStep) {
       case 0:
         if (_currentState.serviceCategory != null) {
@@ -416,32 +508,50 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         }
         break;
       case 1:
-        if (lowerResponse.contains('tell me more') || lowerResponse.contains('details') || attempts >= 2) {
-          _currentState.conversationStep = 2;
-        }
+        // Always move to details after first response
+      _currentState.conversationStep = 2;
         break;
       case 2:
         // Always move to photo after details
-        _currentState.conversationStep = 3;
+      _currentState.conversationStep = 3;
         _currentState.photoUploadRequested = true;
         break;
       case 3:
-        // Force move to scheduling after 2 photo attempts OR if user wants to skip
-        if (attempts >= 2 || lowerResponse.contains('skip') || lowerResponse.contains('later') || 
-            lowerResponse.contains('schedule') || lowerResponse.contains('continue')) {
-          _currentState.conversationStep = 4;
-          _currentState.calendarRequested = true;
-          // Trigger photo upload UI if not triggered yet
+        // Only move to scheduling if user explicitly says they're done with photos
+        if (lowerResponse.contains('skip') || lowerResponse.contains('later') || 
+            lowerResponse.contains('done') || lowerResponse.contains('continue')) {
+      _currentState.conversationStep = 4;
           _triggerPhotoUpload();
         }
+        // Stay at step 3 to allow multiple photo uploads
         break;
       case 4:
-        // Force move to summary after 2 scheduling attempts OR if availability is set
-        if (attempts >= 2 || _currentState.availabilitySet || lowerResponse.contains('summary')) {
-          _currentState.conversationStep = 5;
-          // Trigger calendar UI if not triggered yet
-          _triggerCalendar();
+        // Only move to location form if availability is actually set
+        if (_currentState.availabilitySet) {
+      _currentState.conversationStep = 5;
+          _currentState.locationFormRequested = true;
+          _triggerLocationForm();
         }
+        // If availability not set, stay at step 4 and keep showing calendar
+        break;
+      case 5:
+        // Force move to contact form
+        if (_currentState.locationFormCompleted || attempts >= 1) {
+          _currentState.conversationStep = 6;
+          _currentState.contactFormRequested = true;
+          _triggerContactForm();
+        }
+        break;
+      case 6:
+        // Force move to pricing
+        if (_currentState.contactFormCompleted || attempts >= 1) {
+          _currentState.conversationStep = 7;
+          _calculateNetworkPrice();
+        }
+        break;
+      case 7:
+        // Force move to final summary
+        _currentState.conversationStep = 8;
         break;
     }
   }
@@ -497,25 +607,36 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     
     String lowerInput = input.toLowerCase();
     
+    // Check if the question is related to home services (only for initial messages)
+    if (_currentState.conversationStep == 0 && !_isHomeServiceRelated(lowerInput)) {
+      return "I'm here to help you with home service requests only. Let's focus on getting you connected with the right professional for your home needs. What type of home service do you need help with?";
+    }
+    
+    // Handle specific user messages for step progression
+    if (lowerInput.contains('done') && lowerInput.contains('photo')) {
+      if (_currentState.conversationStep == 3) {
+        _currentState.conversationStep = 4; // Move to availability step
+        print('📸 User done with photos, moving to step 4 (availability)');
+      }
+    }
+    
     // Use step-based progression when no AI is configured
     if (!ApiConfig.isAnyAiConfigured) {
       return _generateStepBasedResponse(input, lowerInput);
     }
     
     // Enhanced mock responses that mirror Gemini style (when AI is configured but fails)
-    if (_currentState.conversationStep < 2) {
-      if (_currentState.serviceCategory == null) {
+    if (_currentState.conversationStep == 0) {
         _currentState.serviceCategory = _detectServiceCategory(lowerInput);
         _currentState.serviceDescription = input;
         _currentState.conversationStep = 1;
+      return "Perfect! I understand you need ${_currentState.serviceCategory ?? 'home'} service. What specifically needs to be done?";
+    }
         
-        return "Perfect! I understand you need ${_currentState.serviceCategory} service. Could you tell me more details about what specifically needs to be done?";
-              } else {
-          _currentState.problemDescription = input;
-          _currentState.conversationStep = 2;
-          
-          return "Got it! Photos help with accurate quotes. Upload some?";
-        }
+    if (_currentState.conversationStep == 1) {
+        _currentState.problemDescription = input;
+        _currentState.conversationStep = 2;
+      return "Great! Photos help professionals provide better estimates. Would you like to upload some?";
     }
     
     // More concise mock flow with attempt tracking
@@ -525,36 +646,55 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     if (_currentState.conversationStep == 2) {
       _currentState.photoUploadRequested = true;
       _currentState.conversationStep = 3;
-      return "Got it! Photos help providers quote accurately. Upload now?";
+      return "Excellent! Photos help providers give accurate quotes. Ready to upload some?";
     }
     
     if (_currentState.conversationStep == 3) {
-      if (attempts >= 2 || lowerInput.contains('skip') || lowerInput.contains('later')) {
-        _currentState.conversationStep = 4;
-        _currentState.calendarRequested = true;
+      if (lowerInput.contains('skip') || lowerInput.contains('later') || lowerInput.contains('done')) {
+      _currentState.conversationStep = 4;
         _triggerPhotoUpload(); // Trigger the actual photo upload UI
         return "When works for you?";
       } else {
         _triggerPhotoUpload();
-        return "Photos help! Upload now or we'll continue.";
+        return "Photos really help! Would you like to upload some, or should we continue?";
       }
     }
     
     if (_currentState.conversationStep == 4) {
-      if (attempts >= 2 || _currentState.availabilitySet) {
-        _currentState.userAvailability = {'preference': input, 'timestamp': DateTime.now().toIso8601String()};
-        _currentState.availabilitySet = true;
-        _currentState.conversationStep = 5;
-        _triggerCalendar(); // Trigger the actual calendar UI
-        String summary = _generateServiceRequestSummary();
-        return "Perfect! Here's your summary:\n\n$summary";
-      } else {
+      // Trigger calendar UI first, don't auto-advance until calendar is used
+      if (!_currentState.calendarRequested) {
         _triggerCalendar();
-        return "When works best? Morning, afternoon, weekend?";
+      _currentState.calendarRequested = true;
       }
+      // Stay at step 4 until availability is actually set
+      return "When works best for you? Please select your preferred date and time.";
     }
     
     if (_currentState.conversationStep == 5) {
+      // Wait for location form to be completed via UI
+      _triggerLocationForm();
+      return "Please fill out the location form above.";
+    }
+    
+    if (_currentState.conversationStep == 6) {
+      // Wait for contact form to be completed via UI
+      _triggerContactForm();
+      return "Please fill out the contact form above.";
+    }
+    
+    if (_currentState.conversationStep == 7) {
+      // Price calculation step
+      _calculateNetworkPrice();
+      if (_currentState.priceEstimate != null) {
+        _currentState.conversationStep = 8;
+        String summary = _generateServiceRequestSummary();
+        return "Excellent! Here's your price estimate: ${_formatPriceRange(_currentState.priceEstimate!)}\n\nHere's your complete summary:\n\n$summary";
+      } else {
+        return "Calculating your price estimate...";
+      }
+    }
+    
+    if (_currentState.conversationStep == 8) {
       return "All set! Ready to connect with professionals.";
     }
     
@@ -569,12 +709,18 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         _currentState.serviceCategory = _detectServiceCategory(lowerInput);
         _currentState.description = input;
         _currentState.conversationStep = 1;
-        return "Hi! I understand you need ${_currentState.serviceCategory ?? 'home service'} help. What specifically needs to be done?";
+        
+        // Customize response based on detected service
+        if (_currentState.serviceCategory != null && _currentState.serviceCategory != 'Handyman') {
+          return "Perfect! I can help with ${_currentState.serviceCategory!.toLowerCase()} services. Tell me more about what's happening - what specifically needs attention?";
+        } else {
+          return "Got it! Could you tell me a bit more about what needs to be fixed or addressed? The more details you provide, the better I can help you find the right professional.";
+        }
         
       case 1:
-        // Step 2: Service Details - Category-specific structured questions
+        // Step 2: Service Details with Guided Options for New Homeowners
         _currentState.conversationStep = 2;
-        return _getServiceSpecificQuestions();
+        return _getGuidedServiceOptions();
         
       case 2:
         // Continue collecting service details
@@ -583,7 +729,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
           return _getNextServiceQuestion();
         } else {
           _currentState.conversationStep = 3;
-          return "Perfect! Now let's do a visual assessment. Would you like to upload photos or a short video (max 30 seconds) to help our professionals better understand your needs? This is optional but highly recommended.";
+          return "Perfect! Photos really help professionals give accurate estimates. Would you like to upload some photos of the issue? It's optional but recommended.";
         }
         
       case 3:
@@ -594,13 +740,13 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         _currentState.serviceAnswers[stepKey] = attempts.toString();
         
         _currentState.photoUploadRequested = true;
-        if (attempts >= 2 || input.toLowerCase().contains('skip') || input.toLowerCase().contains('later')) {
-          _currentState.conversationStep = 4;
+        if (input.toLowerCase().contains('skip') || input.toLowerCase().contains('later') || input.toLowerCase().contains('done')) {
+        _currentState.conversationStep = 4;
           _triggerPhotoUpload();
           return "When works for you?";
         } else {
           _triggerPhotoUpload();
-          return "Photos help! Upload now or continue?";
+          return "Photos are helpful! Would you like to upload some now?";
         }
         
       case 4:
@@ -613,7 +759,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         if (attempts4 >= 2) {
           _currentState.userAvailability = {'preference': input, 'timestamp': DateTime.now().toIso8601String()};
           _currentState.availabilitySet = true;
-          _currentState.conversationStep = 5;
+        _currentState.conversationStep = 5;
           _triggerCalendar();
           String summary = _generateServiceRequestSummary();
           return "Perfect! Here's your summary:\n\n$summary";
@@ -706,38 +852,372 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
   }
 
   Map<String, dynamic> _generateMockPriceEstimate() {
-    // This method would typically generate a mock price estimate based on service category
-    // For now, it's a placeholder.
-    switch (_currentState.serviceCategory) {
-      case 'Cleaning':
-        return {'min': 50, 'max': 150};
-      case 'Plumbing':
-        return {'min': 100, 'max': 300};
-      case 'Electrical':
-        return {'min': 150, 'max': 400};
-      case 'HVAC':
-        return {'min': 200, 'max': 600};
-      case 'Appliance Repair':
-        return {'min': 100, 'max': 300};
-      case 'Landscaping':
-        return {'min': 50, 'max': 150};
-      case 'Pest Control':
-        return {'min': 100, 'max': 250};
-      case 'Roofing':
-        return {'min': 200, 'max': 800};
-      case 'Painting':
-        return {'min': 150, 'max': 400};
-      case 'Handyman':
-        return {'min': 50, 'max': 150};
+    // Legacy method for backward compatibility
+    return _generateNetworkBasedPriceEstimate();
+  }
+  
+  // Generate network-based price estimation with location factors
+  Map<String, dynamic> _generateNetworkBasedPriceEstimate() {
+    // Enhanced service-specific pricing structure (in USD)
+    Map<String, Map<String, dynamic>> servicePricing = {
+      'Cleaning': {
+        'hourly_rate': {'min': 25, 'max': 50, 'avg': 35},
+        'project_pricing': {
+          'Standard House Cleaning': {'min': 80, 'max': 150, 'avg': 115, 'hours': '2-4'},
+          'Deep Cleaning': {'min': 150, 'max': 300, 'avg': 225, 'hours': '4-8'},
+          'Move-in/Move-out Cleaning': {'min': 200, 'max': 400, 'avg': 300, 'hours': '6-10'},
+          'Post-Construction Cleaning': {'min': 300, 'max': 600, 'avg': 450, 'hours': '8-12'},
+        },
+        'default': {'min': 80, 'max': 200, 'avg': 140}
+      },
+      'Plumbing': {
+        'hourly_rate': {'min': 75, 'max': 150, 'avg': 110},
+        'project_pricing': {
+          'Faucet Repair/Installation': {'min': 150, 'max': 300, 'avg': 225, 'hours': '1-2'},
+          'Toilet Repair/Installation': {'min': 200, 'max': 400, 'avg': 300, 'hours': '2-3'},
+          'Pipe Leak Repair': {'min': 250, 'max': 500, 'avg': 375, 'hours': '2-4'},
+          'Water Heater Installation': {'min': 800, 'max': 1500, 'avg': 1150, 'hours': '4-6'},
+          'Drain Cleaning': {'min': 150, 'max': 350, 'avg': 250, 'hours': '1-3'},
+        },
+        'default': {'min': 150, 'max': 450, 'avg': 300}
+      },
+      'Electrical': {
+        'hourly_rate': {'min': 80, 'max': 150, 'avg': 115},
+        'project_pricing': {
+          'Outlet Installation': {'min': 150, 'max': 250, 'avg': 200, 'hours': '1-2'},
+          'Light Fixture Installation': {'min': 200, 'max': 400, 'avg': 300, 'hours': '2-3'},
+          'Circuit Breaker Replacement': {'min': 300, 'max': 600, 'avg': 450, 'hours': '2-4'},
+          'Whole House Rewiring': {'min': 3000, 'max': 8000, 'avg': 5500, 'hours': '20-40'},
+          'Panel Upgrade': {'min': 1500, 'max': 3000, 'avg': 2250, 'hours': '6-12'},
+        },
+        'default': {'min': 200, 'max': 500, 'avg': 350}
+      },
+      'HVAC': {
+        'hourly_rate': {'min': 90, 'max': 175, 'avg': 130},
+        'project_pricing': {
+          'AC Unit Repair': {'min': 300, 'max': 600, 'avg': 450, 'hours': '2-4'},
+          'Furnace Repair': {'min': 400, 'max': 800, 'avg': 600, 'hours': '3-5'},
+          'Duct Cleaning': {'min': 300, 'max': 500, 'avg': 400, 'hours': '3-4'},
+          'AC Installation': {'min': 3000, 'max': 7000, 'avg': 5000, 'hours': '6-10'},
+          'Thermostat Installation': {'min': 200, 'max': 400, 'avg': 300, 'hours': '1-2'},
+        },
+        'default': {'min': 300, 'max': 800, 'avg': 550}
+      },
+      'Appliance Repair': {
+        'hourly_rate': {'min': 60, 'max': 120, 'avg': 85},
+        'project_pricing': {
+          'Refrigerator Repair': {'min': 200, 'max': 400, 'avg': 300, 'hours': '2-3'},
+          'Washer/Dryer Repair': {'min': 150, 'max': 350, 'avg': 250, 'hours': '1-3'},
+          'Dishwasher Repair': {'min': 180, 'max': 300, 'avg': 240, 'hours': '2-3'},
+          'Oven/Stove Repair': {'min': 200, 'max': 450, 'avg': 325, 'hours': '2-4'},
+          'Garbage Disposal Installation': {'min': 150, 'max': 250, 'avg': 200, 'hours': '1-2'},
+        },
+        'default': {'min': 120, 'max': 350, 'avg': 235}
+      },
+      'Landscaping': {
+        'hourly_rate': {'min': 35, 'max': 75, 'avg': 55},
+        'project_pricing': {
+          'Lawn Mowing': {'min': 50, 'max': 150, 'avg': 100, 'hours': '1-3'},
+          'Tree Trimming': {'min': 200, 'max': 800, 'avg': 500, 'hours': '3-8'},
+          'Garden Design': {'min': 500, 'max': 2000, 'avg': 1250, 'hours': '10-20'},
+          'Sprinkler Installation': {'min': 800, 'max': 2500, 'avg': 1650, 'hours': '8-16'},
+          'Yard Cleanup': {'min': 150, 'max': 400, 'avg': 275, 'hours': '3-6'},
+        },
+        'default': {'min': 100, 'max': 300, 'avg': 200}
+      },
+      'Pest Control': {
+        'hourly_rate': {'min': 50, 'max': 100, 'avg': 75},
+        'project_pricing': {
+          'General Pest Treatment': {'min': 150, 'max': 300, 'avg': 225, 'hours': '2-3'},
+          'Termite Treatment': {'min': 500, 'max': 1500, 'avg': 1000, 'hours': '4-8'},
+          'Rodent Control': {'min': 200, 'max': 500, 'avg': 350, 'hours': '2-4'},
+          'Ant Treatment': {'min': 100, 'max': 250, 'avg': 175, 'hours': '1-2'},
+          'Bed Bug Treatment': {'min': 300, 'max': 800, 'avg': 550, 'hours': '3-6'},
+        },
+        'default': {'min': 150, 'max': 350, 'avg': 250}
+      },
+      'Roofing': {
+        'hourly_rate': {'min': 70, 'max': 120, 'avg': 95},
+        'project_pricing': {
+          'Roof Inspection': {'min': 200, 'max': 400, 'avg': 300, 'hours': '2-3'},
+          'Leak Repair': {'min': 300, 'max': 800, 'avg': 550, 'hours': '3-6'},
+          'Shingle Replacement': {'min': 500, 'max': 1500, 'avg': 1000, 'hours': '4-12'},
+          'Full Roof Replacement': {'min': 8000, 'max': 25000, 'avg': 16500, 'hours': '40-80'},
+          'Gutter Repair': {'min': 200, 'max': 600, 'avg': 400, 'hours': '2-5'},
+        },
+        'default': {'min': 400, 'max': 1200, 'avg': 800}
+      },
+      'Painting': {
+        'hourly_rate': {'min': 35, 'max': 80, 'avg': 55},
+        'project_pricing': {
+          'Interior Room Painting': {'min': 300, 'max': 800, 'avg': 550, 'hours': '6-12'},
+          'Exterior House Painting': {'min': 2000, 'max': 6000, 'avg': 4000, 'hours': '20-40'},
+          'Cabinet Painting': {'min': 500, 'max': 1500, 'avg': 1000, 'hours': '8-16'},
+          'Trim/Baseboard Painting': {'min': 200, 'max': 600, 'avg': 400, 'hours': '4-8'},
+          'Touch-up Painting': {'min': 150, 'max': 300, 'avg': 225, 'hours': '2-4'},
+        },
+        'default': {'min': 200, 'max': 600, 'avg': 400}
+      },
+      'Handyman': {
+        'hourly_rate': {'min': 40, 'max': 85, 'avg': 60},
+        'project_pricing': {
+          'Furniture Assembly': {'min': 80, 'max': 200, 'avg': 140, 'hours': '1-3'},
+          'Drywall Repair': {'min': 150, 'max': 400, 'avg': 275, 'hours': '2-5'},
+          'Door Installation': {'min': 200, 'max': 500, 'avg': 350, 'hours': '3-6'},
+          'Shelf Installation': {'min': 100, 'max': 250, 'avg': 175, 'hours': '1-3'},
+          'General Repairs': {'min': 100, 'max': 300, 'avg': 200, 'hours': '2-4'},
+        },
+        'default': {'min': 80, 'max': 200, 'avg': 140}
+      },
+    };
+    
+    String category = _currentState.serviceCategory ?? 'Handyman';
+    Map<String, dynamic> categoryPricing = servicePricing[category] ?? servicePricing['Handyman']!;
+    
+    // Get base price (use default if no specific project type detected)
+    Map<String, dynamic> basePrice = _detectSpecificServiceType(category, categoryPricing);
+    
+    // Location-based adjustments
+    double locationMultiplier = _getLocationPriceMultiplier();
+    
+    // Urgency adjustments
+    double urgencyMultiplier = _getUrgencyMultiplier();
+    
+    // Photo bonus (detailed photos can lead to more accurate quotes)
+    double photoBonus = _currentState.mediaUrls.isNotEmpty ? 0.95 : 1.0; // 5% discount for photos
+    
+    // Get hourly rates
+    Map<String, dynamic> hourlyRates = categoryPricing['hourly_rate'];
+    
+    // Calculate project pricing
+    int finalMin = (basePrice['min']! * locationMultiplier * urgencyMultiplier * photoBonus).round();
+    int finalMax = (basePrice['max']! * locationMultiplier * urgencyMultiplier * photoBonus).round();
+    int finalAvg = (basePrice['avg']! * locationMultiplier * urgencyMultiplier * photoBonus).round();
+    
+    // Calculate hourly rates
+    int hourlyMin = (hourlyRates['min']! * locationMultiplier * urgencyMultiplier).round();
+    int hourlyMax = (hourlyRates['max']! * locationMultiplier * urgencyMultiplier).round();
+    int hourlyAvg = (hourlyRates['avg']! * locationMultiplier * urgencyMultiplier).round();
+    
+    return {
+      'min': finalMin,
+      'max': finalMax,
+      'avg': finalAvg,
+      'currency': 'USD',
+      'service_type': basePrice['service_type'] ?? 'General Service',
+      'estimated_hours': basePrice['hours'] ?? 'Variable',
+      'hourly_rates': {
+        'min': hourlyMin,
+        'max': hourlyMax,
+        'avg': hourlyAvg,
+      },
+      'factors': {
+        'location_multiplier': locationMultiplier,
+        'urgency_multiplier': urgencyMultiplier,
+        'photo_bonus': photoBonus,
+        'base_category': category,
+      },
+      'breakdown': {
+        'base_min': basePrice['min'],
+        'base_max': basePrice['max'],
+        'base_avg': basePrice['avg'],
+        'base_hourly_min': hourlyRates['min'],
+        'base_hourly_max': hourlyRates['max'],
+        'base_hourly_avg': hourlyRates['avg'],
+      }
+    };
+  }
+  
+  // Detect specific service type based on description
+  Map<String, dynamic> _detectSpecificServiceType(String category, Map<String, dynamic> categoryPricing) {
+    String description = (_currentState.serviceDescription ?? '').toLowerCase();
+    Map<String, dynamic> projectPricing = categoryPricing['project_pricing'] ?? {};
+    
+    // Score each project type based on keyword matches
+    String bestMatch = '';
+    double bestScore = 0.0;
+    
+    for (String projectType in projectPricing.keys) {
+      double score = _calculateProjectTypeScore(description, projectType);
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = projectType;
+      }
+    }
+    
+    // Use specific project type if good match found (score > 0.3)
+    if (bestScore > 0.3 && projectPricing.containsKey(bestMatch)) {
+      Map<String, dynamic> specificPricing = Map<String, dynamic>.from(projectPricing[bestMatch]);
+      specificPricing['service_type'] = bestMatch;
+      return specificPricing;
+    }
+    
+    // Fall back to default pricing
+    Map<String, dynamic> defaultPricing = Map<String, dynamic>.from(categoryPricing['default']);
+    defaultPricing['service_type'] = 'General $category Service';
+    return defaultPricing;
+  }
+  
+  // Calculate score for project type match
+  double _calculateProjectTypeScore(String description, String projectType) {
+    String lowerProjectType = projectType.toLowerCase();
+    double score = 0.0;
+    
+    // Extract keywords from project type
+    List<String> keywords = lowerProjectType
+        .replaceAll(RegExp(r'[/\-]'), ' ')
+        .split(' ')
+        .where((word) => word.length > 2)
+        .toList();
+    
+    // Score based on keyword matches
+    for (String keyword in keywords) {
+      if (description.contains(keyword)) {
+        score += 1.0 / keywords.length; // Normalize by number of keywords
+      }
+      
+      // Bonus for exact phrase matches
+      if (description.contains(keyword) && keyword.length > 4) {
+        score += 0.2;
+      }
+    }
+    
+    // Specific keyword bonuses
+    Map<String, List<String>> bonusKeywords = {
+      'faucet': ['tap', 'spigot', 'sink'],
+      'toilet': ['bathroom', 'restroom', 'commode'],
+      'leak': ['dripping', 'water damage', 'pipe'],
+      'cleaning': ['clean', 'dirty', 'sanitize', 'dust'],
+      'painting': ['paint', 'color', 'wall', 'ceiling'],
+      'repair': ['fix', 'broken', 'not working', 'replace'],
+      'installation': ['install', 'setup', 'mount', 'new'],
+    };
+    
+    for (String mainKeyword in bonusKeywords.keys) {
+      if (lowerProjectType.contains(mainKeyword)) {
+        for (String bonus in bonusKeywords[mainKeyword]!) {
+          if (description.contains(bonus)) {
+            score += 0.1;
+          }
+        }
+      }
+    }
+    
+    return score;
+  }
+  
+  // Get location-based price multiplier
+  double _getLocationPriceMultiplier() {
+    String? state = _currentState.state?.toLowerCase() ?? '';
+    String? city = _currentState.city?.toLowerCase() ?? '';
+    
+    // High-cost areas
+    if (state.contains('california') || state.contains('new york') || state.contains('massachusetts') ||
+        state.contains('ca') || state.contains('ny') || state.contains('ma')) {
+      return 1.3; // 30% higher
+    }
+    
+    // Major cities
+    if (city.contains('san francisco') || city.contains('new york') || city.contains('los angeles') ||
+        city.contains('seattle') || city.contains('chicago') || city.contains('boston') ||
+        city.contains('sf') || city.contains('nyc') || city.contains('la')) {
+      return 1.25; // 25% higher
+    }
+    
+    // Medium-cost areas
+    if (state.contains('texas') || state.contains('florida') || state.contains('washington') ||
+        state.contains('tx') || state.contains('fl') || state.contains('wa')) {
+      return 1.1; // 10% higher
+    }
+    
+    // Lower-cost areas
+    if (state.contains('alabama') || state.contains('mississippi') || state.contains('west virginia') ||
+        state.contains('al') || state.contains('ms') || state.contains('wv')) {
+      return 0.85; // 15% lower
+    }
+    
+    return 1.0; // Standard pricing
+  }
+  
+  // Get urgency-based price multiplier
+  double _getUrgencyMultiplier() {
+    int priority = _currentState.priority ?? 3;
+    
+    switch (priority) {
+      case 5: // Emergency
+        return 1.5; // 50% higher for emergency
+      case 4: // Urgent
+        return 1.25; // 25% higher for urgent
+      case 3: // Normal
+        return 1.0; // Standard pricing
+      case 2: // Flexible
+        return 0.9; // 10% lower for flexible timing
+      case 1: // Very flexible
+        return 0.8; // 20% lower for very flexible timing
       default:
-        return {'min': 100, 'max': 300};
+        return 1.0;
     }
   }
 
   String _formatPriceRange(Map<String, dynamic> priceEstimate) {
-    // This method would typically format the price range for display
-    // For now, it's a placeholder.
-    return '\$${priceEstimate['min']}-\$${priceEstimate['max']}';
+    String currency = priceEstimate['currency'] ?? 'USD';
+    String serviceType = priceEstimate['service_type'] ?? 'Service';
+    String estimatedHours = priceEstimate['estimated_hours'] ?? 'Variable';
+    
+    String result = '**$serviceType**\n';
+    
+    // Primary focus: Hourly rates only
+    if (priceEstimate.containsKey('hourly_rates')) {
+      Map<String, dynamic> hourlyRates = priceEstimate['hourly_rates'];
+      int hourlyMin = hourlyRates['min'] ?? 0;
+      int hourlyMax = hourlyRates['max'] ?? 0;
+      int hourlyAvg = hourlyRates['avg'] ?? 0;
+      
+      result += '💰 **\$${hourlyMin}-\$${hourlyMax}/hour** (avg: \$${hourlyAvg}/hour) $currency\n';
+      result += '⏱️ Estimated Duration: $estimatedHours hours';
+    } else {
+      // Fallback: convert project pricing to hourly rate estimate
+      int min = priceEstimate['min'] ?? 0;
+      int max = priceEstimate['max'] ?? 0;
+      int avg = priceEstimate['avg'] ?? 0;
+      
+      // Estimate hourly rate based on typical project duration
+      String timeRange = estimatedHours.replaceAll(' hours', '');
+      if (timeRange.contains('-')) {
+        List<String> timeParts = timeRange.split('-');
+        if (timeParts.length == 2) {
+          try {
+            int minHours = int.parse(timeParts[0].trim());
+            int maxHours = int.parse(timeParts[1].trim());
+            int avgHours = ((minHours + maxHours) / 2).round();
+            
+            int hourlyRateMin = (min / maxHours).round();
+            int hourlyRateMax = (max / minHours).round();
+            int hourlyRateAvg = (avg / avgHours).round();
+            
+            result += '💰 **\$${hourlyRateMin}-\$${hourlyRateMax}/hour** (avg: \$${hourlyRateAvg}/hour) $currency\n';
+            result += '⏱️ Estimated Duration: $estimatedHours hours';
+          } catch (e) {
+            // Simple fallback
+            result += '💰 **Estimated Rate: \$${(avg / 2).round()}/hour** $currency\n';
+            result += '⏱️ Estimated Duration: $estimatedHours hours';
+          }
+        }
+      } else {
+        // Simple hourly rate calculation
+        try {
+          int hours = int.parse(timeRange.trim());
+          int hourlyRate = (avg / hours).round();
+          result += '💰 **Estimated Rate: \$${hourlyRate}/hour** $currency\n';
+          result += '⏱️ Estimated Duration: $hours hours';
+        } catch (e) {
+          result += '💰 **Estimated Rate: \$${(avg / 2).round()}/hour** $currency\n';
+          result += '⏱️ Estimated Duration: $estimatedHours hours';
+        }
+      }
+    }
+    
+    return result;
   }
 
   String _detectServiceCategory(String input) {
@@ -923,8 +1403,11 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
 
   String _generateFallbackResponse(String input) {
     // More intelligent fallback based on conversation state
-    if (_currentState.serviceCategory == null) {
-      return "I'd love to help you with your home service needs! Could you tell me what type of service you're looking for?";
+    if (_currentState.serviceCategory == null && _currentState.conversationStep == 0) {
+      // Force detect service and advance
+      _currentState.serviceCategory = _detectServiceCategory(input.toLowerCase());
+      _currentState.conversationStep = 1;
+      return "Perfect! I understand you need ${_currentState.serviceCategory ?? 'home'} service. What specifically needs to be done?";
     } else {
       return "I want to make sure I help you get the best ${_currentState.serviceCategory} service. Could you share a bit more about what you need?";
     }
@@ -935,59 +1418,127 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     _currentState.mediaUrls.add(photoUrl);
     if (!_currentState.photosUploaded) {
       _currentState.photosUploaded = true;
-      _currentState.conversationStep = 4;
+      // DON'T advance to step 4 yet - wait for user to click "Done"
+      // Keep at step 3 until user is done uploading all photos
       
       // Add contextual AI message - more concise
       _addMessage(ChatMessage(
-        content: "Great photo! When works for you?",
+        content: "Photo uploaded! Add more photos or click 'Done' when ready.",
         type: MessageType.ai,
         timestamp: DateTime.now(),
       ));
       
-      // Trigger calendar after photo upload
-      _triggerCalendar();
+      // Stay at step 3 - calendar will be triggered when user clicks "Done"
     }
   }
 
   void onAvailabilitySelected(Map<String, dynamic> availability) {
+    print('📅 Availability selected: $availability');
     _currentState.userAvailability = availability;
     if (!_currentState.availabilitySet) {
       _currentState.availabilitySet = true;
       _currentState.conversationStep = 5;
       
-      // Generate comprehensive summary
-      String summary = _generateServiceRequestSummary();
-      
-      // Add contextual AI message with summary - more concise
+      // Move to location form
       _addMessage(ChatMessage(
-        content: "Perfect! Here's your summary:\n\n$summary\n\nReady to connect with professionals!",
+        content: "Perfect! Now I need your service location details.",
         type: MessageType.ai,
         timestamp: DateTime.now(),
       ));
       
-      // Trigger conversation completion which calls getServiceRequestSummary()
-      if (isConversationComplete()) {
-        _onConversationComplete();
-      }
+      print('📍 Triggering location form from availability selection');
+      _triggerLocationForm();
+    }
+  }
+  
+  // Handle location form completion
+  void onLocationFormCompleted(Map<String, dynamic> locationData) {
+    _currentState.locationForm = locationData;
+    _currentState.address = locationData['address'];
+    _currentState.zipcode = locationData['zipcode'];
+    _currentState.city = locationData['city'];
+    _currentState.state = locationData['state'];
+    _currentState.locationFormCompleted = true;
+    _currentState.conversationStep = 6;
+    
+    _addMessage(ChatMessage(
+      content: "Perfect! Now I need your contact information.",
+      type: MessageType.ai,
+      timestamp: DateTime.now(),
+    ));
+    
+    _triggerContactForm();
+  }
+  
+  // Handle contact form completion
+  void onContactFormCompleted(Map<String, dynamic> contactData) {
+    _currentState.contactForm = contactData;
+    _currentState.phoneNumber = contactData['tel'];
+    _currentState.email = contactData['email'];
+    _currentState.contactFormCompleted = true;
+    _currentState.conversationStep = 7;
+    
+    // Calculate price estimation
+    _calculateNetworkPrice();
+    
+    _addMessage(ChatMessage(
+      content: "Excellent! Here's your price estimate: ${_formatPriceRange(_currentState.priceEstimate!)}",
+      type: MessageType.ai,
+      timestamp: DateTime.now(),
+    ));
+    
+    // Move to final summary
+    _currentState.conversationStep = 8;
+    String summary = _generateServiceRequestSummary();
+    
+    _addMessage(ChatMessage(
+      content: "Here's your complete summary:\n\n$summary\n\nReady to connect with professionals!",
+      type: MessageType.ai,
+      timestamp: DateTime.now(),
+    ));
+    
+    // Trigger conversation completion
+    if (isConversationComplete()) {
+      _onConversationComplete();
     }
   }
 
   // Enhanced service request summary
   Map<String, dynamic> getServiceRequestSummary() {
+    String conversationDescription = _generateConversationDescription();
     return {
       'serviceCategory': _currentState.serviceCategory ?? 'General Service',
-      'serviceDescription': _currentState.serviceDescription ?? '',
-      'problemDescription': _currentState.problemDescription ?? '',
+      'serviceDescription': conversationDescription,
+      'problemDescription': conversationDescription,
       'mediaUrls': _currentState.mediaUrls,
       'availability': _currentState.userAvailability ?? {},
-      'location': _currentState.address ?? '',
+      'locationForm': {
+        'address': _currentState.address ?? '',
+        'zipcode': _currentState.zipcode ?? '',
+        'city': _currentState.city ?? '',
+        'state': _currentState.state ?? '',
+      },
+      'contactForm': {
+        'tel': _currentState.phoneNumber ?? '',
+        'email': _currentState.email ?? '',
+      },
+      'priceEstimate': _currentState.priceEstimate ?? {},
       'customerName': _currentState.customerName ?? '',
       'tags': _currentState.tags,
       'extractedInfo': _currentState.extractedInfo,
       'conversationStep': _currentState.conversationStep,
       'timestamp': DateTime.now().toIso8601String(),
-      'isComplete': _currentState.availabilitySet && _currentState.serviceCategory != null,
+      'isComplete': _isRequestComplete(),
     };
+  }
+  
+  // Check if request is complete with all required information
+  bool _isRequestComplete() {
+    return _currentState.serviceCategory != null &&
+           _currentState.availabilitySet &&
+           _currentState.locationFormCompleted &&
+           _currentState.contactFormCompleted &&
+           _currentState.priceEstimationCompleted;
   }
   
   // Generate formatted summary for display
@@ -997,12 +1548,10 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     // Service Information
     summary += "🔧 **Service Type:** ${_currentState.serviceCategory ?? 'General Service'}\n";
     
-    if (_currentState.serviceDescription != null && _currentState.serviceDescription!.isNotEmpty) {
-      summary += "📝 **Description:** ${_currentState.serviceDescription}\n";
-    }
-    
-    if (_currentState.problemDescription != null && _currentState.problemDescription!.isNotEmpty) {
-      summary += "❗ **Details:** ${_currentState.problemDescription}\n";
+    // Generate description from conversation content
+    String conversationDescription = _generateConversationDescription();
+    if (conversationDescription.isNotEmpty) {
+      summary += "📝 **Description:** $conversationDescription\n";
     }
     
     // Media Information
@@ -1017,18 +1566,302 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
       summary += "📅 **Availability:** ${_formatAvailability(_currentState.userAvailability!)}\n";
     }
     
+    // Location Information
+    if (_currentState.locationFormCompleted) {
+      summary += "📍 **Location:** ${_currentState.address}\n";
+      summary += "🏠 **Address:** ${_currentState.city}, ${_currentState.state} ${_currentState.zipcode}\n";
+    }
+    
+    // Contact Information
+    if (_currentState.contactFormCompleted) {
+      summary += "📞 **Phone:** ${_currentState.phoneNumber}\n";
+      summary += "📧 **Email:** ${_currentState.email}\n";
+    }
+    
+    // Price Estimation - Hourly Rate Focus
+    if (_currentState.priceEstimationCompleted && _currentState.priceEstimate != null) {
+      summary += "💰 **Hourly Rate:** ${_formatSummaryPriceEstimate(_currentState.priceEstimate!)}\n";
+    }
+    
     // Customer Information
     if (_currentState.customerName != null && _currentState.customerName!.isNotEmpty) {
       summary += "👤 **Customer:** ${_currentState.customerName}\n";
     }
     
-    if (_currentState.address != null && _currentState.address!.isNotEmpty) {
-      summary += "📍 **Location:** ${_currentState.address}\n";
-    }
-    
     summary += "\n✅ **Status:** Ready for professional matching";
     
     return summary;
+  }
+  
+  // Generate meaningful description from conversation content
+  String _generateConversationDescription() {
+    List<String> userInputs = [];
+    List<String> problemDescriptions = [];
+    
+    // Collect all user messages from the conversation
+    for (ChatMessage message in _messages) {
+      if (message.type == MessageType.user) {
+        String content = message.content.trim();
+        // Skip service category names and simple responses
+        if (content.length > 10 && 
+            !_isSimpleServiceCategory(content) &&
+            !_isSimpleResponse(content)) {
+          
+          // Prioritize messages that describe problems
+          if (_containsProblemKeywords(content)) {
+            problemDescriptions.add(content);
+          } else {
+            userInputs.add(content);
+          }
+        }
+      }
+    }
+    
+    // Also check stored descriptions
+    if (_currentState.problemDescription != null && 
+        _currentState.problemDescription!.isNotEmpty &&
+        _currentState.problemDescription != _currentState.serviceCategory) {
+      problemDescriptions.add(_currentState.problemDescription!);
+    }
+    
+    if (_currentState.serviceDescription != null && 
+        _currentState.serviceDescription!.isNotEmpty &&
+        _currentState.serviceDescription != _currentState.serviceCategory) {
+      userInputs.add(_currentState.serviceDescription!);
+    }
+    
+    // Prioritize problem descriptions
+    List<String> allInputs = [...problemDescriptions, ...userInputs];
+    List<String> uniqueInputs = allInputs.toSet().toList();
+    
+    if (uniqueInputs.isEmpty) {
+      return "Customer requested ${_currentState.serviceCategory?.toLowerCase() ?? 'home service'} assistance.";
+    }
+    
+    // Return the most detailed description or combine multiple if they're different
+    if (uniqueInputs.length == 1) {
+      return uniqueInputs.first;
+    } else {
+      // Find the longest, most detailed description
+      uniqueInputs.sort((a, b) => b.length.compareTo(a.length));
+      return uniqueInputs.first;
+    }
+  }
+  
+  // Check if content contains problem-describing keywords
+  bool _containsProblemKeywords(String content) {
+    List<String> problemKeywords = [
+      'broken', 'not working', 'leaking', 'damaged', 'need', 'help', 'fix', 'repair',
+      'problem', 'issue', 'trouble', 'wrong', 'stuck', 'clogged', 'dirty', 'clean',
+      'install', 'replace', 'upgrade', 'maintenance', 'service', 'stopped working'
+    ];
+    
+    String lowerContent = content.toLowerCase();
+    return problemKeywords.any((keyword) => lowerContent.contains(keyword));
+  }
+  
+  // Check if input is just a service category name
+  bool _isSimpleServiceCategory(String input) {
+    List<String> categories = [
+      'plumbing', 'electrical', 'hvac', 'appliance repair', 'cleaning',
+      'handyman', 'landscaping', 'pest control', 'roofing', 'painting'
+    ];
+    return categories.contains(input.toLowerCase());
+  }
+  
+  // Check if input is a simple response (yes/no/ok/etc)
+  bool _isSimpleResponse(String input) {
+    List<String> simpleResponses = [
+      'yes', 'no', 'ok', 'sure', 'thanks', 'thank you', 'done', 'skip', 'later'
+    ];
+    return simpleResponses.contains(input.toLowerCase()) || input.length < 5;
+  }
+  
+  // Format price estimate specifically for summary - clean hourly rate focus
+  String _formatSummaryPriceEstimate(Map<String, dynamic> priceEstimate) {
+    String currency = priceEstimate['currency'] ?? 'USD';
+    
+    // Primary focus: Clean hourly rate display
+    if (priceEstimate.containsKey('hourly_rates')) {
+      Map<String, dynamic> hourlyRates = priceEstimate['hourly_rates'];
+      int hourlyMin = hourlyRates['min'] ?? 0;
+      int hourlyMax = hourlyRates['max'] ?? 0;
+      int hourlyAvg = hourlyRates['avg'] ?? 0;
+      
+      return '\$${hourlyMin}-\$${hourlyMax}/hour (avg: \$${hourlyAvg}/hour)';
+    } else {
+      // Fallback: convert project pricing to hourly rate estimate
+      int min = priceEstimate['min'] ?? 0;
+      int max = priceEstimate['max'] ?? 0;
+      int avg = priceEstimate['avg'] ?? 0;
+      String estimatedHours = priceEstimate['estimated_hours'] ?? '2-4';
+      
+      // Estimate hourly rate based on typical project duration
+      String timeRange = estimatedHours.replaceAll(' hours', '');
+      if (timeRange.contains('-')) {
+        List<String> timeParts = timeRange.split('-');
+        if (timeParts.length == 2) {
+          try {
+            int minHours = int.parse(timeParts[0].trim());
+            int maxHours = int.parse(timeParts[1].trim());
+            int avgHours = ((minHours + maxHours) / 2).round();
+            
+            int hourlyRateMin = (min / maxHours).round();
+            int hourlyRateMax = (max / minHours).round();
+            int hourlyRateAvg = (avg / avgHours).round();
+            
+            return '\$${hourlyRateMin}-\$${hourlyRateMax}/hour (avg: \$${hourlyRateAvg}/hour)';
+          } catch (e) {
+            // Simple fallback
+            return '\$${(avg / 3).round()}/hour (estimated)';
+          }
+        }
+      }
+      
+      // Final fallback
+      return '\$${(avg / 3).round()}/hour (estimated)';
+    }
+  }
+  
+  // Get guided service options for new homeowners
+  String _getGuidedServiceOptions() {
+    String category = _currentState.serviceCategory ?? 'Handyman';
+    
+    Map<String, List<String>> guidedOptions = {
+      'Plumbing': [
+        'Faucet dripping or not working (kitchen/bathroom)',
+        'Toilet running, clogged, or leaking',
+        'Low water pressure or no hot water',
+        'Pipe leak or water damage'
+      ],
+      'Electrical': [
+        'Outlet not working or sparking',
+        'Light switch or fixture not working',
+        'Circuit breaker keeps tripping',
+        'Need new outlet or light installed'
+      ],
+      'HVAC': [
+        'AC not cooling or heating not working',
+        'Strange noises from vents or unit',
+        'High energy bills or poor airflow',
+        'Thermostat issues or maintenance needed'
+      ],
+      'Appliance Repair': [
+        'Refrigerator not cooling or making noise',
+        'Washer/dryer not working properly',
+        'Dishwasher not cleaning or draining',
+        'Oven, stove, or microwave issues'
+      ],
+      'Cleaning': [
+        'Deep cleaning for move-in/move-out',
+        'Regular house cleaning service',
+        'Post-construction or renovation cleanup',
+        'Carpet or upholstery cleaning'
+      ],
+      'Handyman': [
+        'Furniture assembly or mounting',
+        'Drywall holes or paint touch-ups',
+        'Door or window not closing properly',
+        'Shelving, curtains, or fixtures installation'
+      ],
+      'Landscaping': [
+        'Lawn mowing or yard cleanup',
+        'Tree trimming or removal',
+        'Garden design or planting',
+        'Sprinkler repair or installation'
+      ],
+      'Pest Control': [
+        'Ants, roaches, or other insects',
+        'Rodent problem (mice/rats)',
+        'Termite inspection or treatment',
+        'General pest prevention'
+      ],
+      'Roofing': [
+        'Roof leak or water damage',
+        'Missing or damaged shingles',
+        'Gutter cleaning or repair',
+        'Roof inspection after storm'
+      ],
+      'Painting': [
+        'Interior room painting',
+        'Exterior house painting',
+        'Touch-ups or small paint jobs',
+        'Cabinet or furniture painting'
+      ]
+    };
+    
+    List<String> options = guidedOptions[category] ?? [
+      'Repair or fix something broken',
+      'Install or setup something new',
+      'Regular maintenance or cleaning',
+      'Emergency or urgent issue'
+    ];
+    
+    String optionsList = '';
+    for (int i = 0; i < options.length && i < 3; i++) {
+      optionsList += '• ${options[i]}\n';
+    }
+    
+    return "Got it! Here are common $category issues I help with:\n\n$optionsList\nWhich sounds closest to your situation, or describe your specific issue?";
+  }
+  
+  // Check if user input is related to home services
+  bool _isHomeServiceRelated(String input) {
+    // Always allow if we're in the middle of a service request
+    if (_currentState.serviceCategory != null || _currentState.conversationStep > 0) {
+      return true;
+    }
+    
+    // Home service categories
+    List<String> serviceCategories = [
+      'cleaning', 'plumbing', 'electrical', 'hvac', 'appliance', 'handyman', 
+      'landscaping', 'pest control', 'roofing', 'painting', 'repair', 'fix', 
+      'install', 'maintenance', 'home', 'house'
+    ];
+    
+    // Home-related keywords
+    List<String> homeKeywords = [
+      'kitchen', 'bathroom', 'bedroom', 'living room', 'garage', 'basement', 
+      'attic', 'yard', 'garden', 'driveway', 'roof', 'ceiling', 'floor', 
+      'wall', 'door', 'window', 'pipe', 'drain', 'toilet', 'sink', 'faucet',
+      'light', 'outlet', 'switch', 'ac', 'heater', 'furnace', 'water heater',
+      'dishwasher', 'washer', 'dryer', 'refrigerator', 'oven', 'stove',
+      'fence', 'deck', 'patio', 'lawn', 'tree', 'sprinkler'
+    ];
+    
+    // Problem/action keywords
+    List<String> actionKeywords = [
+      'broken', 'not working', 'leaking', 'clogged', 'stuck', 'damaged',
+      'cracked', 'loose', 'noisy', 'slow', 'dirty', 'need', 'want',
+      'looking for', 'help with', 'service', 'professional', 'contractor'
+    ];
+    
+    // Check if input contains any relevant keywords
+    for (String keyword in [...serviceCategories, ...homeKeywords, ...actionKeywords]) {
+      if (input.contains(keyword)) {
+        return true;
+      }
+    }
+    
+    // Common off-topic patterns to explicitly reject
+    List<String> offTopicPatterns = [
+      'weather', 'news', 'politics', 'sports', 'entertainment', 'music',
+      'movies', 'food', 'restaurant', 'travel', 'vacation', 'school',
+      'work', 'job', 'career', 'health', 'medicine', 'doctor', 'hospital',
+      'shopping', 'clothes', 'fashion', 'car', 'vehicle', 'transportation',
+      'internet', 'computer', 'phone', 'social media', 'game', 'gaming',
+      'what is', 'who is', 'when did', 'where is', 'how to cook',
+      'recipe', 'stock market', 'investment', 'cryptocurrency', 'bitcoin'
+    ];
+    
+    for (String pattern in offTopicPatterns) {
+      if (input.contains(pattern)) {
+        return false;
+      }
+    }
+    
+    // If unsure, allow the conversation to continue but with a gentle redirect
+    return input.length < 100; // Assume short messages might be service-related
   }
   
   // Helper method to detect customer name from input
@@ -1076,9 +1909,8 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
   
   // Check if conversation is complete
   bool isConversationComplete() {
-    return _currentState.conversationStep >= 5 && 
-           _currentState.serviceCategory != null &&
-           _currentState.availabilitySet;
+    return _currentState.conversationStep >= 8 && 
+           _isRequestComplete();
   }
   
   // Called when conversation reaches completion
@@ -1116,22 +1948,52 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
   
   // Trigger calendar UI - this should be connected to your calendar widget  
   void _triggerCalendar() {
-    print('📅 Triggering calendar UI...');
-    // Set flag that calendar UI should be shown
+    print('📅 Triggering calendar UI... Step: ${_currentState.conversationStep}');
     _currentState.calendarRequested = true;
-    
-    // Emit callback for UI to show calendar
     onCalendarRequested?.call();
+  }
+  
+  // Trigger location form UI
+  void _triggerLocationForm() {
+    print('📍 Triggering location form UI...');
+    _currentState.locationFormRequested = true;
+    onLocationFormRequested?.call();
+  }
+  
+  // Trigger contact form UI
+  void _triggerContactForm() {
+    print('📞 Triggering contact form UI...');
+    _currentState.contactFormRequested = true;
+    onContactFormRequested?.call();
+  }
+  
+  // Calculate network-based price estimation
+  void _calculateNetworkPrice() {
+    print('💰 Calculating network-based price...');
+    try {
+      _currentState.priceEstimate = _generateNetworkBasedPriceEstimate();
+      _currentState.priceEstimationCompleted = true;
+      print('💰 Price calculation completed: ${_currentState.priceEstimate}');
+    } catch (e) {
+      print('❌ Price calculation error: $e');
+      // Fallback price
+      _currentState.priceEstimate = {'min': 100, 'max': 300, 'avg': 200, 'currency': 'USD'};
+      _currentState.priceEstimationCompleted = true;
+    }
   }
   
   // Setup method to connect UI callbacks
   void setupUICallbacks({
     VoidCallback? onPhotoUpload,
     VoidCallback? onCalendar,
+    VoidCallback? onLocationForm,
+    VoidCallback? onContactForm,
     Function(Map<String, dynamic>)? onComplete,
   }) {
     onPhotoUploadRequested = onPhotoUpload;
     onCalendarRequested = onCalendar;
+    onLocationFormRequested = onLocationForm;
+    onContactFormRequested = onContactForm;
     onServiceRequestComplete = onComplete;
   }
   
@@ -1145,6 +2007,21 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     _triggerCalendar();
   }
   
+  // Force location form UI to show (call this from your UI)
+  void showLocationForm() {
+    _triggerLocationForm();
+  }
+  
+  // Force contact form UI to show (call this from your UI)
+  void showContactForm() {
+    _triggerContactForm();
+  }
+  
+  // Manually trigger price calculation
+  void calculatePrice() {
+    _calculateNetworkPrice();
+  }
+  
   // Get current conversation step for UI state management
   int get currentStep => _currentState.conversationStep;
   
@@ -1153,4 +2030,10 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
   
   // Check if calendar should be shown
   bool get shouldShowCalendar => _currentState.conversationStep == 4 && _currentState.calendarRequested;
+  
+  // Check if location form should be shown
+  bool get shouldShowLocationForm => _currentState.conversationStep == 5 && _currentState.locationFormRequested;
+  
+  // Check if contact form should be shown
+  bool get shouldShowContactForm => _currentState.conversationStep == 6 && _currentState.contactFormRequested;
 } 
