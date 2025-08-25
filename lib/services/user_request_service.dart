@@ -83,6 +83,10 @@ class UserRequestService {
       // Step 4: Update request status LAST to trigger bidding (after matchedProviders is saved)
       await updateRequestStatus(userRequest.requestId!, 'matched');
       
+      // Debug: Log the request ID and matched providers for Firebase Function debugging
+      print('🔥 TRIGGER: Updated request ${userRequest.requestId} to matched status');
+      print('🔥 TRIGGER: Matched providers: ${matchingProviders.map((p) => p.providerId).toList()}');
+      
       print('✅ Processing complete: ${matchingProviders.length} providers matched');
       
       return {

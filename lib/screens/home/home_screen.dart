@@ -557,8 +557,8 @@ class _HomeScreenState extends State<HomeScreen> {
           
           // Caption and details
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Provider name
@@ -2611,22 +2611,28 @@ class MyConnectionsScreen extends StatefulWidget {
   State<MyConnectionsScreen> createState() => _MyConnectionsScreenState();
 }
 
-class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
+class _MyConnectionsScreenState extends State<MyConnectionsScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _referralCodeController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+  late TabController _tabController;
   bool _isLoading = false;
-  bool _showReferralInput = false;
+  bool _showSearchInput = false;
+  int _currentSearchTab = 0; // 0 = referral code, 1 = username
   Map<String, dynamic>? _pendingConnection;
   List<Map<String, dynamic>> _connections = [];
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadConnections();
   }
 
   @override
   void dispose() {
     _referralCodeController.dispose();
+    _usernameController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -2748,7 +2754,7 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
             'type': 'user',
             'referralCode': referralCode,
           };
-          _showReferralInput = false;
+          _showSearchInput = false;
           _isLoading = false;
         });
         return;
@@ -2773,7 +2779,7 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
             'type': 'provider',
             'referralCode': referralCode,
           };
-          _showReferralInput = false;
+          _showSearchInput = false;
           _isLoading = false;
         });
         return;
@@ -2796,6 +2802,106 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error looking up referral code. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _lookupUsername() async {
+    final username = _usernameController.text.trim();
+    if (username.isEmpty) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Check in users collection by name (case-insensitive)
+      final usersQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .get();
+
+      // Filter by name (case-insensitive search)
+      final userDocs = usersQuery.docs.where((doc) {
+        final data = doc.data();
+        final name = (data['name'] ?? '').toString().toLowerCase();
+        return name.contains(username.toLowerCase());
+      }).toList();
+
+      if (userDocs.isNotEmpty) {
+        // If multiple matches, take the first exact match or the first partial match
+        final exactMatch = userDocs.where((doc) {
+          final data = doc.data();
+          final name = (data['name'] ?? '').toString().toLowerCase();
+          return name == username.toLowerCase();
+        }).toList();
+
+        final doc = exactMatch.isNotEmpty ? exactMatch.first : userDocs.first;
+        final data = doc.data();
+        
+        setState(() {
+          _pendingConnection = {
+            'id': doc.id,
+            'name': data['name'] ?? 'User',
+            'email': data['email'] ?? '',
+            'avatar': data['profileImageUrl'] ?? 'https://picsum.photos/100/100?random=${doc.id.hashCode}',
+            'type': 'user',
+            'referralCode': data['referralCode'] ?? '',
+          };
+          _showSearchInput = false;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Check in providers collection by company name (case-insensitive)
+      final providersQuery = await FirebaseFirestore.instance
+          .collection('providers')
+          .get();
+
+      final providerDocs = providersQuery.docs.where((doc) {
+        final data = doc.data();
+        final companyName = (data['companyName'] ?? '').toString().toLowerCase();
+        final legalName = (data['legalRepresentativeName'] ?? '').toString().toLowerCase();
+        return companyName.contains(username.toLowerCase()) || 
+               legalName.contains(username.toLowerCase());
+      }).toList();
+
+      if (providerDocs.isNotEmpty) {
+        final doc = providerDocs.first;
+        final data = doc.data();
+        setState(() {
+          _pendingConnection = {
+            'id': doc.id,
+            'name': data['companyName'] ?? data['legalRepresentativeName'] ?? 'Provider',
+            'email': data['email'] ?? '',
+            'avatar': data['profileImageUrl'] ?? 'https://picsum.photos/100/100?random=${doc.id.hashCode}',
+            'type': 'provider',
+            'referralCode': data['referralCode'] ?? '',
+          };
+          _showSearchInput = false;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Not found
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Username not found. Please check and try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error looking up username: $e');
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error looking up username. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -2857,6 +2963,7 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
       setState(() {
         _pendingConnection = null;
         _referralCodeController.clear();
+        _usernameController.clear();
         _isLoading = false;
       });
 
@@ -3023,8 +3130,10 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
             icon: const Icon(Icons.add, color: Color(0xFFFBB04C)),
             onPressed: () {
               setState(() {
-                _showReferralInput = true;
+                _showSearchInput = true;
                 _pendingConnection = null;
+                _currentSearchTab = 0;
+                _tabController.animateTo(0);
               });
             },
           ),
@@ -3036,8 +3145,229 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // Existing connections
+                  // Add connection search section (moved to top)
+                  if (_showSearchInput) ...[
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'Add Connection',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          // Tab bar
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: TabBar(
+                              controller: _tabController,
+                              indicator: BoxDecoration(
+                                color: const Color(0xFFFBB04C),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              labelColor: Colors.white,
+                              unselectedLabelColor: Colors.grey[600],
+                              labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                              onTap: (index) {
+                                setState(() {
+                                  _currentSearchTab = index;
+                                });
+                              },
+                              tabs: const [
+                                Tab(text: 'Referral Code'),
+                                Tab(text: 'Username'),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          // Tab content
+                          SizedBox(
+                            height: 120,
+                            child: TabBarView(
+                              controller: _tabController,
+                              children: [
+                                // Referral Code Tab
+                                Column(
+                                  children: [
+                          TextField(
+                            controller: _referralCodeController,
+                            decoration: const InputDecoration(
+                              hintText: 'Enter referral code',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(12)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(12)),
+                                borderSide: BorderSide(color: Color(0xFFFBB04C), width: 2),
+                              ),
+                            ),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                                    const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: _lookupReferralCode,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFBB04C),
+                              foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 32),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                                        'Search',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // Username Tab
+                                Column(
+                                  children: [
+                                    TextField(
+                                      controller: _usernameController,
+                                      decoration: const InputDecoration(
+                                        hintText: 'Enter username',
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                                          borderSide: BorderSide(color: Color(0xFFFBB04C), width: 2),
+                                        ),
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton(
+                                      onPressed: _lookupUsername,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFFFBB04C),
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 32),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Search',
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
+                  // Pending connection confirmation (moved to top after search)
+                  if (_pendingConnection != null) ...[
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'You\'re Adding',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          Center(
+                            child: Column(
+                              children: [
+                                CircleAvatar(
+                                  radius: 40,
+                                  backgroundImage: NetworkImage(_pendingConnection!['avatar']!),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _pendingConnection!['name']!,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _pendingConnection!['type'] == 'user' ? 'User' : 'Provider',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _pendingConnection!['type'] == 'user' ? Colors.blue : Colors.green,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: _confirmConnection,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFBB04C),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Confirm',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
+                  // Existing connections (moved after add connection panel)
                   if (_connections.isNotEmpty) ...[
+                    const SizedBox(height: 20),
                     ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -3120,151 +3450,8 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
                     ),
                   ],
                   
-                  // Add referral code section
-                  if (_showReferralInput) ...[
-                    const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text(
-                            'Enter Referral Code',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          TextField(
-                            controller: _referralCodeController,
-                            decoration: const InputDecoration(
-                              hintText: 'Enter referral code',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(12)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(12)),
-                                borderSide: BorderSide(color: Color(0xFFFBB04C), width: 2),
-                              ),
-                            ),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                          const SizedBox(height: 20),
-                          ElevatedButton(
-                            onPressed: _lookupReferralCode,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFBB04C),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text(
-                              'Next',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  
-                  // Pending connection confirmation
-                  if (_pendingConnection != null) ...[
-                    const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text(
-                            'You\'re Adding',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Center(
-                            child: Column(
-                              children: [
-                                CircleAvatar(
-                                  radius: 40,
-                                  backgroundImage: NetworkImage(_pendingConnection!['avatar']!),
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  _pendingConnection!['name']!,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _pendingConnection!['type'] == 'user' ? 'User' : 'Provider',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: _pendingConnection!['type'] == 'user' ? Colors.blue : Colors.green,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: _confirmConnection,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFBB04C),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text(
-                              'Confirm',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  
                   // Empty state
-                  if (_connections.isEmpty && !_showReferralInput && _pendingConnection == null) ...[
+                  if (_connections.isEmpty && !_showSearchInput && _pendingConnection == null) ...[
                     const SizedBox(height: 40),
                     Center(
                       child: Column(
@@ -3285,7 +3472,7 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Add connections using referral codes',
+                            'Add connections using referral codes or usernames',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[500],
@@ -3295,7 +3482,7 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
                           ElevatedButton.icon(
                             onPressed: () {
                               setState(() {
-                                _showReferralInput = true;
+                                _showSearchInput = true;
                               });
                             },
                             icon: const Icon(Icons.add),

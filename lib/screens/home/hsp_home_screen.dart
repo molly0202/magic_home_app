@@ -1082,67 +1082,67 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               color: Color(0xFF4CAF50),
             ),
           ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
           StreamBuilder<List<ServiceOrder>>(
             stream: HspHomeService.getCompletedTasks(widget.user.uid),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              
-              if (snapshot.hasError) {
-                debugPrint('Firestore error: ${snapshot.error}');
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, color: Colors.red, size: 40),
-                      const SizedBox(height: 8),
-                      Text('Something went wrong. Please try again later.',
-                          style: TextStyle(color: Colors.red, fontSize: 16)),
-                    ],
-                  ),
-                );
-              }
-              
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                
+                if (snapshot.hasError) {
+                  debugPrint('Firestore error: ${snapshot.error}');
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, color: Colors.red, size: 40),
+                        const SizedBox(height: 8),
+                        Text('Something went wrong. Please try again later.',
+                            style: TextStyle(color: Colors.red, fontSize: 16)),
+                      ],
+                    ),
+                  );
+                }
+                
               final tasks = snapshot.data ?? [];
-              
+                
               if (tasks.isEmpty) {
-                return Container(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Icon(
+                  return Container(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        Icon(
                         Icons.check_circle_outline,
-                        size: 48,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
                         'No completed tasks',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey[600],
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
+                        const SizedBox(height: 4),
+                        Text(
                         'Your completed tasks will appear here',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[500],
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[500],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              
-              return Column(
+                      ],
+                    ),
+                  );
+                }
+                
+                return Column(
                 children: tasks.take(5).map((task) => _buildTaskItem(task)).toList(),
-              );
-            },
-          ),
+                );
+              },
+            ),
         ],
       ),
     );
@@ -1213,9 +1213,9 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             if (isBiddingRequest && request.preferences != null && 
                 request.preferences!['price_range'] != null &&
                 request.preferences!['price_range'].toString().isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
+            const SizedBox(height: 8),
+            Row(
+              children: [
                   Icon(Icons.attach_money, size: 16, color: Colors.green[600]),
                   const SizedBox(width: 4),
                   Text(
@@ -1611,7 +1611,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               
               // Bidding opportunities list
               Container(
-                height: 200,
+                height: 230, // Further increased height to prevent bottom overflow
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: opportunities.length,
@@ -1622,7 +1622,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                     final timeRemaining = opportunity['timeRemaining'] as Duration?;
                     
                     return Container(
-                      width: 280,
+                      width: 300, // Further increased width to prevent right overflow
                       margin: EdgeInsets.only(right: 12),
                       child: _buildOpportunityCard(request, deadline, timeRemaining),
                     );
@@ -1663,29 +1663,33 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12), // Reduced padding to prevent overflow
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Header with urgency indicator
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isUrgent ? Colors.red : Color(0xFFFBB04C),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        request.serviceCategory.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isUrgent ? Colors.red : Color(0xFFFBB04C),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          request.serviceCategory.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     if (isUrgent)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1705,7 +1709,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                   ],
                 ),
                 
-                const SizedBox(height: 12),
+                const SizedBox(height: 8), // Reduced spacing
                 
                 // Description
                 Text(
@@ -1719,7 +1723,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 
-                const SizedBox(height: 8),
+                const SizedBox(height: 6), // Reduced spacing
                 
                 // Location
                 Row(
@@ -1755,18 +1759,22 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                       children: [
                         Icon(Icons.insights, size: 12, color: Colors.blue),
                         const SizedBox(width: 4),
-                        Text(
-                          'AI Price: \$${request.aiPriceEstimation!['suggestedRange']?['min']?.toInt() ?? ''}-\$${request.aiPriceEstimation!['suggestedRange']?['max']?.toInt() ?? ''}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.blue,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            'AI Price: \$${request.aiPriceEstimation!['suggestedRange']?['min']?.toInt() ?? ''}-\$${request.aiPriceEstimation!['suggestedRange']?['max']?.toInt() ?? ''}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.blue,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6), // Reduced spacing
                 ],
                 
                 // Time remaining and action button
@@ -1796,22 +1804,25 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                         ],
                       ),
                     ),
-                    ElevatedButton(
-                      onPressed: () => _navigateToBidding(request, deadline),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isUrgent ? Colors.red : Color(0xFFFBB04C),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        minimumSize: Size(0, 0),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                    SizedBox(
+                      width: 70, // Fixed width to prevent overflow
+                      child: ElevatedButton(
+                        onPressed: () => _navigateToBidding(request, deadline),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isUrgent ? Colors.red : Color(0xFFFBB04C),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          minimumSize: Size(0, 0),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
-                      ),
-                      child: const Text(
-                        'BID NOW',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                        child: const Text(
+                          'BID',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -2823,9 +2834,9 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         if (snapshot.hasError) {
           print('❌ Error loading assigned tasks: ${snapshot.error}');
           return Center(
-            child: Column(
+        child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+                     children: [
                 Icon(
                   Icons.error_outline,
                   size: 64,
@@ -2904,8 +2915,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
             child: CircularProgressIndicator(
-              color: Color(0xFFFBB04C),
-            ),
+                 color: Color(0xFFFBB04C),
+               ),
           );
         }
 
@@ -2915,7 +2926,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+                   children: [
                 Icon(
                   Icons.schedule_outlined,
                   size: 64,
@@ -3052,8 +3063,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                   color: Colors.blue[700],
                   size: 20,
                 ),
-                const SizedBox(width: 8),
-                Text(
+                     const SizedBox(width: 8),
+                     Text(
                   'UPCOMING',
                   style: TextStyle(
                     color: Colors.blue[700],
@@ -3064,7 +3075,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 const Spacer(),
                 Text(
                   '\$${task.finalPrice.toStringAsFixed(0)}',
-                  style: const TextStyle(
+                       style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Colors.green,
@@ -3076,17 +3087,17 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             Text(
               task.serviceDescription ?? 'Service Task',
               style: const TextStyle(
-                fontSize: 16,
+                         fontSize: 16,
                 fontWeight: FontWeight.w600,
-              ),
+                       ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-            ),
+                     ),
             const SizedBox(height: 8),
             Row(
               children: [
                 Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
+                     const SizedBox(width: 4),
                 Text(
                   _formatDateTime(task.scheduledTime),
                   style: TextStyle(
@@ -3209,7 +3220,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 ),
               ],
             ),
-          ],
+        ],
         ),
       ),
     );

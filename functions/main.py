@@ -720,16 +720,58 @@ def initiate_bidding_session(event: firestore_fn.Event[firestore_fn.DocumentSnap
             'deadline_hours': 2
         }
         
-        # Create a mock request to call send_bidding_notification
-        from firebase_functions.https_fn import Request
-        from unittest.mock import Mock
-        
-        mock_req = Mock(spec=Request)
-        mock_req.method = 'POST'
-        mock_req.get_json.return_value = notification_payload
-        
-        # Call the bidding notification function
-        send_bidding_notification(mock_req)
+        # Send notifications directly to matched providers (don't create service_requests)
+        for provider_id in matched_providers:
+            try:
+                # Get provider FCM tokens
+                provider_doc = db.collection('providers').document(provider_id).get()
+                if not provider_doc.exists:
+                    logging.warning(f"Provider {provider_id} not found")
+                    continue
+                    
+                provider_data = provider_doc.to_dict()
+                fcm_tokens = provider_data.get('fcmTokens', [])
+                
+                if not fcm_tokens:
+                    logging.warning(f"No FCM tokens for provider {provider_id}")
+                    continue
+                
+                # Send notification to each token
+                for token in fcm_tokens:
+                    message = messaging.Message(
+                        notification=messaging.Notification(
+                            title=f"🔥 New {urgency.title()} Service Request",
+                            body=f"{task_description} • {suggested_price}"
+                        ),
+                        data={
+                            'type': 'bidding_opportunity',
+                            'request_id': request_id,
+                            'urgency': urgency,
+                            'deadline_hours': '2'
+                        },
+                        token=token,
+                        android=messaging.AndroidConfig(
+                            priority='high',
+                            notification=messaging.AndroidNotification(
+                                sound='default',
+                                channel_id='bidding_notifications'
+                            )
+                        ),
+                        apns=messaging.APNSConfig(
+                            payload=messaging.APNSPayload(
+                                aps=messaging.Aps(
+                                    sound='default',
+                                    badge=2
+                                )
+                            )
+                        )
+                    )
+                    
+                    messaging.send(message)
+                    logging.info(f"Sent bidding notification to provider {provider_id}")
+                    
+            except Exception as e:
+                logging.error(f"Failed to send notification to provider {provider_id}: {str(e)}")
         
         logging.info(f"Bidding session created and notifications sent for request {request_id}")
         

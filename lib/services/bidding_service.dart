@@ -43,6 +43,7 @@ class BiddingService {
 
   /// Get active bidding opportunities for a provider
   static Stream<List<Map<String, dynamic>>> getProviderBiddingOpportunities(String providerId) {
+    print('🔍 BIDDING_SERVICE: Looking for opportunities for provider: $providerId');
     return _firestore
         .collection('user_requests')
         .where('status', isEqualTo: 'matched')
@@ -50,6 +51,7 @@ class BiddingService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .asyncMap((snapshot) async {
+      print('🔍 BIDDING_SERVICE: Found ${snapshot.docs.length} matched requests for provider $providerId');
       List<Map<String, dynamic>> opportunities = [];
       
       for (var doc in snapshot.docs) {
@@ -75,6 +77,7 @@ class BiddingService {
             .get();
         
         bool hasExistingBid = existingBidQuery.docs.isNotEmpty;
+        print('🔍 BIDDING_SERVICE: Request ${doc.id} - hasExistingBid: $hasExistingBid');
         
         // Get bidding session to check deadline
         var sessionQuery = await _firestore
@@ -87,10 +90,16 @@ class BiddingService {
         if (sessionQuery.docs.isNotEmpty) {
           var sessionData = sessionQuery.docs.first.data();
           deadline = (sessionData['deadline'] as Timestamp).toDate();
+          print('🔍 BIDDING_SERVICE: Request ${doc.id} - deadline: $deadline');
+        } else {
+          print('🔍 BIDDING_SERVICE: Request ${doc.id} - no bidding session found');
         }
         
         // Only include if deadline hasn't passed and no existing bid
-        if (!hasExistingBid && (deadline == null || DateTime.now().isBefore(deadline))) {
+        bool isDeadlineValid = deadline == null || DateTime.now().isBefore(deadline);
+        print('🔍 BIDDING_SERVICE: Request ${doc.id} - isDeadlineValid: $isDeadlineValid');
+        
+        if (!hasExistingBid && isDeadlineValid) {
           opportunities.add({
             'request': request,
             'deadline': deadline,
@@ -102,6 +111,7 @@ class BiddingService {
         }
       }
       
+      print('🔍 BIDDING_SERVICE: Returning ${opportunities.length} opportunities for provider $providerId');
       return opportunities;
     });
   }
