@@ -33,10 +33,20 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   bool _isTyping = false;
   bool _showPhotoUpload = false;
   bool _showCalendar = false;
+  bool _showLocationForm = false;
+  bool _showContactForm = false;
   bool _showSummary = false;
   bool _isListening = false;
   bool _speechEnabled = false;
   DateTime _selectedDate = DateTime.now();
+  
+  // Form controllers to persist data
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _zipcodeController = TextEditingController();
+  final TextEditingController _cityController = TextEditingController();
+  final TextEditingController _stateController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   List<DateTime> _selectedDates = [];
 
   @override
@@ -54,6 +64,13 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    // Dispose form controllers
+    _addressController.dispose();
+    _zipcodeController.dispose();
+    _cityController.dispose();
+    _stateController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
@@ -164,15 +181,37 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         // Reset all special UI states first
         _showPhotoUpload = false;
         _showCalendar = false;
+        _showLocationForm = false;
+        _showContactForm = false;
         _showSummary = false;
         
         // Check if we need to show special UI elements based on new 8-step flow
-        if (_aiService.currentState.conversationStep == 3 || _aiService.currentState.conversationStep == 4) {
+        if (_aiService.currentState.conversationStep == 3) {
           _showPhotoUpload = true;
-        } else if (_aiService.currentState.conversationStep == 5) {
+        } else if (_aiService.currentState.conversationStep == 4) {
           _showCalendar = true;
-        } else if (_aiService.currentState.conversationStep == 8 || _aiService.currentState.conversationStep == 9) {
+          print('🗓️ Calendar UI should be shown now - Step 4 (Calendar Requested: ${_aiService.currentState.calendarRequested})');
+        } else if (_aiService.currentState.conversationStep == 5 && _aiService.currentState.availabilitySet) {
+          // Only show location form if availability is actually set
+          _showLocationForm = true;
+          _showCalendar = false; // Hide calendar when moving to location
+          print('📍 Location Form UI should be shown now - Step 5 (Availability Set: ${_aiService.currentState.availabilitySet})');
+        } else if (_aiService.currentState.conversationStep == 6 && _aiService.currentState.locationFormCompleted) {
+          // Only show contact form if location form is completed
+          _showContactForm = true;
+          _showLocationForm = false; // Hide location form
+          print('📞 Contact Form UI should be shown now - Step 6 (Location Completed: ${_aiService.currentState.locationFormCompleted})');
+        } else if (_aiService.currentState.conversationStep >= 8) {
           _showSummary = true;
+          print('📋 Summary UI should be shown now - Step 8+');
+        }
+        
+        // CRITICAL: Force calendar to show at step 4, prevent immediate advancement
+        if (_aiService.currentState.conversationStep == 4 && !_aiService.currentState.availabilitySet) {
+          _showCalendar = true;
+          _showLocationForm = false; // Ensure no conflict
+          _showContactForm = false;
+          print('🔄 FORCE: Calendar UI enabled - Step 4 (Availability NOT set yet)');
         }
       });
       
@@ -193,58 +232,93 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     }
   }
 
-  Future<void> _uploadPhoto() async {
+  Future<void> _uploadPhotos() async {
     try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.camera,
+      // Show photo source selection dialog
+      final ImageSource? source = await showDialog<ImageSource>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Add Photos'),
+            content: const Text('How would you like to add photos?'),
+            actions: [
+              TextButton.icon(
+                onPressed: () => Navigator.pop(context, ImageSource.camera),
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Take Photo'),
+              ),
+              TextButton.icon(
+                onPressed: () => Navigator.pop(context, ImageSource.gallery),
+                icon: const Icon(Icons.photo_library),
+                label: const Text('Choose from Gallery'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (source == null) return;
+
+      setState(() {
+        _isLoading = true;
+      });
+
+      XFile? image;
+      
+      image = await _picker.pickImage(
+        source: source,
         maxWidth: 1024,
         maxHeight: 1024,
         imageQuality: 80,
       );
-      
+
       if (image != null) {
-        setState(() {
-          _isLoading = true;
-        });
-        
-        final String downloadUrl = await _uploadImageToFirebase(File(image.path));
-        _aiService.onPhotoUploaded(downloadUrl);
-        
-        // Add system message about photo upload
-        setState(() {
-          _aiService.messages.add(ChatMessage(
-            content: "Photo uploaded successfully!",
-            type: MessageType.system,
-            timestamp: DateTime.now(),
-            imageUrl: downloadUrl,
-          ));
-        });
-        
-        // Continue conversation
-        await _aiService.processUserInput("I've uploaded a photo.");
-        
-        setState(() {
-          _showPhotoUpload = false;
-          _isLoading = false;
-          // Check if we need to show next step based on 8-step flow
-          if (_aiService.currentState.conversationStep == 4) {
-            // After photo upload, move to step 5 (availability)
-            _showCalendar = true;
-          }
-        });
-        
-        _scrollToBottom();
+        try {
+          final String downloadUrl = await _uploadImageToFirebase(File(image.path));
+          _aiService.onPhotoUploaded(downloadUrl);
+          
+          // Add system message
+          setState(() {
+            _aiService.messages.add(ChatMessage(
+              content: "Photo uploaded successfully!",
+              type: MessageType.system,
+              timestamp: DateTime.now(),
+              imageUrl: downloadUrl,
+            ));
+          });
+
+          _scrollToBottom();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Photo uploaded successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } catch (e) {
+          print('Error uploading photo: $e');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error uploading photo: $e')),
+          );
+        }
       }
     } catch (e) {
-      print('Error uploading photo: $e');
+      print('Error uploading photos: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error uploading photo: $e')),
+        SnackBar(content: Text('Error uploading photos: $e')),
       );
+    } finally {
       setState(() {
         _isLoading = false;
       });
     }
   }
+
+
 
   Future<String> _uploadImageToFirebase(File imageFile) async {
     try {
@@ -313,10 +387,11 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   }
 
   Future<void> _selectAvailability() async {
+    // Submit availability and trigger next step
     final availabilityData = {
-      'selectedDates': _selectedDates.map((date) => date.toIso8601String()).toList(),
-      'preferredTime': 'flexible',
-      'notes': 'Available on selected dates',
+      'date': _selectedDate.toIso8601String(),
+      'preference': 'Selected date: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+      'timestamp': DateTime.now().toIso8601String(),
     };
     
     _aiService.onAvailabilitySelected(availabilityData);
@@ -324,6 +399,11 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     setState(() {
       _isLoading = true;
       _showCalendar = false;
+      // Check if location form should show next
+      if (_aiService.currentState.conversationStep == 5) {
+        _showLocationForm = true;
+        print('📍 Showing location form after calendar submission');
+      }
     });
     
     try {
@@ -429,6 +509,8 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
               setState(() {
                 _showPhotoUpload = false;
                 _showCalendar = false;
+                _showLocationForm = false;
+                _showContactForm = false;
                 _showSummary = false;
               });
             },
@@ -449,6 +531,17 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                 }
                 
                 final message = _aiService.messages[index];
+                
+                // Check if this is the start of service boxes and we haven't rendered them yet
+                if (message.metadata?['isServiceBox'] == true && _isFirstServiceBox(index)) {
+                  return _buildServiceBoxesGrid(index);
+                }
+                
+                // Skip service boxes that are already handled in the grid
+                if (message.metadata?['isServiceBox'] == true && !_isFirstServiceBox(index)) {
+                  return const SizedBox.shrink();
+                }
+                
                 return _buildMessageBubble(message);
               },
             ),
@@ -457,6 +550,8 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           // Special UI elements
           if (_showPhotoUpload) _buildPhotoUploadSection(),
           if (_showCalendar) _buildCalendarSection(),
+          if (_showLocationForm) _buildLocationFormSection(),
+          if (_showContactForm) _buildContactFormSection(),
           if (_showSummary) _buildSummarySection(),
           
           // Input area
@@ -469,6 +564,13 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   Widget _buildMessageBubble(ChatMessage message) {
     final isUser = message.type == MessageType.user;
     final isSystem = message.type == MessageType.system;
+    final isServiceOptions = message.metadata?['isServiceOptions'] == true;
+    final isServiceBox = message.metadata?['isServiceBox'] == true;
+    
+    // If it's a service box, render it as a horizontal card
+    if (isServiceBox) {
+      return _buildServiceBox(message);
+    }
     
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -481,7 +583,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           Flexible(
             child: Container(
               constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.75,
+                maxWidth: MediaQuery.of(context).size.width * (isServiceOptions ? 0.9 : 0.75),
               ),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -489,12 +591,17 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                     ? Colors.white.withOpacity(0.9)
                     : isSystem 
                         ? Colors.green.withOpacity(0.8)
-                        : Colors.white.withOpacity(0.95),
-                borderRadius: BorderRadius.circular(20),
+                        : isServiceOptions
+                            ? Colors.blue.withOpacity(0.05) // Light floating background
+                            : Colors.white.withOpacity(0.95),
+                borderRadius: BorderRadius.circular(isServiceOptions ? 16 : 20),
+                border: isServiceOptions 
+                    ? Border.all(color: Colors.blue.withOpacity(0.2), width: 1)
+                    : null,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
+                    color: Colors.black.withOpacity(isServiceOptions ? 0.08 : 0.1),
+                    blurRadius: isServiceOptions ? 8 : 4,
                     offset: const Offset(0, 2),
                   ),
                 ],
@@ -525,9 +632,10 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                   Text(
                     message.content,
                     style: TextStyle(
-                      fontSize: 16,
-                      color: isUser ? Colors.black87 : Colors.black,
-                      fontWeight: isSystem ? FontWeight.w600 : FontWeight.normal,
+                      fontSize: isServiceOptions ? 15 : 16,
+                      color: isUser ? Colors.black87 : (isServiceOptions ? Colors.black87 : Colors.black),
+                      fontWeight: isSystem ? FontWeight.w600 : (isServiceOptions ? FontWeight.w500 : FontWeight.normal),
+                      height: isServiceOptions ? 1.4 : 1.2,
                     ),
                   ),
                 ],
@@ -539,6 +647,146 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         ],
       ),
     );
+  }
+
+  // Check if this is the first service box in a sequence
+  bool _isFirstServiceBox(int index) {
+    if (index == 0) return true;
+    
+    final currentMessage = _aiService.messages[index];
+    final previousMessage = _aiService.messages[index - 1];
+    
+    return currentMessage.metadata?['isServiceBox'] == true && 
+           previousMessage.metadata?['isServiceBox'] != true;
+  }
+
+  // Build a grid of service boxes (2 columns)
+  Widget _buildServiceBoxesGrid(int startIndex) {
+    List<ChatMessage> serviceBoxes = [];
+    
+    // Collect all consecutive service boxes starting from startIndex
+    for (int i = startIndex; i < _aiService.messages.length; i++) {
+      final message = _aiService.messages[i];
+      if (message.metadata?['isServiceBox'] == true) {
+        serviceBoxes.add(message);
+      } else {
+        break;
+      }
+    }
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16, left: 44, right: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Create rows of 2 service boxes each
+          for (int i = 0; i < serviceBoxes.length; i += 2)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildServiceBoxWidget(serviceBoxes[i]),
+                  ),
+                  const SizedBox(width: 8),
+                  if (i + 1 < serviceBoxes.length)
+                    Expanded(
+                      child: _buildServiceBoxWidget(serviceBoxes[i + 1]),
+                    )
+                  else
+                    const Expanded(child: SizedBox()),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // Build individual service box widget for grid layout
+  Widget _buildServiceBoxWidget(ChatMessage message) {
+    final serviceType = message.metadata?['serviceType'] ?? message.content;
+    
+    // Define service icons
+    Map<String, IconData> serviceIcons = {
+      'Plumbing': Icons.plumbing,
+      'Electrical': Icons.electrical_services,
+      'HVAC': Icons.ac_unit,
+      'Appliance Repair': Icons.kitchen,
+      'Cleaning': Icons.cleaning_services,
+      'Handyman': Icons.handyman,
+      'Landscaping': Icons.grass,
+      'Pest Control': Icons.bug_report,
+      'Roofing': Icons.roofing,
+      'Painting': Icons.format_paint,
+    };
+    
+    // Define service colors
+    Map<String, Color> serviceColors = {
+      'Plumbing': Colors.blue,
+      'Electrical': Colors.orange,
+      'HVAC': Colors.cyan,
+      'Appliance Repair': Colors.purple,
+      'Cleaning': Colors.green,
+      'Handyman': Colors.brown,
+      'Landscaping': Colors.lightGreen,
+      'Pest Control': Colors.red,
+      'Roofing': Colors.grey,
+      'Painting': Colors.pink,
+    };
+    
+    IconData icon = serviceIcons[serviceType] ?? Icons.home_repair_service;
+    Color color = serviceColors[serviceType] ?? Colors.blue;
+    
+    return GestureDetector(
+      onTap: () {
+        _messageController.text = serviceType;
+        _sendMessage();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.withOpacity(0.2), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: color,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                serviceType,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildServiceBox(ChatMessage message) {
+    // This method is now deprecated in favor of the grid layout
+    // But keeping it for backward compatibility
+    return _buildServiceBoxWidget(message);
   }
 
   Widget _buildAvatarIcon() {
@@ -663,7 +911,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Upload Photo',
+            'Upload Photos',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -672,32 +920,127 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Take a photo to help service providers understand your needs better.',
+            'Take photos or select images to help service providers understand your needs better.',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey,
             ),
           ),
           const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _isLoading ? null : _uploadPhoto,
-            icon: _isLoading 
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.camera_alt),
-            label: Text(_isLoading ? 'Uploading...' : 'Upload Photo'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFBB04C),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _uploadPhotos,
+                  icon: _isLoading 
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.camera_alt),
+                  label: Text(_isLoading ? 'Uploading...' : 
+                    (_aiService.currentState.mediaUrls.isEmpty ? 'Add Photos' : 'Add More')),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFBB04C),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              if (_aiService.currentState.mediaUrls.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () async {
+                    setState(() {
+                      _showPhotoUpload = false;
+                    });
+                    
+                    // Trigger AI to ask about availability after photos are done
+                    await _aiService.processUserInput("I'm done uploading photos.");
+                    
+                    setState(() {
+                      // Show calendar UI for the next step
+                      if (_aiService.currentState.conversationStep >= 4) {
+                        _showCalendar = true;
+                        print('🗓️ Moving to calendar after photos are done');
+                      }
+                    });
+                    
+                    _scrollToBottom();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Done'),
+                ),
+              ],
+            ],
+          ),
+          
+          // Show uploaded photos
+          if (_aiService.currentState.mediaUrls.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text(
+              'Uploaded Photos (${_aiService.currentState.mediaUrls.length})',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
               ),
             ),
-          ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 80,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _aiService.currentState.mediaUrls.length,
+                itemBuilder: (context, index) {
+                  return Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        _aiService.currentState.mediaUrls[index],
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            width: 80,
+                            height: 80,
+                            color: Colors.grey[200],
+                            child: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 80,
+                            height: 80,
+                            color: Colors.grey[200],
+                            child: const Icon(Icons.error_outline, color: Colors.grey),
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1045,6 +1388,261 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                               color: Colors.white,
                               size: 24,
                             ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildLocationFormSection() {
+    // Use persistent form controllers
+    
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            '📍 Service Location Details',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Address Field
+          TextField(
+            controller: _addressController,
+            decoration: const InputDecoration(
+              labelText: 'Street Address *',
+              hintText: '123 Main Street',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.home),
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          // City and State Row
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _cityController,
+                  decoration: const InputDecoration(
+                    labelText: 'City *',
+                    hintText: 'San Francisco',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.location_city),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _stateController,
+                  decoration: const InputDecoration(
+                    labelText: 'State *',
+                    hintText: 'CA',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.map),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // Zipcode Field
+          TextField(
+            controller: _zipcodeController,
+            decoration: const InputDecoration(
+              labelText: 'Zipcode *',
+              hintText: '94102',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.local_post_office),
+            ),
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 20),
+          
+          // Submit Button
+          ElevatedButton(
+            onPressed: () {
+              // Validate required fields
+              if (_addressController.text.trim().isEmpty ||
+                  _cityController.text.trim().isEmpty ||
+                  _stateController.text.trim().isEmpty ||
+                  _zipcodeController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please fill in all required fields'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              // Submit location data
+              final locationData = {
+                'address': _addressController.text.trim(),
+                'city': _cityController.text.trim(),
+                'state': _stateController.text.trim(),
+                'zipcode': _zipcodeController.text.trim(),
+              };
+              
+              _aiService.onLocationFormCompleted(locationData);
+              
+              setState(() {
+                _showLocationForm = false;
+                _showContactForm = true; // Show contact form next
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFBB04C),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text(
+              'Continue to Contact Info',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildContactFormSection() {
+    // Use persistent form controllers
+    
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            '📞 Contact Information',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Phone Field
+          TextField(
+            controller: _phoneController,
+            decoration: const InputDecoration(
+              labelText: 'Phone Number *',
+              hintText: '+1 (555) 123-4567',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.phone),
+            ),
+            keyboardType: TextInputType.phone,
+          ),
+          const SizedBox(height: 12),
+          
+          // Email Field
+          TextField(
+            controller: _emailController,
+            decoration: const InputDecoration(
+              labelText: 'Email Address *',
+              hintText: 'your.email@example.com',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.email),
+            ),
+            keyboardType: TextInputType.emailAddress,
+          ),
+          const SizedBox(height: 20),
+          
+          // Submit Button
+          ElevatedButton(
+            onPressed: () {
+              // Validate required fields
+              if (_phoneController.text.trim().isEmpty ||
+                  _emailController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please fill in all required fields'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              // Basic email validation
+              if (!_emailController.text.contains('@') || !_emailController.text.contains('.')) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid email address'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              // Submit contact data
+              final contactData = {
+                'tel': _phoneController.text.trim(),
+                'email': _emailController.text.trim(),
+              };
+              
+              _aiService.onContactFormCompleted(contactData);
+              
+              setState(() {
+                _showContactForm = false;
+                _showSummary = true; // Show summary next
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFBB04C),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text(
+              'Complete Service Request',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
           ),
         ],
