@@ -630,7 +630,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         _currentState.serviceCategory = _detectServiceCategory(lowerInput);
         _currentState.serviceDescription = input;
         _currentState.conversationStep = 1;
-      return "Perfect! I understand you need ${_currentState.serviceCategory ?? 'home'} service. What specifically needs to be done?";
+      return _getServiceSpecificSecondQuestion(_currentState.serviceCategory);
     }
         
     if (_currentState.conversationStep == 1) {
@@ -711,11 +711,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         _currentState.conversationStep = 1;
         
         // Customize response based on detected service
-        if (_currentState.serviceCategory != null && _currentState.serviceCategory != 'Handyman') {
-          return "Perfect! I can help with ${_currentState.serviceCategory!.toLowerCase()} services. Tell me more about what's happening - what specifically needs attention?";
-        } else {
-          return "Got it! Could you tell me a bit more about what needs to be fixed or addressed? The more details you provide, the better I can help you find the right professional.";
-        }
+        return _getServiceSpecificSecondQuestion(_currentState.serviceCategory);
         
       case 1:
         // Step 2: Service Details with Guided Options for New Homeowners
@@ -1401,13 +1397,51 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     }
   }
 
+  // Generate service-specific second question to engage users better
+  String _getServiceSpecificSecondQuestion(String? serviceCategory) {
+    switch (serviceCategory) {
+      case 'Plumbing':
+        return "Great choice! Plumbing issues can be tricky. Is this about a leak, clog, installation, or something not working properly? What's going on with your plumbing?";
+      
+      case 'Electrical':
+        return "Perfect! Electrical work needs the right expertise. Are you dealing with outlets, lighting, circuit issues, or an installation? Tell me what's happening!";
+      
+      case 'HVAC':
+        return "Smart! HVAC systems are complex. Is your heating, cooling, or ventilation not working right? What temperatures or comfort issues are you experiencing?";
+      
+      case 'Appliance Repair':
+        return "Good call! Which appliance is giving you trouble? Is it your refrigerator, washer, dryer, dishwasher, or something else? What's it doing (or not doing)?";
+      
+      case 'Cleaning':
+        return "Excellent! A clean home is a happy home. Are you looking for regular cleaning, deep cleaning, move-in/out, or post-construction cleanup? What areas need attention?";
+      
+      case 'Handyman':
+        return "Perfect! Handyman services cover so much. Are you looking to fix something broken, install something new, or tackle a home improvement project? What needs your attention?";
+      
+      case 'Landscaping':
+        return "Great choice! Your outdoor space deserves care. Is this about lawn maintenance, garden design, tree work, or hardscaping? What's your vision for the space?";
+      
+      case 'Pest Control':
+        return "Smart move! Pest issues need quick attention. Are you seeing specific pests like ants, mice, or insects? Is this for prevention or treating an active problem?";
+      
+      case 'Roofing':
+        return "Important! Your roof protects everything below. Are you noticing leaks, missing shingles, storm damage, or planning maintenance? What's happening up there?";
+      
+      case 'Painting':
+        return "Fantastic! Fresh paint transforms spaces. Are you thinking interior or exterior? Is this for a single room, whole house, or touch-up work? What's your painting project?";
+      
+      default:
+        return "Perfect! I'm here to help with your home service needs. Could you tell me more about what's happening? The more details you share, the better I can connect you with the right professional.";
+    }
+  }
+  
   String _generateFallbackResponse(String input) {
     // More intelligent fallback based on conversation state
     if (_currentState.serviceCategory == null && _currentState.conversationStep == 0) {
       // Force detect service and advance
       _currentState.serviceCategory = _detectServiceCategory(input.toLowerCase());
       _currentState.conversationStep = 1;
-      return "Perfect! I understand you need ${_currentState.serviceCategory ?? 'home'} service. What specifically needs to be done?";
+      return _getServiceSpecificSecondQuestion(_currentState.serviceCategory);
     } else {
       return "I want to make sure I help you get the best ${_currentState.serviceCategory} service. Could you share a bit more about what you need?";
     }
@@ -1896,6 +1930,23 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     
     if (availability.containsKey('preference')) {
       formatted = availability['preference'].toString();
+    } else if (availability.containsKey('dates') && availability['dates'] is List) {
+      // Handle multiple dates
+      List<String> dates = List<String>.from(availability['dates']);
+      if (dates.length == 1) {
+        DateTime date = DateTime.parse(dates.first);
+        formatted = "Selected date: ${date.day}/${date.month}/${date.year}";
+      } else {
+        formatted = "Selected ${dates.length} dates";
+      }
+      
+      // Add time preference if available
+      if (availability.containsKey('timePreference')) {
+        String timePreference = availability['timePreference'];
+        if (timePreference != 'Any time') {
+          formatted += ", Time: $timePreference";
+        }
+      }
     } else if (availability.containsKey('selectedDates')) {
       formatted = "Selected dates provided";
     } else if (availability.containsKey('timeSlots')) {

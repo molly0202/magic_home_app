@@ -39,6 +39,8 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   bool _isListening = false;
   bool _speechEnabled = false;
   DateTime _selectedDate = DateTime.now();
+  TimeOfDay _selectedTime = TimeOfDay.now();
+  String _selectedTimePreference = 'Any time';
   
   // Form controllers to persist data
   final TextEditingController _addressController = TextEditingController();
@@ -48,6 +50,13 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   List<DateTime> _selectedDates = [];
+  List<String> _timePreferenceOptions = [
+    'Any time',
+    'Morning (8AM - 12PM)',
+    'Afternoon (12PM - 5PM)', 
+    'Evening (5PM - 8PM)',
+    'Specific time'
+  ];
 
   @override
   void initState() {
@@ -388,10 +397,29 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
 
   Future<void> _selectAvailability() async {
     // Submit availability and trigger next step
+    String timeInfo = _selectedTimePreference;
+    if (_selectedTimePreference == 'Specific time') {
+      timeInfo = 'Specific time: ${_selectedTime.format(context)}';
+    }
+    
+    // Format all selected dates
+    List<String> dateStrings = _selectedDates.map((date) => 
+      '${date.day}/${date.month}/${date.year}'
+    ).toList();
+    
+    String datesText = _selectedDates.length == 1 
+        ? 'Selected date: ${dateStrings.first}'
+        : 'Selected dates: ${dateStrings.join(', ')}';
+    
     final availabilityData = {
-      'date': _selectedDate.toIso8601String(),
-      'preference': 'Selected date: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+      'dates': _selectedDates.map((date) => date.toIso8601String()).toList(),
+      'selectedDatesCount': _selectedDates.length,
+      'timePreference': _selectedTimePreference,
+      'specificTime': _selectedTimePreference == 'Specific time' ? _selectedTime.format(context) : null,
+      'preference': '$datesText, Time: $timeInfo',
       'timestamp': DateTime.now().toIso8601String(),
+      // Keep the single date for backward compatibility
+      'date': _selectedDates.isNotEmpty ? _selectedDates.first.toIso8601String() : DateTime.now().toIso8601String(),
     };
     
     _aiService.onAvailabilitySelected(availabilityData);
@@ -408,7 +436,11 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     
     try {
       // Continue conversation with availability info
-      await _aiService.processUserInput("I've selected my availability.");
+      String availabilityMessage = _selectedDates.length == 1 
+          ? "I've selected my availability: ${dateStrings.first} at $timeInfo"
+          : "I've selected my availability for multiple dates: ${dateStrings.join(', ')} at $timeInfo";
+          
+      await _aiService.processUserInput(availabilityMessage);
       
       setState(() {
         _isLoading = false;
@@ -1049,7 +1081,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   Widget _buildCalendarSection() {
     return Container(
       margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
+      constraints: const BoxConstraints(maxHeight: 600), // Limit height to prevent overflow
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -1061,15 +1093,34 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           const Text(
             'What is your availability?',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Select your preferred date(s) and time:',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tap dates to select multiple days. ${_selectedDates.isEmpty ? 'Select at least one date.' : '${_selectedDates.length} date${_selectedDates.length == 1 ? '' : 's'} selected.'}',
+            style: TextStyle(
+              fontSize: 12,
+              color: _selectedDates.isEmpty ? Colors.red.shade600 : Colors.green.shade600,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 16),
@@ -1122,7 +1173,146 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          
+          // Display selected dates
+          if (_selectedDates.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.calendar_today, size: 16, color: Colors.green.shade600),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Selected Date${_selectedDates.length == 1 ? '' : 's'}:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.green.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: _selectedDates.map((date) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        ),
+                        child: Text(
+                          '${date.day}/${date.month}/${date.year}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          
+          const SizedBox(height: 24),
+          
+          // Time Preference Section
+          const Text(
+            'Time Preference:',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          // Time preference dropdown
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.withOpacity(0.3)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedTimePreference,
+                isExpanded: true,
+                items: _timePreferenceOptions.map((String option) {
+                  return DropdownMenuItem<String>(
+                    value: option,
+                    child: Text(
+                      option,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _selectedTimePreference = newValue!;
+                  });
+                },
+              ),
+            ),
+          ),
+          
+          // Specific time picker (only show if "Specific time" is selected)
+          if (_selectedTimePreference == 'Specific time') ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.access_time, color: Colors.black54),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Selected Time: ${_selectedTime.format(context)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      final TimeOfDay? picked = await showTimePicker(
+                        context: context,
+                        initialTime: _selectedTime,
+                      );
+                      if (picked != null && picked != _selectedTime) {
+                        setState(() {
+                          _selectedTime = picked;
+                        });
+                      }
+                    },
+                    child: const Text('Change'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          
+          const SizedBox(height: 20),
           ElevatedButton(
             onPressed: _selectedDates.isEmpty ? null : _selectAvailability,
             style: ElevatedButton.styleFrom(
@@ -1133,9 +1323,10 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: Text('Continue (${_selectedDates.length} days selected)'),
+            child: Text('Continue (${_selectedDates.length} date${_selectedDates.length == 1 ? '' : 's'} selected)'),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
