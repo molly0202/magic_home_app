@@ -4,9 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user_request.dart';
 import '../../services/user_task_service.dart';
 import 'task_detail_screen.dart';
-import '../matching/provider_matching_test_screen.dart';
+
 import '../reviews/customer_review_screen.dart';
-import '../debug/user_requests_debug_screen.dart';
 
 class MyTasksScreen extends StatefulWidget {
   final User user;
@@ -76,59 +75,6 @@ class _MyTasksScreenState extends State<MyTasksScreen>
         iconTheme: const IconThemeData(color: Colors.black87),
         actions: [
           IconButton(
-            icon: const Icon(Icons.bug_report),
-            onPressed: () async {
-              // Debug function - check all requests
-              print('🐛 Debug: Checking all requests for user ${widget.user.uid}');
-              
-              try {
-                // Check all user_requests documents for this user
-                final allRequestsQuery = await FirebaseFirestore.instance
-                    .collection('user_requests')
-                    .where('userId', isEqualTo: widget.user.uid)
-                    .orderBy('createdAt', descending: true)
-                    .get();
-                
-                print('🐛 Found ${allRequestsQuery.docs.length} total requests for user');
-                
-                for (var doc in allRequestsQuery.docs) {
-                  final data = doc.data();
-                  print('🐛 Request ${doc.id}:');
-                  print('   - Status: ${data['status']}');
-                  print('   - Category: ${data['serviceCategory']}');
-                  print('   - Description: ${data['description']}');
-                  print('   - Created: ${data['createdAt']}');
-                  print('   - MatchedProviders: ${data['matchedProviders']}');
-                }
-                
-                // Show result in UI and navigate to debug screen
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Found ${allRequestsQuery.docs.length} requests. Opening debug screen...'),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-                
-                // Navigate to debug screen
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const UserRequestsDebugScreen(),
-                  ),
-                );
-              } catch (e) {
-                print('🐛 Debug error: $e');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Debug error: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            tooltip: 'Debug Check Requests',
-          ),
-          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _refreshStreams,
             tooltip: 'Refresh Tasks',
@@ -169,9 +115,6 @@ class _MyTasksScreenState extends State<MyTasksScreen>
     print('🎯 User email: ${widget.user.email}');
     return Column(
       children: [
-        // Provider Matching Test Section at the top
-        _buildProviderMatchingTestSection(),
-        
         // Tasks List
         Expanded(
           child: StreamBuilder<List<Map<String, dynamic>>>(
@@ -694,116 +637,7 @@ class _MyTasksScreenState extends State<MyTasksScreen>
     );
   }
 
-  Widget _buildProviderMatchingTestSection() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF6B73FF), Color(0xFF000DFF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.science,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Provider Matching Test Lab',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      'Test the provider matching algorithm',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.orange,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'BETA',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProviderMatchingTestScreen(),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.play_arrow, size: 20),
-              label: const Text(
-                'Run Matching Test',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF6B73FF),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   void _showMarkCompleteDialog(UserRequest task) {
     showDialog(
