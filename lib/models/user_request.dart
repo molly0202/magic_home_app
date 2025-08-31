@@ -18,6 +18,7 @@ class UserRequest {
   final Map<String, dynamic>? aiPriceEstimation; // AI-generated price estimation
   final String? assignedProviderId; // Provider ID when task is assigned
   final String? selectedBidId; // Bid ID that was selected
+  final String? finalServiceSchedule; // Final confirmed service time from user
   
   UserRequest({
     this.requestId,
@@ -37,6 +38,7 @@ class UserRequest {
     this.aiPriceEstimation,
     this.assignedProviderId,
     this.selectedBidId,
+    this.finalServiceSchedule,
   }) : createdAt = createdAt ?? DateTime.now();
 
   // Create from AI intake service data
@@ -67,6 +69,7 @@ class UserRequest {
       tags: tags ?? [],
       priority: priority ?? 3,
       aiPriceEstimation: aiPriceEstimation,
+      finalServiceSchedule: null, // Not set during AI intake
     );
   }
 
@@ -93,6 +96,7 @@ class UserRequest {
           : null,
       assignedProviderId: data['assignedProviderId'],
       selectedBidId: data['selectedBidId'],
+      finalServiceSchedule: data['finalServiceSchedule'],
     );
   }
 
@@ -116,6 +120,7 @@ class UserRequest {
       'aiPriceEstimation': aiPriceEstimation,
       'assignedProviderId': assignedProviderId,
       'selectedBidId': selectedBidId,
+      'finalServiceSchedule': finalServiceSchedule,
     };
   }
 
@@ -138,6 +143,7 @@ class UserRequest {
     Map<String, dynamic>? aiPriceEstimation,
     String? assignedProviderId,
     String? selectedBidId,
+    String? finalServiceSchedule,
   }) {
     return UserRequest(
       requestId: requestId ?? this.requestId,
@@ -157,6 +163,7 @@ class UserRequest {
       aiPriceEstimation: aiPriceEstimation ?? this.aiPriceEstimation,
       assignedProviderId: assignedProviderId ?? this.assignedProviderId,
       selectedBidId: selectedBidId ?? this.selectedBidId,
+      finalServiceSchedule: finalServiceSchedule ?? this.finalServiceSchedule,
     );
   }
 

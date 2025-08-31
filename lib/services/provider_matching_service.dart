@@ -160,19 +160,34 @@ class ProviderMatchingService {
   /// Get eligible providers based on service category
   static Future<List<QueryDocumentSnapshot>> _getEligibleProviders(String serviceCategory) async {
     try {
+      print('🔍 Searching for providers with service category: "$serviceCategory"');
+      
+      // Normalize service category to lowercase for matching
+      final normalizedCategory = serviceCategory.toLowerCase();
+      print('🔍 Normalized category: "$normalizedCategory"');
+      
       // Query providers that:
       // 1. Are active
       // 2. Accept new requests
-      // 3. Have the required service category
+      // 3. Have the required service category (case-insensitive)
       // 4. Are verified
       
       final query = await _firestore
           .collection('providers')
           .where('is_active', isEqualTo: true)
           .where('accepting_new_requests', isEqualTo: true)
-          .where('service_categories', arrayContains: serviceCategory)
+          .where('service_categories', arrayContains: normalizedCategory)
           .where('status', isEqualTo: 'verified')
           .get();
+      
+      print('🔍 Found ${query.docs.length} eligible providers for "$normalizedCategory"');
+      
+      // Log provider details for debugging
+      for (final doc in query.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final providerName = data['name'] ?? data['company'] ?? 'Unknown';
+        print('   - ${doc.id}: $providerName');
+      }
       
       return query.docs;
     } catch (e) {

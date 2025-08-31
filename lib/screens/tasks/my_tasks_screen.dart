@@ -6,6 +6,7 @@ import '../../services/user_task_service.dart';
 import 'task_detail_screen.dart';
 import '../matching/provider_matching_test_screen.dart';
 import '../reviews/customer_review_screen.dart';
+import '../debug/user_requests_debug_screen.dart';
 
 class MyTasksScreen extends StatefulWidget {
   final User user;
@@ -76,9 +77,54 @@ class _MyTasksScreenState extends State<MyTasksScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.bug_report),
-            onPressed: () {
+            onPressed: () async {
               // Debug function - check all requests
               print('🐛 Debug: Checking all requests for user ${widget.user.uid}');
+              
+              try {
+                // Check all user_requests documents for this user
+                final allRequestsQuery = await FirebaseFirestore.instance
+                    .collection('user_requests')
+                    .where('userId', isEqualTo: widget.user.uid)
+                    .orderBy('createdAt', descending: true)
+                    .get();
+                
+                print('🐛 Found ${allRequestsQuery.docs.length} total requests for user');
+                
+                for (var doc in allRequestsQuery.docs) {
+                  final data = doc.data();
+                  print('🐛 Request ${doc.id}:');
+                  print('   - Status: ${data['status']}');
+                  print('   - Category: ${data['serviceCategory']}');
+                  print('   - Description: ${data['description']}');
+                  print('   - Created: ${data['createdAt']}');
+                  print('   - MatchedProviders: ${data['matchedProviders']}');
+                }
+                
+                // Show result in UI and navigate to debug screen
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Found ${allRequestsQuery.docs.length} requests. Opening debug screen...'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+                
+                // Navigate to debug screen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const UserRequestsDebugScreen(),
+                  ),
+                );
+              } catch (e) {
+                print('🐛 Debug error: $e');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Debug error: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
             tooltip: 'Debug Check Requests',
           ),
@@ -203,31 +249,12 @@ class _MyTasksScreenState extends State<MyTasksScreen>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Create a new service request to get started',
+                        'Your submitted service requests will appear here once processed',
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey[600],
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          // Navigate back to home screen to create request
-                          Navigator.pop(context);
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('Create Request'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFBB04C),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
+                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
@@ -365,7 +392,7 @@ class _MyTasksScreenState extends State<MyTasksScreen>
   }
 
   Widget _buildTaskCardWithBiddingInfo(UserRequest task, String actualStatus, int bidCount) {
-    final statusInfo = UserTaskService.getTaskStatusInfo(actualStatus);
+    final statusInfo = UserTaskService.getTaskStatusInfo(actualStatus, task: task);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),

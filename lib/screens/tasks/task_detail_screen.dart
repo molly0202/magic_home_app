@@ -21,17 +21,44 @@ class TaskDetailScreen extends StatefulWidget {
 }
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
+  UserRequest? _currentTask;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentTask = widget.task;
+    _listenToTaskUpdates();
+  }
+
+  void _listenToTaskUpdates() {
+    if (widget.task.requestId != null) {
+      UserTaskService.firestore
+          .collection('user_requests')
+          .doc(widget.task.requestId!)
+          .snapshots()
+          .listen((doc) {
+        if (doc.exists && mounted) {
+          setState(() {
+            _currentTask = UserRequest.fromFirestore(doc);
+          });
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final currentTask = _currentTask ?? widget.task;
+    
     return FutureBuilder<Map<String, dynamic>>(
-      future: _getTaskWithBiddingInfo(),
+      future: _getTaskWithBiddingInfo(currentTask),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
             backgroundColor: Colors.grey[50],
             appBar: AppBar(
               title: Text(
-                widget.task.serviceCategory.replaceAll('_', ' ').toUpperCase(),
+                currentTask.serviceCategory.replaceAll('_', ' ').toUpperCase(),
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Colors.black87,
@@ -57,7 +84,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
         final actualStatus = taskInfo['actualStatus'] as String;
         final bidCount = taskInfo['bidCount'] as int;
-        final statusInfo = UserTaskService.getTaskStatusInfo(actualStatus);
+        final statusInfo = UserTaskService.getTaskStatusInfo(actualStatus, task: currentTask);
 
         return Scaffold(
           backgroundColor: Colors.grey[50],
@@ -81,24 +108,28 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 _buildStatusHeader(statusInfo, actualStatus, bidCount),
 
                 // Request Details Card
-                _buildRequestDetailsCard(),
+                _buildRequestDetailsCard(currentTask),
 
                 // Contact Information (if assigned)
-                if (actualStatus == 'assigned' && widget.task.assignedProviderId != null)
-                  _buildContactCard(),
+                if (actualStatus == 'assigned' && currentTask.assignedProviderId != null)
+                  _buildContactCard(currentTask),
 
                 // Address Card
-                _buildAddressCard(),
+                _buildAddressCard(currentTask),
 
                 // Availability Card
-                _buildAvailabilityCard(),
+                _buildAvailabilityCard(currentTask),
+
+                // Final Service Schedule Card (if confirmed)
+                if (currentTask.finalServiceSchedule != null && currentTask.finalServiceSchedule!.isNotEmpty)
+                  _buildFinalScheduleCard(currentTask),
 
                 // Description Card
-                _buildDescriptionCard(),
+                _buildDescriptionCard(currentTask),
 
                 // Media Card (if has media)
-                if (widget.task.mediaUrls.isNotEmpty)
-                  _buildMediaCard(),
+                if (currentTask.mediaUrls.isNotEmpty)
+                  _buildMediaCard(currentTask),
 
                 const SizedBox(height: 100), // Bottom padding
               ],
@@ -109,11 +140,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  Future<Map<String, dynamic>> _getTaskWithBiddingInfo() async {
+  Future<Map<String, dynamic>> _getTaskWithBiddingInfo(UserRequest task) async {
     // Only check for bidding info if status is 'matched'
-    if (widget.task.status != 'matched') {
+    if (task.status != 'matched') {
       return {
-        'actualStatus': widget.task.status,
+        'actualStatus': task.status,
         'bidCount': 0,
         'biddingSession': null,
       };
@@ -123,7 +154,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       // Check for active bidding session with bids
       final sessionQuery = await UserTaskService.firestore
           .collection('bidding_sessions')
-          .where('requestId', isEqualTo: widget.task.requestId)
+          .where('requestId', isEqualTo: task.requestId)
           .where('sessionStatus', isEqualTo: 'active')
           .limit(1)
           .get();
@@ -143,14 +174,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       }
 
       return {
-        'actualStatus': widget.task.status,
+        'actualStatus': task.status,
         'bidCount': 0,
         'biddingSession': null,
       };
     } catch (e) {
       print('❌ Error getting bidding info: $e');
       return {
-        'actualStatus': widget.task.status,
+        'actualStatus': task.status,
         'bidCount': 0,
         'biddingSession': null,
       };
@@ -222,7 +253,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _navigateToQuotes,
+                onPressed: () => _navigateToQuotes(_currentTask ?? widget.task),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFBB04C),
                   foregroundColor: Colors.white,
@@ -247,7 +278,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _navigateToQuotes,
+                onPressed: () => _navigateToQuotes(_currentTask ?? widget.task),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
@@ -257,7 +288,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   ),
                 ),
                 child: const Text(
-                  'View Provider Details',
+                  'View Quote Details',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -271,7 +302,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  Widget _buildRequestDetailsCard() {
+  Widget _buildRequestDetailsCard(UserRequest task) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(20),
@@ -299,20 +330,20 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           ),
           const SizedBox(height: 16),
           
-          _buildDetailRow('Category', widget.task.serviceCategory.replaceAll('_', ' ').toUpperCase()),
-          _buildDetailRow('Created', _formatDateTime(widget.task.createdAt)),
-          _buildDetailRow('Priority', 'Priority ${widget.task.priority}'),
+          _buildDetailRow('Category', task.serviceCategory.replaceAll('_', ' ').toUpperCase()),
+          _buildDetailRow('Created', _formatDateTime(task.createdAt)),
+          _buildDetailRow('Priority', 'Priority ${task.priority}'),
           
-          if (widget.task.preferences != null && widget.task.preferences!['price_range'] != null)
-            _buildDetailRow('Budget', widget.task.preferences!['price_range'].toString()),
+          if (task.preferences != null && task.preferences!['price_range'] != null)
+            _buildDetailRow('Budget', task.preferences!['price_range'].toString()),
         ],
       ),
     );
   }
 
-  Widget _buildContactCard() {
+  Widget _buildContactCard(UserRequest task) {
     return FutureBuilder<Map<String, dynamic>?>(
-      future: UserTaskService.getProviderDetails(widget.task.assignedProviderId!),
+      future: UserTaskService.getProviderDetails(task.assignedProviderId!),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const SizedBox.shrink();
@@ -393,7 +424,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  Widget _buildAddressCard() {
+  Widget _buildAddressCard(UserRequest task) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(20),
@@ -425,7 +456,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             children: [
               Expanded(
                 child: Text(
-                  widget.task.address,
+                                              task.address,
                   style: const TextStyle(
                     fontSize: 14,
                     color: Colors.black87,
@@ -433,51 +464,21 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 ),
               ),
               IconButton(
-                onPressed: () => _openMaps(widget.task.address),
+                onPressed: () => _openMaps(task.address),
                 icon: const Icon(
-                  Icons.map,
+                  Icons.directions,
                   color: Colors.blue,
                 ),
+                tooltip: 'Get Directions',
               ),
             ],
-          ),
-          
-          // Map placeholder (you can integrate with Google Maps later)
-          Container(
-            height: 120,
-            width: double.infinity,
-            margin: const EdgeInsets.only(top: 12),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.map,
-                    size: 32,
-                    color: Colors.grey[500],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Map View',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAvailabilityCard() {
+  Widget _buildAvailabilityCard(UserRequest task) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(20),
@@ -505,22 +506,22 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           ),
           const SizedBox(height: 16),
           
-                      if (widget.task.userAvailability.isNotEmpty) ...[
-            if (widget.task.userAvailability['preferredTime'] != null)
+                      if (task.userAvailability.isNotEmpty) ...[
+            if (task.userAvailability['preferredTime'] != null)
               Text(
-                widget.task.userAvailability['preferredTime'],
+                task.userAvailability['preferredTime'],
                 style: const TextStyle(
                   fontSize: 14,
                   color: Colors.black87,
                 ),
               ),
             
-            if (widget.task.userAvailability['timeSlots'] != null) ...[
+            if (task.userAvailability['timeSlots'] != null) ...[
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
-                children: (widget.task.userAvailability['timeSlots'] as List)
+                children: (task.userAvailability['timeSlots'] as List)
                     .map((slot) => Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -555,7 +556,110 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  Widget _buildDescriptionCard() {
+  Widget _buildFinalScheduleCard(UserRequest task) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.event_available,
+                color: Colors.green[700],
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Confirmed Service Time',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Your Confirmed Schedule:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  task.finalServiceSchedule!,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check_circle_outline,
+                  color: Colors.blue[700],
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'This is the final service time you confirmed when accepting the quote. The provider has been notified.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDescriptionCard(UserRequest task) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(20),
@@ -583,7 +687,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            widget.task.description,
+            task.description,
             style: const TextStyle(
               fontSize: 14,
               color: Colors.black87,
@@ -595,7 +699,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  Widget _buildMediaCard() {
+  Widget _buildMediaCard(UserRequest task) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(20),
@@ -627,9 +731,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             height: 100,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: widget.task.mediaUrls.length,
+              itemCount: task.mediaUrls.length,
               itemBuilder: (context, index) {
-                final url = widget.task.mediaUrls[index];
+                final url = task.mediaUrls[index];
                 return Container(
                   width: 100,
                   margin: const EdgeInsets.only(right: 12),
@@ -689,12 +793,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  void _navigateToQuotes() {
+  void _navigateToQuotes(UserRequest task) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ServiceQuotesScreen(
-          task: widget.task,
+          task: task,
           user: widget.user,
         ),
       ),

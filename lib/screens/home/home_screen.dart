@@ -476,10 +476,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-                // Rating stars
-                Text(
-                  review['ratingStars'] ?? '⭐⭐⭐⭐⭐',
-                  style: const TextStyle(fontSize: 14),
+                // Thumbs up/down badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.thumb_up,
+                        color: Colors.green,
+                        size: 12,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        '👍',
+                        style: TextStyle(fontSize: 10),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -847,9 +865,27 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            post['rating']!,
-                            style: const TextStyle(fontSize: 16),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.thumb_up,
+                                  color: Colors.green,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '👍',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),

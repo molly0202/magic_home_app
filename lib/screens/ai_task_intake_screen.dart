@@ -48,7 +48,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   final TextEditingController _cityController = TextEditingController();
   final TextEditingController _stateController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
   List<DateTime> _selectedDates = [];
   List<String> _timePreferenceOptions = [
     'Any time',
@@ -79,7 +79,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     _cityController.dispose();
     _stateController.dispose();
     _phoneController.dispose();
-    _emailController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
@@ -404,19 +404,19 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     
     // Format all selected dates
     List<String> dateStrings = _selectedDates.map((date) => 
-      '${date.day}/${date.month}/${date.year}'
+      _formatDateForDisplay(date)
     ).toList();
     
     String datesText = _selectedDates.length == 1 
-        ? 'Selected date: ${dateStrings.first}'
-        : 'Selected dates: ${dateStrings.join(', ')}';
+        ? dateStrings.first
+        : dateStrings.join(', ');
     
     final availabilityData = {
       'dates': _selectedDates.map((date) => date.toIso8601String()).toList(),
       'selectedDatesCount': _selectedDates.length,
       'timePreference': _selectedTimePreference,
       'specificTime': _selectedTimePreference == 'Specific time' ? _selectedTime.format(context) : null,
-      'preference': '$datesText, Time: $timeInfo',
+      'preference': '$datesText at $timeInfo',
       'timestamp': DateTime.now().toIso8601String(),
       // Keep the single date for backward compatibility
       'date': _selectedDates.isNotEmpty ? _selectedDates.first.toIso8601String() : DateTime.now().toIso8601String(),
@@ -435,10 +435,10 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     });
     
     try {
-      // Continue conversation with availability info
+      // Continue conversation with clean availability info
       String availabilityMessage = _selectedDates.length == 1 
-          ? "I've selected my availability: ${dateStrings.first} at $timeInfo"
-          : "I've selected my availability for multiple dates: ${dateStrings.join(', ')} at $timeInfo";
+          ? "${dateStrings.first} at $timeInfo"
+          : "${dateStrings.join(', ')} at $timeInfo";
           
       await _aiService.processUserInput(availabilityMessage);
       
@@ -470,25 +470,53 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       }
       
       // Prepare AI intake data in the format expected by UserRequestService
+      // Get the complete service request summary for proper description
+      final serviceRequestSummary = _aiService.getServiceRequestSummary();
+      
+      // Extract data from Service Request Summary structure (not currentState)
+      final locationForm = serviceRequestSummary['locationForm'] as Map<String, dynamic>? ?? {};
+      final contactForm = serviceRequestSummary['contactForm'] as Map<String, dynamic>? ?? {};
+      
       final aiIntakeData = {
-        'serviceCategory': _aiService.currentState.serviceCategory ?? 'general',
-        'description': _aiService.currentState.description ?? '',
-        'mediaUrls': _aiService.currentState.mediaUrls ?? [],
-        'address': _aiService.currentState.address ?? '',
-        'phoneNumber': _aiService.currentState.phoneNumber ?? '',
+        'serviceCategory': serviceRequestSummary['serviceCategory'] ?? 'general',
+        'description': serviceRequestSummary['serviceDescription'] ?? 
+                      serviceRequestSummary['problemDescription'] ?? 
+                      _aiService.currentState.description ?? '',
+        'mediaUrls': serviceRequestSummary['mediaUrls'] ?? [],
+        
+        // Extract from locationForm (not currentState.address)
+        'address': _buildFullAddress(locationForm),
+        'zipcode': locationForm['zipcode'] ?? '',
+        'city': locationForm['city'] ?? '',
+        'state': locationForm['state'] ?? '',
+        
+        // Extract from contactForm (not currentState.phoneNumber)
+        'phoneNumber': contactForm['tel'] ?? _aiService.currentState.phoneNumber ?? '',
+        'email': contactForm['email'] ?? _aiService.currentState.email ?? '',
+        
+        // Use 'availability' from summary (not userAvailability from currentState)
+        'userAvailability': serviceRequestSummary['availability'] ?? _aiService.currentState.userAvailability ?? {},
+        
         'location': _aiService.currentState.location,
-        'userAvailability': _aiService.currentState.userAvailability ?? {},
         'preferences': _aiService.currentState.preferences ?? {},
-        'tags': _aiService.currentState.tags ?? [],
+        'tags': serviceRequestSummary['tags'] ?? _aiService.currentState.tags ?? [],
         'priority': _aiService.currentState.priority ?? 3,
-        'aiPriceEstimation': _aiService.currentState.priceEstimate != null ? {
-          'suggestedRange': _aiService.currentState.priceEstimate,
+        
+        // Extract price estimation from summary
+        'aiPriceEstimation': serviceRequestSummary['priceEstimate'] != null ? {
+          'suggestedRange': serviceRequestSummary['priceEstimate'],
           'aiModel': 'ai-conversation-v1',
           'confidenceLevel': 'medium',
           'generatedAt': DateTime.now().toIso8601String(),
         } : null,
-        // Additional metadata for debugging
+        
+        // Additional metadata for debugging and provider matching
         'serviceAnswers': _aiService.currentState.serviceAnswers,
+        'conversationStep': serviceRequestSummary['conversationStep'] ?? _aiService.currentState.conversationStep,
+        'extractedInfo': serviceRequestSummary['extractedInfo'] ?? _aiService.currentState.extractedInfo,
+        'customerName': serviceRequestSummary['customerName'] ?? '',
+        'isComplete': serviceRequestSummary['isComplete'] ?? false,
+        'serviceRequestSummary': serviceRequestSummary, // Include full summary for reference
       };
       
       print('🚀 Submitting service request via UserRequestService...');
@@ -502,11 +530,28 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       
       print('✅ Service request processed successfully: $result');
       
-      // Show success message
+      // Debug: Show detailed result information
+      if (result['userRequest'] != null) {
+        final userRequest = result['userRequest'] as Map<String, dynamic>;
+        print('🔍 DEBUG: Created User Request:');
+        print('   - Request ID: ${userRequest['requestId']}');
+        print('   - User ID: ${userRequest['userId']}');
+        print('   - Status: ${userRequest['status']}');
+        print('   - Service Category: ${userRequest['serviceCategory']}');
+        print('   - Description: ${userRequest['description']}');
+        print('   - Address: ${userRequest['address']}');
+        print('   - Phone: ${userRequest['phoneNumber']}');
+        print('   - Created At: ${userRequest['createdAt']}');
+        print('   - Matched Providers: ${userRequest['matchedProviders']}');
+      }
+      
+      // Show success message with request ID
+      final requestId = result['userRequest']?['requestId'] ?? 'unknown';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Service request submitted and providers are being matched!'),
+        SnackBar(
+          content: Text('Service request submitted successfully!\nRequest ID: $requestId'),
           backgroundColor: Colors.green,
+          duration: const Duration(seconds: 4),
         ),
       );
       
@@ -1229,7 +1274,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                           border: Border.all(color: Colors.green.withOpacity(0.3)),
                         ),
                         child: Text(
-                          '${date.day}/${date.month}/${date.year}',
+                          _formatDateForDisplay(date),
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -1352,7 +1397,9 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     
     return Container(
       margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.7, // Limit height to 70% of screen
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -1364,9 +1411,11 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           const Text(
             'Service Request Summary',
             style: TextStyle(
@@ -1486,6 +1535,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                   ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -1770,6 +1820,19 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           ),
           const SizedBox(height: 16),
           
+          // Name Field
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: 'Full Name *',
+              hintText: 'John Smith',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.person),
+            ),
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 12),
+          
           // Phone Field
           TextField(
             controller: _phoneController,
@@ -1781,27 +1844,14 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
             ),
             keyboardType: TextInputType.phone,
           ),
-          const SizedBox(height: 12),
-          
-          // Email Field
-          TextField(
-            controller: _emailController,
-            decoration: const InputDecoration(
-              labelText: 'Email Address *',
-              hintText: 'your.email@example.com',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.email),
-            ),
-            keyboardType: TextInputType.emailAddress,
-          ),
           const SizedBox(height: 20),
           
           // Submit Button
           ElevatedButton(
             onPressed: () {
               // Validate required fields
-              if (_phoneController.text.trim().isEmpty ||
-                  _emailController.text.trim().isEmpty) {
+              if (_nameController.text.trim().isEmpty ||
+                  _phoneController.text.trim().isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Please fill in all required fields'),
@@ -1811,21 +1861,10 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                 return;
               }
               
-              // Basic email validation
-              if (!_emailController.text.contains('@') || !_emailController.text.contains('.')) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please enter a valid email address'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-              
               // Submit contact data
               final contactData = {
+                'name': _nameController.text.trim(),
                 'tel': _phoneController.text.trim(),
-                'email': _emailController.text.trim(),
               };
               
               _aiService.onContactFormCompleted(contactData);
@@ -1854,5 +1893,57 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         ],
       ),
     );
+  }
+
+  /// Build full address from location form components
+  String _buildFullAddress(Map<String, dynamic> locationForm) {
+    final address = locationForm['address']?.toString() ?? '';
+    final city = locationForm['city']?.toString() ?? '';
+    final state = locationForm['state']?.toString() ?? '';
+    final zipcode = locationForm['zipcode']?.toString() ?? '';
+    
+    // If we have a complete address, use it
+    if (address.isNotEmpty) {
+      List<String> parts = [address];
+      if (city.isNotEmpty) parts.add(city);
+      if (state.isNotEmpty) parts.add(state);
+      if (zipcode.isNotEmpty) parts.add(zipcode);
+      return parts.join(', ');
+    }
+    
+    // Fallback to currentState address if locationForm is empty
+    return _aiService.currentState.address ?? '';
+  }
+
+  /// Format date for clear display (e.g., "Sept 7th, 2025")
+  String _formatDateForDisplay(DateTime date) {
+    const monthNames = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'
+    ];
+    
+    String day = date.day.toString();
+    String suffix = _getDaySuffix(date.day);
+    String month = monthNames[date.month - 1];
+    String year = date.year.toString();
+    
+    return '$month $day$suffix, $year';
+  }
+
+  /// Get ordinal suffix for day (1st, 2nd, 3rd, 4th, etc.)
+  String _getDaySuffix(int day) {
+    if (day >= 11 && day <= 13) {
+      return 'th';
+    }
+    switch (day % 10) {
+      case 1:
+        return 'st';
+      case 2:
+        return 'nd';
+      case 3:
+        return 'rd';
+      default:
+        return 'th';
+    }
   }
 } 

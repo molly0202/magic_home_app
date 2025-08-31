@@ -1,8 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../models/user_request.dart';
 import '../models/service_bid.dart';
 import '../models/bidding_session.dart';
+import '../config/api_config.dart';
 
 class UserTaskService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -253,8 +256,166 @@ class UserTaskService {
     }
   }
 
+  /// Accept a bid with final service date and time
+  static Future<bool> acceptBidWithSchedule(
+    String bidId, 
+    String userId, 
+    DateTime serviceDateTime,
+    String formattedSchedule,
+  ) async {
+    try {
+      print('🗓️ Accepting bid with schedule: $bidId for user: $userId');
+      print('🗓️ Service scheduled for: $formattedSchedule');
+      
+      final bidDoc = await _firestore.collection('service_bids').doc(bidId).get();
+      if (!bidDoc.exists) {
+        throw Exception('Bid not found');
+      }
+
+      final bidData = bidDoc.data()!;
+      final requestId = bidData['requestId'];
+      final providerId = bidData['providerId'];
+
+      // Update the winning bid with final schedule
+      await _firestore.collection('service_bids').doc(bidId).update({
+        'bidStatus': 'accepted',
+        'acceptedAt': FieldValue.serverTimestamp(),
+        'finalServiceDateTime': Timestamp.fromDate(serviceDateTime),
+        'finalServiceSchedule': formattedSchedule,
+        'serviceDate': serviceDateTime.toIso8601String().split('T')[0], // YYYY-MM-DD
+        'serviceTime': '${serviceDateTime.hour.toString().padLeft(2, '0')}:${serviceDateTime.minute.toString().padLeft(2, '0')}', // HH:MM
+      });
+
+      // Update the user request with final schedule
+      await _firestore.collection('user_requests').doc(requestId).update({
+        'status': 'assigned',
+        'assignedProviderId': providerId,
+        'selectedBidId': bidId,
+        'assignedAt': FieldValue.serverTimestamp(),
+        'finalServiceDateTime': Timestamp.fromDate(serviceDateTime),
+        'finalServiceSchedule': formattedSchedule,
+        'serviceDate': serviceDateTime.toIso8601String().split('T')[0],
+        'serviceTime': '${serviceDateTime.hour.toString().padLeft(2, '0')}:${serviceDateTime.minute.toString().padLeft(2, '0')}',
+      });
+
+      // Create assigned task record for provider
+      await _firestore.collection('assigned_tasks').add({
+        'requestId': requestId,
+        'bidId': bidId,
+        'providerId': providerId,
+        'userId': userId,
+        'serviceCategory': bidData['serviceCategory'] ?? 'general',
+        'finalServiceDateTime': Timestamp.fromDate(serviceDateTime),
+        'finalServiceSchedule': formattedSchedule,
+        'serviceDate': serviceDateTime.toIso8601String().split('T')[0],
+        'serviceTime': '${serviceDateTime.hour.toString().padLeft(2, '0')}:${serviceDateTime.minute.toString().padLeft(2, '0')}',
+        'taskStatus': 'scheduled',
+        'createdAt': FieldValue.serverTimestamp(),
+        'priceQuote': bidData['priceQuote'],
+        'customerName': bidData['customerName'] ?? 'Customer',
+        'customerPhone': bidData['customerPhone'] ?? '',
+        'serviceAddress': bidData['serviceAddress'] ?? '',
+      });
+
+      // Reject other bids for this request
+      final otherBids = await _firestore
+          .collection('service_bids')
+          .where('requestId', isEqualTo: requestId)
+          .where(FieldPath.documentId, isNotEqualTo: bidId)
+          .get();
+
+      final batch = _firestore.batch();
+      for (final doc in otherBids.docs) {
+        batch.update(doc.reference, {
+          'bidStatus': 'rejected',
+          'rejectedAt': FieldValue.serverTimestamp(),
+          'rejectionReason': 'Another bid was selected',
+        });
+      }
+      await batch.commit();
+
+      print('✅ Bid accepted with final schedule: $formattedSchedule');
+      return true;
+    } catch (e) {
+      print('❌ Error accepting bid with schedule: $e');
+      return false;
+    }
+  }
+
+  /// Accept a bid with simple service time text
+  static Future<bool> acceptBidWithScheduleText(
+    String bidId, 
+    String userId, 
+    String serviceTimeText,
+  ) async {
+    try {
+      print('🗓️ Accepting bid with service time: $bidId for user: $userId');
+      print('🗓️ Service time: $serviceTimeText');
+      
+      final bidDoc = await _firestore.collection('service_bids').doc(bidId).get();
+      if (!bidDoc.exists) {
+        throw Exception('Bid not found');
+      }
+
+      final bidData = bidDoc.data()!;
+      final requestId = bidData['requestId'];
+      final providerId = bidData['providerId'];
+
+      // Update the winning bid with service time
+      await _firestore.collection('service_bids').doc(bidId).update({
+        'bidStatus': 'accepted',
+        'acceptedAt': FieldValue.serverTimestamp(),
+        'finalServiceSchedule': serviceTimeText,
+      });
+
+      // Update the user request with final schedule
+      await _firestore.collection('user_requests').doc(requestId).update({
+        'status': 'assigned',
+        'assignedProviderId': providerId,
+        'selectedBidId': bidId,
+        'assignedAt': FieldValue.serverTimestamp(),
+        'finalServiceSchedule': serviceTimeText,
+      });
+
+      // Create assigned task record for provider
+      await _firestore.collection('assigned_tasks').add({
+        'requestId': requestId,
+        'bidId': bidId,
+        'providerId': providerId,
+        'userId': userId,
+        'finalServiceSchedule': serviceTimeText,
+        'taskStatus': 'scheduled',
+        'createdAt': FieldValue.serverTimestamp(),
+        'priceQuote': bidData['priceQuote'],
+      });
+
+      // Reject other bids for this request
+      final otherBids = await _firestore
+          .collection('service_bids')
+          .where('requestId', isEqualTo: requestId)
+          .where(FieldPath.documentId, isNotEqualTo: bidId)
+          .get();
+
+      final batch = _firestore.batch();
+      for (final doc in otherBids.docs) {
+        batch.update(doc.reference, {
+          'bidStatus': 'rejected',
+          'rejectedAt': FieldValue.serverTimestamp(),
+          'rejectionReason': 'Another bid was selected',
+        });
+      }
+      await batch.commit();
+
+      print('✅ Bid accepted with service time: $serviceTimeText');
+      return true;
+    } catch (e) {
+      print('❌ Error accepting bid with service time: $e');
+      return false;
+    }
+  }
+
   /// Get task status display info
-  static Map<String, dynamic> getTaskStatusInfo(String status) {
+  static Map<String, dynamic> getTaskStatusInfo(String status, {UserRequest? task}) {
     switch (status.toLowerCase()) {
       case 'pending':
         return {
@@ -264,11 +425,21 @@ class UserTaskService {
           'description': 'Looking for providers',
         };
       case 'matched':
+        String description = 'Providers found';
+        if (task != null) {
+          // Get matched providers information from user request
+          final matchedProviders = _getMatchedProvidersFromFirestore(task.requestId!);
+          // For now, show count from stored field or fallback
+          final providerCount = _getProviderCount(task);
+          if (providerCount > 0) {
+            description = '$providerCount provider${providerCount > 1 ? 's' : ''} found';
+          }
+        }
         return {
           'label': 'Matched',
           'color': Colors.blue,
           'icon': Icons.people,
-          'description': 'Providers found',
+          'description': description,
         };
       case 'bidding':
         return {
@@ -325,6 +496,39 @@ class UserTaskService {
       return '${difference.inMinutes}m';
     } else {
       return 'Expires soon';
+    }
+  }
+
+  /// Get provider count from user request
+  static int _getProviderCount(UserRequest task) {
+    // Check if matchedProviders field exists and has data
+    if (task.toFirestore()['matchedProviders'] is List) {
+      final matchedProviders = task.toFirestore()['matchedProviders'] as List;
+      return matchedProviders.length;
+    }
+    
+    // Fallback to matchCount field if available
+    if (task.toFirestore()['matchCount'] is int) {
+      return task.toFirestore()['matchCount'] as int;
+    }
+    
+    return 0;
+  }
+
+  /// Get matched providers information from Firestore (async helper for future use)
+  static Future<List<String>> _getMatchedProvidersFromFirestore(String requestId) async {
+    try {
+      final doc = await _firestore.collection('user_requests').doc(requestId).get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        if (data['matchedProviders'] is List) {
+          return List<String>.from(data['matchedProviders']);
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Error getting matched providers: $e');
+      return [];
     }
   }
 

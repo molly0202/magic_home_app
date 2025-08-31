@@ -2315,9 +2315,27 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                               ),
                             ),
                           ),
-                          Text(
-                            review['ratingStars'] ?? '⭐⭐⭐⭐⭐',
-                            style: const TextStyle(fontSize: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.thumb_up,
+                                  color: Colors.green,
+                                  size: 10,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '👍',
+                                  style: TextStyle(fontSize: 8),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -3322,13 +3340,13 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // Rating and Stats
+                      // Rating and Stats (using thumbs up system)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          _buildStatItem('${_providerStats?.averageRating.toStringAsFixed(1) ?? '4.8'}', 'Rating', Icons.star, Colors.orange),
-                          _buildStatItem('${_providerStats?.totalTasks ?? 45}', 'Jobs Done', Icons.work, Colors.blue),
-                          _buildStatItem('${_providerStats?.tasksThisMonth ?? 8}', 'This Month', Icons.trending_up, Colors.green),
+                          _buildStatItem('${data['thumbs_up_count'] ?? 0}', 'Thumbs Up', Icons.thumb_up, Colors.green),
+                          _buildStatItem('${data['total_jobs_completed'] ?? 0}', 'Jobs Done', Icons.work, Colors.blue),
+                          _buildStatItem('${_calculateSuccessRate(data)}%', 'Success Rate', Icons.trending_up, Colors.orange),
                         ],
                       ),
                     ],
@@ -3344,11 +3362,6 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 
                 // Company Description Section
                 _buildCompanyDescription(data),
-                
-                const SizedBox(height: 20),
-                
-                // Past Projects Section
-                _buildPastProjects(),
                 
                 const SizedBox(height: 20),
                 
@@ -3886,12 +3899,27 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  Row(
-                                    children: List.generate(5, (i) => Icon(
-                                      Icons.star,
-                                      size: 14,
-                                      color: i < (order['rating'] ?? 5) ? Colors.orange : Colors.grey[300],
-                                    )),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.thumb_up,
+                                          color: Colors.green,
+                                          size: 12,
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Text(
+                                          '👍',
+                                          style: TextStyle(fontSize: 10),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
@@ -4311,5 +4339,14 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         ],
       ),
     );
+  }
+
+  int _calculateSuccessRate(Map<String, dynamic> data) {
+    final totalJobs = data['total_jobs_completed'] ?? 0;
+    final thumbsUp = data['thumbs_up_count'] ?? 0;
+    
+    if (totalJobs == 0) return 0;
+    
+    return ((thumbsUp / totalJobs) * 100).round();
   }
 }

@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/user_request.dart';
 import '../../models/service_bid.dart';
 import '../../services/user_task_service.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../providers/exact_provider_profile_screen.dart';
 
 class ServiceQuotesScreen extends StatefulWidget {
   final UserRequest task;
@@ -543,12 +545,32 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                       const SizedBox(height: 16),
                     ],
                     
-                    // Action button
+                    // View Profile button (always available)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _viewProviderProfile(bid.providerId, companyName),
+                        icon: const Icon(Icons.person, size: 18),
+                        label: const Text('View Provider Profile'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFFBB04C),
+                          side: const BorderSide(color: Color(0xFFFBB04C)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    // Action buttons based on status
                     if (bid.bidStatus == 'pending' && widget.task.status != 'assigned') ...[
+                      // Accept Quote button
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: _isAcceptingBid ? null : () => _acceptBid(bid),
+                          onPressed: _isAcceptingBid ? null : () => _showTimeConfirmationDialog(bid),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
                             foregroundColor: Colors.white,
@@ -677,20 +699,99 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
     }
   }
 
-  Future<void> _acceptBid(ServiceBid bid) async {
+  Future<void> _showTimeConfirmationDialog(ServiceBid bid) async {
+    final TextEditingController timeController = TextEditingController();
+    
+    final result = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text(
+            'Confirm Service Time',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Please confirm when you\'d like the service to be performed:',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: timeController,
+                decoration: const InputDecoration(
+                  labelText: 'Service Date & Time',
+                  hintText: 'e.g., Tomorrow at 2 PM, Sept 7th at 10 AM, This weekend',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.schedule),
+                ),
+                textCapitalization: TextCapitalization.sentences,
+                maxLines: 2,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Examples: "Tomorrow at 2 PM", "Sept 7th at 10 AM", "This weekend morning"',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (timeController.text.trim().isNotEmpty) {
+                  Navigator.of(context).pop(timeController.text.trim());
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFBB04C),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Accept Quote'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != null && result.isNotEmpty) {
+      await _acceptBidWithTimeText(bid, result);
+    }
+  }
+
+  Future<void> _acceptBidWithTimeText(ServiceBid bid, String serviceTimeText) async {
     setState(() {
       _isAcceptingBid = true;
     });
 
     try {
-      final success = await UserTaskService.acceptBid(bid.bidId!, widget.user.uid);
+      print('🗓️ Accepting bid with service time: $serviceTimeText');
+
+      // Accept bid with service time text
+      final success = await UserTaskService.acceptBidWithScheduleText(
+        bid.bidId!,
+        widget.user.uid,
+        serviceTimeText,
+      );
       
       if (success) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Quote accepted successfully!'),
+            SnackBar(
+              content: Text('Quote accepted! Service scheduled for $serviceTimeText'),
               backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
             ),
           );
           
@@ -724,4 +825,73 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
       }
     }
   }
+
+  void _viewProviderProfile(String providerId, String providerName) {
+    // Navigate to dedicated provider profile view screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ExactProviderProfileScreen(
+          providerId: providerId,
+          providerName: providerName,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showProviderInfoDialog(String providerId, String providerName) async {
+    try {
+      final providerDetails = await UserTaskService.getProviderDetails(providerId);
+      
+      if (!mounted) return;
+      
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text(providerName),
+            content: providerDetails != null 
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Rating: ${providerDetails['rating'] ?? 'N/A'}'),
+                      Text('Jobs Completed: ${providerDetails['total_jobs_completed'] ?? 0}'),
+                      Text('Success Rate: ${_calculateSuccessRate(providerDetails)}%'),
+                      if (providerDetails['phone'] != null) ...[
+                        const SizedBox(height: 8),
+                        Text('Phone: ${providerDetails['phone']}'),
+                      ],
+                    ],
+                  )
+                : const Text('Loading provider information...'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading provider info: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  int _calculateSuccessRate(Map<String, dynamic> providerDetails) {
+    final totalJobs = providerDetails['total_jobs_completed'] ?? 0;
+    final thumbsUp = providerDetails['thumbs_up_count'] ?? 0;
+    
+    if (totalJobs == 0) return 0;
+    
+    return ((thumbsUp / totalJobs) * 100).round();
+  }
+
+
 }
