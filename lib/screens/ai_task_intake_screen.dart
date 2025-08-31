@@ -1336,22 +1336,26 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     final priceEstimate = state.priceEstimate ?? {'min': 100, 'max': 500};
     
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+      constraints: const BoxConstraints(maxHeight: 500), // Constrain max height
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Reduced vertical margin
+      child: SingleChildScrollView( // Make scrollable
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min, // Use minimum space needed
+            children: [
           const Text(
             'Service Request Summary',
             style: TextStyle(
@@ -1470,7 +1474,9 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                     ),
                   ),
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1587,256 +1593,274 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   }
   
   Widget _buildLocationFormSection() {
-    // Use persistent form controllers
+    // Use persistent form controllers - Make scrollable and more compact to prevent overflow
     
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+      constraints: const BoxConstraints(maxHeight: 400), // Constrain max height
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Reduced vertical margin
+      child: SingleChildScrollView( // Make scrollable
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            '📍 Service Location Details',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
-          
-          // Address Field
-          TextField(
-            controller: _addressController,
-            decoration: const InputDecoration(
-              labelText: 'Street Address *',
-              hintText: '123 Main Street',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.home),
-            ),
-          ),
-          const SizedBox(height: 12),
-          
-          // City and State Row
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min, // Use minimum space needed
             children: [
-              Expanded(
-                flex: 2,
-                child: TextField(
-                  controller: _cityController,
-                  decoration: const InputDecoration(
-                    labelText: 'City *',
-                    hintText: 'San Francisco',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.location_city),
-                  ),
+              const Text(
+                '📍 Service Location Details',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _stateController,
-                  decoration: const InputDecoration(
-                    labelText: 'State *',
-                    hintText: 'CA',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.map),
+              const SizedBox(height: 12), // Reduced spacing
+              
+              // Address Field
+              TextField(
+                controller: _addressController,
+                decoration: const InputDecoration(
+                  labelText: 'Street Address *',
+                  hintText: '123 Main Street',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.home),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Compact padding
+                ),
+              ),
+              const SizedBox(height: 8), // Reduced spacing
+              
+              // City and State Row
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _cityController,
+                      decoration: const InputDecoration(
+                        labelText: 'City *',
+                        hintText: 'San Francisco',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.location_city),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8), // Reduced spacing
+                  Expanded(
+                    child: TextField(
+                      controller: _stateController,
+                      decoration: const InputDecoration(
+                        labelText: 'State *',
+                        hintText: 'CA',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.map),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8), // Reduced spacing
+              
+              // Zipcode Field
+              TextField(
+                controller: _zipcodeController,
+                decoration: const InputDecoration(
+                  labelText: 'Zipcode *',
+                  hintText: '94102',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.local_post_office),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16), // Reduced spacing
+              
+              // Submit Button
+              ElevatedButton(
+                onPressed: () {
+                  // Validate required fields
+                  if (_addressController.text.trim().isEmpty ||
+                      _cityController.text.trim().isEmpty ||
+                      _stateController.text.trim().isEmpty ||
+                      _zipcodeController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please fill in all required fields'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+                  
+                  // Submit location data
+                  final locationData = {
+                    'address': _addressController.text.trim(),
+                    'city': _cityController.text.trim(),
+                    'state': _stateController.text.trim(),
+                    'zipcode': _zipcodeController.text.trim(),
+                  };
+                  
+                  _aiService.onLocationFormCompleted(locationData);
+                  
+                  setState(() {
+                    _showLocationForm = false;
+                    _showContactForm = true; // Show contact form next
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFBB04C),
+                  padding: const EdgeInsets.symmetric(vertical: 14), // Slightly reduced padding
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Continue to Contact Info',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          
-          // Zipcode Field
-          TextField(
-            controller: _zipcodeController,
-            decoration: const InputDecoration(
-              labelText: 'Zipcode *',
-              hintText: '94102',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.local_post_office),
-            ),
-            keyboardType: TextInputType.number,
-          ),
-          const SizedBox(height: 20),
-          
-          // Submit Button
-          ElevatedButton(
-            onPressed: () {
-              // Validate required fields
-              if (_addressController.text.trim().isEmpty ||
-                  _cityController.text.trim().isEmpty ||
-                  _stateController.text.trim().isEmpty ||
-                  _zipcodeController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please fill in all required fields'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-              
-              // Submit location data
-              final locationData = {
-                'address': _addressController.text.trim(),
-                'city': _cityController.text.trim(),
-                'state': _stateController.text.trim(),
-                'zipcode': _zipcodeController.text.trim(),
-              };
-              
-              _aiService.onLocationFormCompleted(locationData);
-              
-              setState(() {
-                _showLocationForm = false;
-                _showContactForm = true; // Show contact form next
-              });
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFBB04C),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text(
-              'Continue to Contact Info',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
   
   Widget _buildContactFormSection() {
-    // Use persistent form controllers
+    // Use persistent form controllers - Make scrollable and compact to prevent overflow
     
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            '📞 Contact Information',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
-          
-          // Phone Field
-          TextField(
-            controller: _phoneController,
-            decoration: const InputDecoration(
-              labelText: 'Phone Number *',
-              hintText: '+1 (555) 123-4567',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.phone),
-            ),
-            keyboardType: TextInputType.phone,
-          ),
-          const SizedBox(height: 12),
-          
-          // Email Field
-          TextField(
-            controller: _emailController,
-            decoration: const InputDecoration(
-              labelText: 'Email Address *',
-              hintText: 'your.email@example.com',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.email),
-            ),
-            keyboardType: TextInputType.emailAddress,
-          ),
-          const SizedBox(height: 20),
-          
-          // Submit Button
-          ElevatedButton(
-            onPressed: () {
-              // Validate required fields
-              if (_phoneController.text.trim().isEmpty ||
-                  _emailController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please fill in all required fields'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-              
-              // Basic email validation
-              if (!_emailController.text.contains('@') || !_emailController.text.contains('.')) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please enter a valid email address'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-              
-              // Submit contact data
-              final contactData = {
-                'tel': _phoneController.text.trim(),
-                'email': _emailController.text.trim(),
-              };
-              
-              _aiService.onContactFormCompleted(contactData);
-              
-              setState(() {
-                _showContactForm = false;
-                _showSummary = true; // Show summary next
-              });
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFBB04C),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+      constraints: const BoxConstraints(maxHeight: 320), // Constrain max height
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Reduced vertical margin
+      child: SingleChildScrollView( // Make scrollable
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
               ),
-            ),
-            child: const Text(
-              'Complete Service Request',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+            ],
           ),
-        ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min, // Use minimum space needed
+            children: [
+              const Text(
+                '📞 Contact Information',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 12), // Reduced spacing
+              
+              // Phone Field
+              TextField(
+                controller: _phoneController,
+                decoration: const InputDecoration(
+                  labelText: 'Phone Number *',
+                  hintText: '+1 (555) 123-4567',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.phone),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Compact padding
+                ),
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 8), // Reduced spacing
+              
+              // Email Field
+              TextField(
+                controller: _emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email Address *',
+                  hintText: 'your.email@example.com',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.email),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 16), // Reduced spacing
+              
+              // Submit Button
+              ElevatedButton(
+                onPressed: () {
+                  // Validate required fields
+                  if (_phoneController.text.trim().isEmpty ||
+                      _emailController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please fill in all required fields'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+                  
+                  // Basic email validation
+                  if (!_emailController.text.contains('@') || !_emailController.text.contains('.')) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please enter a valid email address'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+                  
+                  // Submit contact data
+                  final contactData = {
+                    'tel': _phoneController.text.trim(),
+                    'email': _emailController.text.trim(),
+                  };
+                  
+                  _aiService.onContactFormCompleted(contactData);
+                  
+                  setState(() {
+                    _showContactForm = false;
+                    _showSummary = true; // Show summary next
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFBB04C),
+                  padding: const EdgeInsets.symmetric(vertical: 14), // Slightly reduced padding
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Complete Service Request',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
