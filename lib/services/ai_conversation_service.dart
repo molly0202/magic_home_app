@@ -141,7 +141,7 @@ You are Magic Home assistant. Help users create service requests efficiently.
 CUSTOMER PROFILE: Your customers are often new homeowners with limited knowledge about home construction, repairs, and maintenance. They need guidance and suggestions to properly describe their issues.
 
 CONVERSATION FLOW - FOLLOW STRICTLY:
-1. DISCOVER (Step 0-1): What service do you need?
+1. DISCOVER (Step 0-1): What service do you need? Then ask SERVICE-SPECIFIC follow-up question
 2. DETAILS (Step 2): Get specific problem details WITH GUIDED OPTIONS
 3. PHOTOS (Step 3): Guide to photo upload - MAX 2 attempts then proceed
 4. SCHEDULE (Step 4): Set availability - MAX 2 attempts then proceed
@@ -151,6 +151,18 @@ CONVERSATION FLOW - FOLLOW STRICTLY:
 8. CONFIRM (Step 8): Show complete summary
 
 SERVICE CATEGORIES: Cleaning, Plumbing, Electrical, HVAC, Appliance Repair, Handyman, Landscaping, Pest Control, Roofing, Painting
+
+SERVICE-SPECIFIC SECOND QUESTIONS (Step 1):
+- Plumbing: "Great choice! Plumbing issues can be tricky. Is this about a leak, clog, installation, or something not working properly? What's going on with your plumbing?"
+- Electrical: "Perfect! Electrical work needs the right expertise. Are you dealing with outlets, lighting, circuit issues, or an installation? Tell me what's happening!"
+- HVAC: "Smart! HVAC systems are complex. Is your heating, cooling, or ventilation not working right? What temperatures or comfort issues are you experiencing?"
+- Appliance Repair: "Good call! Which appliance is giving you trouble? Is it your refrigerator, washer, dryer, dishwasher, or something else? What's it doing (or not doing)?"
+- Cleaning: "Excellent! A clean home is a happy home. Are you looking for regular cleaning, deep cleaning, move-in/out, or post-construction cleanup? What areas need attention?"
+- Handyman: "Perfect! Handyman services cover so much. Are you looking to fix something broken, install something new, or tackle a home improvement project? What needs your attention?"
+- Landscaping: "Great choice! Your outdoor space deserves care. Is this about lawn maintenance, garden design, tree work, or hardscaping? What's your vision for the space?"
+- Pest Control: "Smart move! Pest issues need quick attention. Are you seeing specific pests like ants, mice, or insects? Is this for prevention or treating an active problem?"
+- Roofing: "Important! Your roof protects everything below. Are you noticing leaks, missing shingles, storm damage, or planning maintenance? What's happening up there?"
+- Painting: "Fantastic! Fresh paint transforms spaces. Are you thinking interior or exterior? Is this for a single room, whole house, or touch-up work? What's your painting project?"
 
 GUIDANCE FOR NEW HOMEOWNERS:
 - Always provide 2-3 common issue examples for their service category
@@ -165,14 +177,15 @@ RULES:
 - Keep responses SHORT (1 sentence max)
 - Ask ONE question at a time
 - NEVER repeat the same question
-- Progress to step 3 automatically for at most 5 rounds of complete conversations about what's going on (after that, user must explicitly say "done" to move to step 4)
+- Step 1: ALWAYS use the SERVICE-SPECIFIC SECOND QUESTION from the list above based on detected service category
+- Step 2: After 2-3 conversation rounds in details gathering, automatically advance to photo upload
 - Step 2: Always provide 2-3 SPECIFIC examples for the service category to guide new homeowners
 - Step 3: Say "Photos are helpful! Would you like to upload some?" then TRIGGER photo upload
 - Step 4: Say "When works for you?" then TRIGGER calendar
 - If user says "skip" or "later" - move to next step immediately
 
 STEP TRIGGERS:
-- Step 3: After asking about photos MAX 2 times, automatically call photo upload UI
+- Step 3: After asking about photos MAX 5 times, automatically call photo upload UI
 - Step 4: After asking about schedule MAX 2 times, automatically call calendar UI
 - Step 5: After availability set, trigger location form UI
 - Step 6: After location form completed, trigger contact form UI
@@ -458,10 +471,15 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         contextualMessage += " [Step 0: Identify service - be brief]";
         break;
       case 1:
-        contextualMessage += " [Step 1: Get details with GUIDED OPTIONS - provide 2-3 specific examples for ${_currentState.serviceCategory}, attempt $attempts/2]";
+        // Provide the exact service-specific question for the AI to ask
+        String serviceSpecificQuestion = _getServiceSpecificSecondQuestion(_currentState.serviceCategory);
+        contextualMessage += " [Step 1: Ask this EXACT question: \"$serviceSpecificQuestion\"]";
         break;
       case 2:
-        contextualMessage += " [Step 2: Move to photo upload - be brief]";
+        // Count Step 2 conversation rounds for details gathering
+        String step2Key = 'step_2_rounds';
+        int step2Rounds = _currentState.extractedInfo[step2Key] ?? 0;
+        contextualMessage += " [Step 2: Details gathering - Round ${step2Rounds + 1}/3. After 3 rounds, auto-advance to photos]";
         break;
       case 3:
         contextualMessage += " [Step 3: Photo upload - attempt $attempts/2, if >=2 say 'Photos are helpful! Upload some?' and trigger upload]";
@@ -512,9 +530,19 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
       _currentState.conversationStep = 2;
         break;
       case 2:
-        // Always move to photo after details
-      _currentState.conversationStep = 3;
-        _currentState.photoUploadRequested = true;
+        // Count Step 2 conversation rounds and auto-advance after 3 rounds
+        String step2Key = 'step_2_rounds';
+        int step2Rounds = _currentState.extractedInfo[step2Key] ?? 0;
+        step2Rounds++;
+        _currentState.extractedInfo[step2Key] = step2Rounds;
+        
+        // Auto-advance to photos after 3 conversation rounds in details
+        if (step2Rounds >= 3) {
+          _currentState.conversationStep = 3;
+          _currentState.photoUploadRequested = true;
+          print('📝 Step 2: Auto-advancing to photos after $step2Rounds rounds of details');
+        }
+        // Otherwise stay in step 2 for more details
         break;
       case 3:
         // Only move to scheduling if user explicitly says they're done with photos
@@ -636,7 +664,9 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     if (_currentState.conversationStep == 1) {
         _currentState.problemDescription = input;
         _currentState.conversationStep = 2;
-      return "Great! Photos help professionals provide better estimates. Would you like to upload some?";
+        // Start Step 2 conversation rounds tracking
+        _currentState.extractedInfo['step_2_rounds'] = 0;
+      return _getGuidedServiceOptions(); // Ask for more specific details
     }
     
     // More concise mock flow with attempt tracking
@@ -644,9 +674,24 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     int attempts = _currentState.extractedInfo[stepKey] ?? 0;
     
     if (_currentState.conversationStep == 2) {
-      _currentState.photoUploadRequested = true;
-      _currentState.conversationStep = 3;
-      return "Excellent! Photos help providers give accurate quotes. Ready to upload some?";
+      // Handle Step 2 conversation rounds for details gathering
+      String step2Key = 'step_2_rounds';
+      int step2Rounds = _currentState.extractedInfo[step2Key] ?? 0;
+      step2Rounds++;
+      _currentState.extractedInfo[step2Key] = step2Rounds;
+      
+      // Store the user's response
+      _currentState.serviceAnswers['details_round_$step2Rounds'] = input;
+      
+      // After 3 rounds, auto-advance to photos
+      if (step2Rounds >= 3) {
+        _currentState.conversationStep = 3;
+        _currentState.photoUploadRequested = true;
+        return "Perfect! I have enough details now. Photos would really help professionals provide accurate quotes. Ready to upload some?";
+      } else {
+        // Continue gathering more specific details
+        return _getFollowUpDetailsQuestion(step2Rounds);
+      }
     }
     
     if (_currentState.conversationStep == 3) {
@@ -716,16 +761,27 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
       case 1:
         // Step 2: Service Details with Guided Options for New Homeowners
         _currentState.conversationStep = 2;
+        // Initialize Step 2 conversation rounds tracking
+        _currentState.extractedInfo['step_2_rounds'] = 0;
         return _getGuidedServiceOptions();
         
       case 2:
-        // Continue collecting service details
-        _currentState.serviceAnswers[_getCurrentQuestionKey()] = input;
-        if (_needMoreServiceDetails()) {
-          return _getNextServiceQuestion();
-        } else {
+        // Handle Step 2 conversation rounds for details gathering  
+        String step2Key = 'step_2_rounds';
+        int step2Rounds = _currentState.extractedInfo[step2Key] ?? 0;
+        step2Rounds++;
+        _currentState.extractedInfo[step2Key] = step2Rounds;
+        
+        // Store the user's response
+        _currentState.serviceAnswers['details_round_$step2Rounds'] = input;
+        
+        // After 3 rounds, auto-advance to photos
+        if (step2Rounds >= 3) {
           _currentState.conversationStep = 3;
-          return "Perfect! Photos really help professionals give accurate estimates. Would you like to upload some photos of the issue? It's optional but recommended.";
+          return "Perfect! I have enough details now. Photos really help professionals give accurate estimates. Would you like to upload some photos of the issue?";
+        } else {
+          // Continue gathering more specific details
+          return _getFollowUpDetailsQuestion(step2Rounds);
         }
         
       case 3:
@@ -1217,7 +1273,33 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
   }
 
   String _detectServiceCategory(String input) {
-    // Use scoring system for better category detection
+    String lowerInput = input.toLowerCase().trim();
+    
+    print('🔍 Detecting service category for input: "$lowerInput"');
+    
+    // FIRST: Check for exact service category matches (from service box clicks)
+    final exactCategories = {
+      'cleaning': 'Cleaning',
+      'plumbing': 'Plumbing', 
+      'electrical': 'Electrical',
+      'hvac': 'HVAC',
+      'appliance repair': 'Appliance Repair',
+      'appliancerepair': 'Appliance Repair', // Handle no space version
+      'handyman': 'Handyman',
+      'landscaping': 'Landscaping',
+      'pest control': 'Pest Control',
+      'pestcontrol': 'Pest Control', // Handle no space version
+      'roofing': 'Roofing',
+      'painting': 'Painting'
+    };
+    
+    if (exactCategories.containsKey(lowerInput)) {
+      String detectedCategory = exactCategories[lowerInput]!;
+      print('✅ Exact match found: "$lowerInput" -> "$detectedCategory"');
+      return detectedCategory;
+    }
+    
+    // SECOND: Use scoring system for natural language descriptions
     final categoryScores = _calculateCategoryScores(input);
     
     // Find the category with the highest score
@@ -1232,7 +1314,9 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     });
     
     // Return best category if confidence is high enough, otherwise default to Handyman
-    return (highestScore > 0.3) ? bestCategory! : 'Handyman';
+    String finalCategory = (highestScore > 0.3) ? bestCategory! : 'Handyman';
+    print('📊 Scoring result: Best="$bestCategory" (score: $highestScore) -> Final: "$finalCategory"');
+    return finalCategory;
   }
 
   Map<String, double> _calculateCategoryScores(String input) {
@@ -1242,50 +1326,50 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     // Define keywords and their weights for each category
     Map<String, Map<String, double>> categoryKeywords = {
       'Cleaning': {
-        'clean': 1.0, 'dirty': 0.8, 'dust': 0.7, 'vacuum': 0.9, 'maid': 1.0, 'tidy': 0.8,
+        'cleaning': 1.0, 'clean': 1.0, 'dirty': 0.8, 'dust': 0.7, 'vacuum': 0.9, 'maid': 1.0, 'tidy': 0.8,
         'sanitize': 0.9, 'scrub': 0.8, 'sweep': 0.7, 'mop': 0.8, 'disinfect': 0.9,
         'housekeeping': 1.0, 'spotless': 0.8, 'polish': 0.7, 'organize': 0.6
       },
       'Plumbing': {
-        'leak': 1.0, 'pipe': 0.9, 'drain': 0.9, 'toilet': 0.8, 'faucet': 0.8, 'plumb': 1.0,
+        'plumbing': 1.0, 'plumber': 1.0, 'leak': 1.0, 'pipe': 0.9, 'drain': 0.9, 'toilet': 0.8, 'faucet': 0.8, 'plumb': 1.0,
         'water': 0.6, 'sink': 0.7, 'shower': 0.8, 'bathtub': 0.8, 'clog': 0.9,
         'pressure': 0.7, 'hot water': 0.8, 'cold water': 0.7, 'sewer': 0.9
       },
       'Electrical': {
-        'electric': 1.0, 'power': 0.8, 'outlet': 0.9, 'light': 0.7, 'wiring': 1.0, 'switch': 0.8,
+        'electrical': 1.0, 'electrician': 1.0, 'electric': 1.0, 'power': 0.8, 'outlet': 0.9, 'light': 0.7, 'wiring': 1.0, 'switch': 0.8,
         'circuit': 0.9, 'breaker': 0.9, 'voltage': 0.8, 'amperage': 0.8, 'shock': 0.7,
-        'electrician': 1.0, 'generator': 0.8, 'panel': 0.8, 'meter': 0.7
+        'generator': 0.8, 'panel': 0.8, 'meter': 0.7
       },
       'HVAC': {
-        'heat': 0.8, 'cool': 0.8, 'hvac': 1.0, 'furnace': 0.9, 'air conditioning': 1.0, 'ac': 0.8,
+        'hvac': 1.0, 'heat': 0.8, 'cool': 0.8, 'furnace': 0.9, 'air conditioning': 1.0, 'ac': 0.8,
         'temperature': 0.7, 'thermostat': 0.9, 'duct': 0.8, 'ventilation': 0.9,
         'filter': 0.7, 'humidity': 0.7, 'refrigerant': 0.9, 'compressor': 0.8
       },
       'Appliance Repair': {
-        'appliance': 1.0, 'refrigerator': 0.9, 'washer': 0.9, 'dryer': 0.9, 'dishwasher': 0.9, 'oven': 0.8,
+        'appliance repair': 1.0, 'appliance': 1.0, 'refrigerator': 0.9, 'washer': 0.9, 'dryer': 0.9, 'dishwasher': 0.9, 'oven': 0.8,
         'microwave': 0.8, 'stove': 0.8, 'freezer': 0.8, 'garbage disposal': 0.9,
         'repair': 0.7, 'broken': 0.6, 'not working': 0.7, 'malfunctioning': 0.8
       },
       'Landscaping': {
-        'lawn': 0.9, 'garden': 0.9, 'yard': 0.8, 'tree': 0.7, 'landscape': 1.0, 'grass': 0.8,
+        'landscaping': 1.0, 'lawn': 0.9, 'garden': 0.9, 'yard': 0.8, 'tree': 0.7, 'landscape': 1.0, 'grass': 0.8,
         'mowing': 0.9, 'trimming': 0.8, 'pruning': 0.8, 'weeds': 0.7, 'mulch': 0.7,
         'irrigation': 0.8, 'sprinkler': 0.8, 'hedge': 0.7, 'bushes': 0.7
       },
       'Pest Control': {
-        'pest': 1.0, 'bug': 0.8, 'ant': 0.8, 'roach': 0.9, 'exterminate': 1.0,
+        'pest control': 1.0, 'pest': 1.0, 'bug': 0.8, 'ant': 0.8, 'roach': 0.9, 'exterminate': 1.0,
         'insect': 0.8, 'mice': 0.9, 'rat': 0.9, 'termite': 0.9, 'spider': 0.7,
         'cockroach': 0.9, 'infestation': 1.0, 'fumigation': 1.0, 'poison': 0.7
       },
       'Roofing': {
-        'roof': 1.0, 'gutter': 0.8, 'shingle': 0.9, 'leak': 0.7, 'tile': 0.7,
+        'roofing': 1.0, 'roof': 1.0, 'gutter': 0.8, 'shingle': 0.9, 'leak': 0.7, 'tile': 0.7,
         'rafter': 0.8, 'chimney': 0.7, 'flashing': 0.8, 'eaves': 0.7, 'downspout': 0.8
       },
       'Painting': {
-        'paint': 1.0, 'wall': 0.7, 'color': 0.6, 'brush': 0.8, 'roller': 0.8,
+        'painting': 1.0, 'paint': 1.0, 'wall': 0.7, 'color': 0.6, 'brush': 0.8, 'roller': 0.8,
         'primer': 0.9, 'ceiling': 0.7, 'trim': 0.7, 'exterior': 0.8, 'interior': 0.8
       },
       'Handyman': {
-        'fix': 0.8, 'repair': 0.7, 'install': 0.8, 'replace': 0.7, 'maintenance': 0.8,
+        'handyman': 1.0, 'fix': 0.8, 'repair': 0.7, 'install': 0.8, 'replace': 0.7, 'maintenance': 0.8,
         'broken': 0.6, 'assembly': 0.7, 'mounting': 0.7, 'general': 0.6
       }
     };
@@ -1394,6 +1478,20 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
       if (_currentState.serviceDescription == null || _currentState.serviceDescription!.length < input.length) {
         _currentState.serviceDescription = input;
       }
+    }
+  }
+
+  // Generate follow-up questions for Step 2 details gathering rounds
+  String _getFollowUpDetailsQuestion(int roundNumber) {
+    switch (roundNumber) {
+      case 1:
+        return _getGuidedServiceOptions(); // First follow-up, use guided options
+      case 2:
+        return "Can you tell me more about when this started happening or how urgent this is?";
+      case 3:
+        return "Any other details that might help a professional understand your situation better?";
+      default:
+        return "Perfect! Let's move on to photos.";
     }
   }
 
