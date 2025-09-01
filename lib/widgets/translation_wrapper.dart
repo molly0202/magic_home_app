@@ -39,7 +39,7 @@ extension WidgetTranslation on Widget {
     return TranslationWrapper(child: this);
   }
   
-  Widget withTranslation({bool showFloatingButton = true}) {
+  Widget withTranslationButton({bool showFloatingButton = true}) {
     return TranslationWrapper(
       showFloatingButton: showFloatingButton,
       child: this,

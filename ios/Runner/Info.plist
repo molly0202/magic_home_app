@@ -84,5 +84,7 @@
 	<string>We need access to your photo library for identity verification and to upload photos of your service needs.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>We need access to your contacts to find your friends on Magic Home</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need access to your location to find nearby service providers and calculate accurate service distances.</string>
 </dict>
 </plist> 

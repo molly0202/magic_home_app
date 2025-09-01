@@ -17,6 +17,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../services/reviews_service.dart';
 import '../../widgets/translatable_text.dart';
+import '../../services/in_app_notification_service.dart';
 import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
@@ -1516,10 +1517,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildDiscoverScreen() {
-    return const Center(
-      child: TranslatableText(
-        'Discover',
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const TranslatableText(
+            'Discover',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 40),
+          
+          // Test notification button (for development)
+          ElevatedButton.icon(
+            onPressed: () {
+              InAppNotificationService().showTestNotification(context);
+            },
+            icon: const Icon(Icons.notifications_active),
+            label: const TranslatableText('Test Quote Notification'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

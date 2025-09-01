@@ -10,6 +10,7 @@ import 'screens/bidding/provider_bid_screen.dart';
 import 'screens/bidding/bid_comparison_screen.dart';
 import 'services/notification_service.dart';
 import 'services/translation_service.dart';
+import 'services/in_app_notification_service.dart';
 import 'models/user_request.dart';
 import 'widgets/floating_translation_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
@@ -116,6 +117,11 @@ class _MagicHomeAppState extends State<MagicHomeApp> {
       ),
       home: _isLoading ? const LoadingScreen() : const WelcomeScreen(),
       builder: (context, child) {
+        // Initialize in-app notifications when the app is built
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          InAppNotificationService().initialize(context);
+        });
+        
         // Wrap the entire app with translation widget
         return FloatingTranslationWidget(child: child!);
       },
