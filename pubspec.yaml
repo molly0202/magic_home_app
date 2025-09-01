@@ -51,6 +51,7 @@ dependencies:
   table_calendar: ^3.0.9
   speech_to_text: ^7.1.1
   google_maps_flutter: ^2.12.3
+  translator: ^1.0.3+1
   
   # Firebase - temporarily disable Auth
   # firebase_auth: ^4.10.0

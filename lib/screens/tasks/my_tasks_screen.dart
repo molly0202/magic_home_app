@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user_request.dart';
 import '../../services/user_task_service.dart';
+import '../../widgets/translatable_text.dart';
 import 'task_detail_screen.dart';
 
 import '../reviews/customer_review_screen.dart';
@@ -535,7 +536,7 @@ class _MyTasksScreenState extends State<MyTasksScreen>
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
+                          child: TranslatableText(
                             'Provider assigned - Work in progress',
                             style: TextStyle(
                               fontSize: 14,
@@ -568,7 +569,7 @@ class _MyTasksScreenState extends State<MyTasksScreen>
                             Icons.visibility,
                             size: 16,
                           ),
-                          label: const Text('View Details'),
+                          label: const TranslatableText('View Details'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.green[700],
                             side: BorderSide(color: Colors.green[300]!),
@@ -617,7 +618,7 @@ class _MyTasksScreenState extends State<MyTasksScreen>
                         Icons.rate_review,
                         size: 16,
                       ),
-                      label: const Text('Add Review'),
+                      label: const TranslatableText('Add Review'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFFFBB04C),
                         side: const BorderSide(color: Color(0xFFFBB04C)),
@@ -649,7 +650,7 @@ class _MyTasksScreenState extends State<MyTasksScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              TranslatableText(
                 'Are you sure you want to mark this task as complete?',
                 style: TextStyle(
                   fontSize: 16,
@@ -688,7 +689,7 @@ class _MyTasksScreenState extends State<MyTasksScreen>
                 ),
               ),
               const SizedBox(height: 12),
-              Text(
+              TranslatableText(
                 'This will move the task to your completed tasks and notify the provider.',
                 style: TextStyle(
                   fontSize: 14,
@@ -700,7 +701,7 @@ class _MyTasksScreenState extends State<MyTasksScreen>
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(
+              child: TranslatableText(
                 'Cancel',
                 style: TextStyle(
                   color: Colors.grey[600],

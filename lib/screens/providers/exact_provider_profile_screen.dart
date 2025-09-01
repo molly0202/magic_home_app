@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/reviews_service.dart';
+import '../../widgets/translatable_text.dart';
 
 class ExactProviderProfileScreen extends StatefulWidget {
   final String providerId;
@@ -215,7 +216,7 @@ class _ExactProviderProfileScreenState extends State<ExactProviderProfileScreen>
           ),
         ),
         const SizedBox(height: 4),
-        Text(
+        TranslatableText(
           label,
           style: TextStyle(
             fontSize: 12,
@@ -245,7 +246,7 @@ class _ExactProviderProfileScreenState extends State<ExactProviderProfileScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'Recommended by',
             style: TextStyle(
               fontSize: 18,
@@ -370,7 +371,7 @@ class _ExactProviderProfileScreenState extends State<ExactProviderProfileScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'About Our Service',
             style: TextStyle(
               fontSize: 18,
@@ -412,7 +413,7 @@ class _ExactProviderProfileScreenState extends State<ExactProviderProfileScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'Customer Reviews',
             style: TextStyle(
               fontSize: 18,

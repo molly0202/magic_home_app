@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/user_request.dart';
 import '../../models/bidding_session.dart';
 import '../../services/user_task_service.dart';
+import '../../widgets/translatable_text.dart';
 import 'service_quotes_screen.dart';
 
 class TaskDetailScreen extends StatefulWidget {
@@ -287,7 +288,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Text(
+                child: const TranslatableText(
                   'View Quote Details',
                   style: TextStyle(
                     fontSize: 16,
@@ -320,7 +321,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'Request Details:',
             style: TextStyle(
               fontSize: 16,
@@ -367,7 +368,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              const TranslatableText(
                 'Contact:',
                 style: TextStyle(
                   fontSize: 16,
@@ -442,7 +443,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'Address:',
             style: TextStyle(
               fontSize: 16,
@@ -496,7 +497,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'Availability',
             style: TextStyle(
               fontSize: 16,
@@ -605,7 +606,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                const TranslatableText(
                   'Your Confirmed Schedule:',
                   style: TextStyle(
                     fontSize: 12,
@@ -677,7 +678,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'Detailed Description',
             style: TextStyle(
               fontSize: 16,
@@ -717,7 +718,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'Photos & Videos',
             style: TextStyle(
               fontSize: 16,
@@ -770,7 +771,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         children: [
           SizedBox(
             width: 80,
-            child: Text(
+            child: TranslatableText(
               '$label:',
               style: TextStyle(
                 fontSize: 14,

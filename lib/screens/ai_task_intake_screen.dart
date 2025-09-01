@@ -9,6 +9,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'dart:io';
 import '../services/ai_conversation_service.dart';
 import '../services/user_request_service.dart';
+import '../widgets/translatable_text.dart';
 
 class AITaskIntakeScreen extends StatefulWidget {
   final User? user;
@@ -721,7 +722,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                     ),
                     const SizedBox(height: 8),
                   ],
-                  Text(
+                  TranslatableText(
                     message.content,
                     style: TextStyle(
                       fontSize: isServiceOptions ? 15 : 16,
@@ -859,7 +860,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
             ),
             const SizedBox(width: 6),
             Flexible(
-              child: Text(
+              child: TranslatableText(
                 serviceType,
                 style: const TextStyle(
                   fontSize: 13,
@@ -1002,7 +1003,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          const TranslatableText(
             'Upload Photos',
             style: TextStyle(
               fontSize: 18,
@@ -1031,7 +1032,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.camera_alt),
-                  label: Text(_isLoading ? 'Uploading...' : 
+                  label: TranslatableText(_isLoading ? 'Uploading...' : 
                     (_aiService.currentState.mediaUrls.isEmpty ? 'Add Photos' : 'Add More')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFBB04C),
@@ -1383,7 +1384,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: Text('Continue (${_selectedDates.length} date${_selectedDates.length == 1 ? '' : 's'} selected)'),
+            child: TranslatableText('Continue (${_selectedDates.length} date${_selectedDates.length == 1 ? '' : 's'} selected)'),
           ),
           ],
         ),
@@ -1416,7 +1417,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-          const Text(
+          const TranslatableText(
             'Service Request Summary',
             style: TextStyle(
               fontSize: 18,
@@ -1433,7 +1434,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           // Service Details
           if (state.serviceAnswers.isNotEmpty) ...[
             const SizedBox(height: 12),
-            const Text('Service Details:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const TranslatableText('Service Details:', style: TextStyle(fontWeight: FontWeight.bold)),
             ...state.serviceAnswers.entries.map((entry) => 
               Padding(
                 padding: const EdgeInsets.only(left: 16, top: 4),
@@ -1478,7 +1479,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                const TranslatableText(
                   'Estimated Price Range',
                   style: TextStyle(
                     fontSize: 16,
@@ -1526,7 +1527,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text(
+                : const TranslatableText(
                     'Submit Service Request',
                     style: TextStyle(
                       fontSize: 16,
@@ -1546,7 +1547,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          TranslatableText(
             title,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
@@ -1776,7 +1777,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: const Text(
+            child: const TranslatableText(
               'Continue to Contact Info',
               style: TextStyle(
                 fontSize: 16,

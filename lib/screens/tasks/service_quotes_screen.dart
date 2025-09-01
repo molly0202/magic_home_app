@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/user_request.dart';
 import '../../models/service_bid.dart';
 import '../../services/user_task_service.dart';
+import '../../widgets/translatable_text.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/exact_provider_profile_screen.dart';
 
@@ -28,7 +29,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text(
+        title: const TranslatableText(
           'Service Quotes',
           style: TextStyle(
             fontWeight: FontWeight.bold,
@@ -87,7 +88,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'Estimated Price Range',
             style: TextStyle(
               fontSize: 18,
@@ -146,7 +147,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                                 color: Color(0xFFFBB04C),
                               ),
                             ),
-                            const Text(
+                            const TranslatableText(
                               'Market Average',
                               style: TextStyle(
                                 fontSize: 10,
@@ -252,7 +253,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                     color: Colors.grey[400],
                   ),
                   const SizedBox(height: 16),
-                  Text(
+                  TranslatableText(
                     'Waiting for Quotes',
                     style: TextStyle(
                       fontSize: 18,
@@ -362,7 +363,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          Text(
+                          TranslatableText(
                             '$distance • $reviewCount reviews',
                             style: TextStyle(
                               fontSize: 12,
@@ -395,7 +396,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          const Text(
+                          const TranslatableText(
                             'Excellent Match',
                             style: TextStyle(
                               color: Colors.white,
@@ -418,7 +419,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                     // Price and benchmark
                     Row(
                       children: [
-                        Text(
+                        TranslatableText(
                           'Quote',
                           style: TextStyle(
                             fontSize: 14,
@@ -444,7 +445,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                             color: priceBenchmark['color'].withOpacity(0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(
+                          child: TranslatableText(
                             priceBenchmark['label'],
                             style: TextStyle(
                               fontSize: 12,
@@ -462,7 +463,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                     if (provider != null) ...[
                       Row(
                         children: [
-                          Text(
+                          TranslatableText(
                             'Recommended by 4 people in your network',
                             style: TextStyle(
                               fontSize: 12,
@@ -523,7 +524,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                     
                     // Availability and message
                     if (bid.availability.isNotEmpty) ...[
-                      Text(
+                      TranslatableText(
                         'Availability: ${bid.availability}',
                         style: const TextStyle(
                           fontSize: 14,
@@ -551,7 +552,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                       child: OutlinedButton.icon(
                         onPressed: () => _viewProviderProfile(bid.providerId, companyName),
                         icon: const Icon(Icons.person, size: 18),
-                        label: const Text('View Provider Profile'),
+                        label: const TranslatableText('View Provider Profile'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFFFBB04C),
                           side: const BorderSide(color: Color(0xFFFBB04C)),
@@ -588,7 +589,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Text(
+                              : const TranslatableText(
                                   'Accept Quote',
                                   style: TextStyle(
                                     fontSize: 16,
@@ -614,7 +615,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                               size: 20,
                             ),
                             SizedBox(width: 8),
-                            Text(
+                            TranslatableText(
                               'Quote Accepted',
                               style: TextStyle(
                                 fontSize: 16,
@@ -643,7 +644,7 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(
+      child: TranslatableText(
         text,
         style: TextStyle(
           fontSize: 10,

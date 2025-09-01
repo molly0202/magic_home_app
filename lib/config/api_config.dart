@@ -10,6 +10,9 @@ class ApiConfig {
   // Google Maps API Configuration
   static const String googleMapsApiKey = 'YOUR_GOOGLE_MAPS_API_KEY';
   
+  // Google Translate API Configuration
+  static const String googleTranslateApiKey = 'YOUR_GOOGLE_TRANSLATE_API_KEY';
+  
   // Firebase Functions Configuration
   static const String firebaseFunctionsUrl = 'https://us-central1-magic-home-01.cloudfunctions.net';
   static const String firebaseRegion = 'us-central1';
@@ -19,6 +22,7 @@ class ApiConfig {
   static bool get isOpenAiConfigured => openAiApiKey != 'YOUR_OPENAI_API_KEY' && openAiApiKey.isNotEmpty;
   static bool get isFirebaseFunctionsConfigured => firebaseFunctionsUrl != 'https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net';
   static bool get isGoogleMapsConfigured => googleMapsApiKey != 'YOUR_GOOGLE_MAPS_API_KEY' && googleMapsApiKey.isNotEmpty;
+  static bool get isGoogleTranslateConfigured => googleTranslateApiKey != 'YOUR_GOOGLE_TRANSLATE_API_KEY' && googleTranslateApiKey.isNotEmpty;
   
   // Check if any AI service is configured
   static bool get isAnyAiConfigured => isGeminiConfigured || isOpenAiConfigured;

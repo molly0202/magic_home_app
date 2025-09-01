@@ -7,7 +7,7 @@ import '../../services/notification_service.dart';
 import '../../services/hsp_home_service.dart';
 import '../../models/provider_stats.dart';
 import '../../models/service_order.dart';
-
+import '../../widgets/translatable_text.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -805,15 +805,15 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             ),
           ),
             const SizedBox(height: 4),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
+                  TranslatableText(
+          title,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+            fontWeight: FontWeight.w500,
           ),
+          textAlign: TextAlign.center,
+        ),
         ],
       ),
     );
@@ -2158,7 +2158,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              TranslatableText(
                 'Recent Customer Reviews',
                 style: TextStyle(
                   fontSize: 18,
@@ -3423,7 +3423,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
+        TranslatableText(
           label,
           style: TextStyle(
             fontSize: 12,
@@ -3453,7 +3453,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'Recommended by',
             style: TextStyle(
               fontSize: 18,
@@ -3817,7 +3817,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'Customer Reviews',
             style: TextStyle(
               fontSize: 18,

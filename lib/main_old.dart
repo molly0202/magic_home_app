@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
@@ -11,7 +12,6 @@ import 'screens/bidding/bid_comparison_screen.dart';
 import 'services/notification_service.dart';
 import 'services/translation_service.dart';
 import 'models/user_request.dart';
-import 'widgets/floating_translation_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -35,15 +35,15 @@ void main() async {
   await Firebase.initializeApp();
   print('Firebase initialized successfully');
   
-  // Initialize translation service
-  await TranslationService().initialize();
-  print('Translation service initialized');
-  
   // Set the background messaging handler early on
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   
   // Set up notification navigation callback
   NotificationService.setNavigationCallback(_handleNotificationNavigation);
+  
+  // Initialize translation service
+  await TranslationService().initialize();
+  print('Translation service initialized');
   
   runApp(const MagicHomeApp());
 }
@@ -56,6 +56,109 @@ class MagicHomeApp extends StatefulWidget {
 }
 
 class _MagicHomeAppState extends State<MagicHomeApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Listen to translation service changes
+    TranslationService().addListener(_onLanguageChanged);
+  }
+
+  @override
+  void dispose() {
+    TranslationService().removeListener(_onLanguageChanged);
+    super.dispose();
+  }
+
+  void _onLanguageChanged() {
+    setState(() {
+      // Rebuild app when language changes
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Magic Home',
+      navigatorKey: navigatorKey,
+      
+      // Internationalization support
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: TranslationService.supportedLocales,
+      locale: TranslationService().currentLocale,
+      
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFBB04C)),
+        useMaterial3: true,
+      ),
+      home: const AuthWrapper(),
+    );
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<firebase_auth.User?>(
+      stream: firebase_auth.FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFFFBB04C),
+              ),
+            ),
+          );
+        }
+
+        if (snapshot.hasData) {
+          return _buildHomeScreen(snapshot.data!);
+        } else {
+          return const WelcomeScreen();
+        }
+      },
+    );
+  }
+
+  Widget _buildHomeScreen(firebase_auth.User user) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+      builder: (context, userSnapshot) {
+        if (userSnapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFFFBB04C),
+              ),
+            ),
+          );
+        }
+
+        if (userSnapshot.hasData && userSnapshot.data!.exists) {
+          final userData = userSnapshot.data!.data() as Map<String, dynamic>;
+          final userRole = userData['role'] as String?;
+
+          if (userRole == 'provider') {
+            return HspHomeScreen(user: user);
+          } else {
+            return HomeScreen(user: user);
+          }
+        } else {
+          return HomeScreen(user: user);
+        }
+      },
+    );
+  }
+}
+
+// Notification handling function
+void _handleNotificationNavigation(Map<String, dynamic> data) {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId: '441732602904-ib5itb3on72gkv6qffdjv6g58kgvmpnf.apps.googleusercontent.com',
   );
@@ -115,10 +218,6 @@ class _MagicHomeAppState extends State<MagicHomeApp> {
         ),
       ),
       home: _isLoading ? const LoadingScreen() : const WelcomeScreen(),
-      builder: (context, child) {
-        // Wrap the entire app with translation widget
-        return FloatingTranslationWidget(child: child!);
-      },
       onGenerateRoute: (settings) {
         print('Generating route for: ${settings.name}');
         if (settings.name == '/home') {

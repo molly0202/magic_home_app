@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../models/user_request.dart';
+import '../../widgets/translatable_text.dart';
 
 class CustomerReviewScreen extends StatefulWidget {
   final UserRequest task;
@@ -450,7 +451,7 @@ class _CustomerReviewScreenState extends State<CustomerReviewScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             "You're reviewing:",
             style: TextStyle(
               fontSize: 16,
@@ -496,7 +497,7 @@ class _CustomerReviewScreenState extends State<CustomerReviewScreen> {
           const SizedBox(height: 24),
           
           // Upload pictures section
-          const Text(
+          const TranslatableText(
             'Upload pictures',
             style: TextStyle(
               fontSize: 16,
@@ -529,7 +530,7 @@ class _CustomerReviewScreenState extends State<CustomerReviewScreen> {
                           color: Color(0xFFFBB04C),
                         ),
                         SizedBox(height: 8),
-                        Text(
+                        TranslatableText(
                           'Add photos',
                           style: TextStyle(
                             color: Colors.grey,
@@ -537,7 +538,7 @@ class _CustomerReviewScreenState extends State<CustomerReviewScreen> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        Text(
+                        TranslatableText(
                           'Camera or Gallery',
                           style: TextStyle(
                             color: Colors.grey,
@@ -669,7 +670,7 @@ class _CustomerReviewScreenState extends State<CustomerReviewScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             "You're reviewing:",
             style: TextStyle(
               fontSize: 16,
@@ -685,7 +686,7 @@ class _CustomerReviewScreenState extends State<CustomerReviewScreen> {
           const SizedBox(height: 48),
           
           // First question
-          const Text(
+          const TranslatableText(
             'Did the service fulfill your expectations?',
             style: TextStyle(
               fontSize: 18,
@@ -766,7 +767,7 @@ class _CustomerReviewScreenState extends State<CustomerReviewScreen> {
           const SizedBox(height: 48),
           
           // Second question
-          const Text(
+          const TranslatableText(
             'Would you recommend this service to your friends?',
             style: TextStyle(
               fontSize: 18,

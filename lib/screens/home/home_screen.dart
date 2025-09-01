@@ -16,6 +16,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../services/reviews_service.dart';
+import '../../widgets/translatable_text.dart';
 import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
@@ -114,7 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
             size: 24,
           ),
           const SizedBox(height: 4),
-          Text(
+          TranslatableText(
             label,
             style: TextStyle(
               color: isSelected ? const Color(0xFFFBB04C) : Colors.grey,
@@ -158,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              TranslatableText(
                 'Hello, ${_displayName ?? 'User'}',
                 style: const TextStyle(
                   color: Colors.white,
@@ -271,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
+                    const TranslatableText(
                       'sendhelper',
                       style: TextStyle(
                         fontSize: 12,
@@ -280,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
+                    TranslatableText(
                       title,
                       style: const TextStyle(
                         fontSize: 16,
@@ -289,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
+                    TranslatableText(
                       discount,
                       style: const TextStyle(
                         fontSize: 36,
@@ -298,7 +299,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
+                    TranslatableText(
                       promoText,
                       style: const TextStyle(
                         fontSize: 10,
@@ -306,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    Text(
+                    TranslatableText(
                       promoCode,
                       style: const TextStyle(
                         fontSize: 20,
@@ -315,7 +316,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
+                    TranslatableText(
                       description,
                       style: const TextStyle(
                         fontSize: 10,
@@ -1516,7 +1517,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDiscoverScreen() {
     return const Center(
-      child: Text(
+      child: TranslatableText(
         'Discover',
         style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
       ),
