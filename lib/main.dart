@@ -32,19 +32,25 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  print('Initializing Firebase...');
-  await Firebase.initializeApp();
-  print('Firebase initialized successfully');
   
-  // Initialize translation service
-  await TranslationService().initialize();
-  print('Translation service initialized');
-  
-  // Set the background messaging handler early on
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  
-  // Set up notification navigation callback
-  NotificationService.setNavigationCallback(_handleNotificationNavigation);
+  try {
+    print('Initializing Firebase...');
+    await Firebase.initializeApp();
+    print('Firebase initialized successfully');
+    
+    // Initialize translation service
+    await TranslationService().initialize();
+    print('Translation service initialized');
+    
+    // Set the background messaging handler early on
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    
+    // Set up notification navigation callback
+    NotificationService.setNavigationCallback(_handleNotificationNavigation);
+  } catch (e) {
+    print('Firebase initialization failed: $e');
+    // Continue anyway - app might work without Firebase for basic UI
+  }
   
   runApp(const MagicHomeApp());
 }
@@ -115,7 +121,15 @@ class _MagicHomeAppState extends State<MagicHomeApp> {
           ),
         ),
       ),
-      home: _isLoading ? const LoadingScreen() : const WelcomeScreen(),
+      home: _isLoading 
+        ? const LoadingScreen() 
+        : (_user != null 
+          ? HomeScreen(
+              firebaseUser: firebase_auth.FirebaseAuth.instance.currentUser,
+              googleUser: _user,
+              googleSignIn: _googleSignIn,
+            )
+          : const WelcomeScreen()),
       builder: (context, child) {
         // Initialize in-app notifications when the app is built
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -274,6 +288,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 
+
 // Handle notification navigation
 void _handleNotificationNavigation(String notificationType, Map<String, dynamic> data) async {
   print('🔔 Handling notification navigation: $notificationType');
@@ -404,3 +419,4 @@ Future<void> _handleStatusUpdateNavigation(BuildContext context, Map<String, dyn
     // TODO: Navigate to support/help screen
   }
 }
+
