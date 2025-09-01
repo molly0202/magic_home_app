@@ -188,21 +188,31 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
       });
 
       // Send verification email to admin with document attachments FIRST
-      await EmailService.sendVerificationEmailWithAttachments(
-        providerData: {
-          'uid': widget.user.uid,
-          'email': widget.email,
-          'companyName': _companyNameController.text.trim(),
-          'legalRepresentativeName': _legalRepNameController.text.trim(),
-          'phoneNumber': _phoneController.text.trim(),
-          'address': _addressController.text.trim(),
-        },
-        documentFiles: {
-          'governmentId': _governmentIdFile!,
-          'businessLicense': _businessLicenseFile!,
-          'insurance': _insuranceFile!,
-        },
-      );
+      try {
+        await EmailService.sendVerificationEmailWithAttachments(
+          providerData: {
+            'uid': widget.user.uid,
+            'email': widget.email,
+            'companyName': _companyNameController.text.trim(),
+            'legalRepresentativeName': _legalRepNameController.text.trim(),
+            'phoneNumber': _phoneController.text.trim(),
+            'address': _addressController.text.trim(),
+          },
+          documentFiles: {
+            'governmentId': _governmentIdFile!,
+            'businessLicense': _businessLicenseFile!,
+            'insurance': _insuranceFile!,
+          },
+        );
+        print('✅ Document upload and email sending completed');
+      } catch (uploadError) {
+        print('❌ Document upload failed: $uploadError');
+        setState(() {
+          _errorMessage = 'Document upload failed: ${uploadError.toString()}. Please try again.';
+          _isLoading = false;
+        });
+        return;
+      }
 
       setState(() {
         _errorMessage = 'Updating your application status...';

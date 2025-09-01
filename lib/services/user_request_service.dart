@@ -13,6 +13,7 @@ class UserRequestService {
   }) async {
     try {
       print('📝 Creating user request from AI intake data...');
+      print('📋 Raw AI Intake Data: $aiIntakeData');
       
       // Extract and validate data from AI intake
       final serviceCategory = aiIntakeData['serviceCategory']?.toString() ?? 
@@ -22,11 +23,94 @@ class UserRequestService {
         throw ArgumentError('Service category is required');
       }
       
+      // Get comprehensive description combining all available details (excluding availability)
+      String description = '';
+      List<String> descriptionParts = [];
+      
+      if (aiIntakeData['serviceRequestSummary'] != null) {
+        final summary = aiIntakeData['serviceRequestSummary'] as Map<String, dynamic>;
+        
+        // Collect all available descriptions (excluding availability responses)
+        if (summary['problemDescription']?.toString().isNotEmpty == true) {
+          final problemDesc = summary['problemDescription'].toString();
+          if (!_containsAvailabilityContent(problemDesc)) {
+            descriptionParts.add(problemDesc);
+          }
+        }
+        
+        if (summary['serviceDescription']?.toString().isNotEmpty == true) {
+          final serviceDesc = summary['serviceDescription'].toString();
+          if (!_containsAvailabilityContent(serviceDesc) && 
+              !descriptionParts.contains(serviceDesc)) {
+            descriptionParts.add(serviceDesc);
+          }
+        }
+        
+        if (summary['basicDescription']?.toString().isNotEmpty == true) {
+          final basicDesc = summary['basicDescription'].toString();
+          if (!_containsAvailabilityContent(basicDesc) && 
+              !descriptionParts.contains(basicDesc)) {
+            descriptionParts.add(basicDesc);
+          }
+        }
+        
+        // Include service answers as additional details (filter out availability and duplicates)
+        if (aiIntakeData['serviceAnswers'] is Map) {
+          final serviceAnswers = aiIntakeData['serviceAnswers'] as Map<String, dynamic>;
+          for (var answer in serviceAnswers.values) {
+            final answerStr = answer.toString();
+            if (answerStr.isNotEmpty && 
+                answerStr.length > 3 && 
+                !_containsAvailabilityContent(answerStr) &&
+                !descriptionParts.contains(answerStr)) {
+              descriptionParts.add(answerStr);
+            }
+          }
+        }
+      }
+      
+      // Fallback to direct description field
+      if (descriptionParts.isEmpty && aiIntakeData['description']?.toString().isNotEmpty == true) {
+        final directDesc = aiIntakeData['description'].toString();
+        if (!_containsAvailabilityContent(directDesc)) {
+          descriptionParts.add(directDesc);
+        }
+      }
+      
+      // Combine all parts into comprehensive description
+      if (descriptionParts.isNotEmpty) {
+        // Remove duplicates and join
+        final uniqueParts = descriptionParts.toSet().toList();
+        description = uniqueParts.join('. ');
+        
+        // Clean up the description
+        description = description.replaceAll('..', '.').replaceAll('  ', ' ').trim();
+        if (!description.endsWith('.')) {
+          description += '.';
+        }
+      } else {
+        description = "Customer requested ${serviceCategory.toLowerCase()} service assistance.";
+      }
+      
+      print('✅ Extracted service details:');
+      print('   - Category: $serviceCategory');
+      print('   - Description: $description');
+      print('   - Description Source: ${_getDescriptionSource(aiIntakeData, description)}');
+      print('   - Media Count: ${_extractMediaUrls(aiIntakeData).length}');
+      print('   - Address: ${aiIntakeData['address']}');
+      print('   - City: ${aiIntakeData['city']}');
+      print('   - State: ${aiIntakeData['state']}');
+      print('   - Zipcode: ${aiIntakeData['zipcode']}');
+      print('   - Phone: ${aiIntakeData['phoneNumber']}');
+      print('   - Email: ${aiIntakeData['email']}');
+      print('   - Customer Name: ${aiIntakeData['customerName']}');
+      print('   - Is Complete: ${aiIntakeData['isComplete']}');
+      
       // Create UserRequest object
       final userRequest = UserRequest.fromAIIntake(
         userId: userId,
         serviceCategory: serviceCategory,
-        description: aiIntakeData['description']?.toString() ?? '',
+        description: description,
         mediaUrls: _extractMediaUrls(aiIntakeData),
         userAvailability: _extractAvailability(aiIntakeData),
         address: aiIntakeData['address']?.toString() ?? 
@@ -37,6 +121,7 @@ class UserRequestService {
         preferences: _extractPreferences(aiIntakeData),
         tags: _extractTags(aiIntakeData),
         priority: _determinePriority(aiIntakeData),
+        aiPriceEstimation: _extractAiPriceEstimation(aiIntakeData),
       );
       
       // Save to Firestore
@@ -62,27 +147,44 @@ class UserRequestService {
     int maxProviders = 10,
   }) async {
     try {
-      print('🚀 Processing complete user request...');
+      print('🚀 Processing complete user request flow...');
+      print('👤 User ID: $userId');
+      print('🎯 Max providers to match: $maxProviders');
       
-      // Step 1: Create the user request
+      // Step 1: Create the user request from Service Request Summary
+      print('\n📝 Step 1: Converting Service Request Summary to User Request...');
       final userRequest = await createRequestFromAIIntake(
         userId: userId,
         aiIntakeData: aiIntakeData,
       );
+      print('✅ User Request created with ID: ${userRequest.requestId}');
       
-      // Step 2: Find matching providers
+      // Step 2: Find matching providers using the provider matching service
+      print('\n🔍 Step 2: Finding matching providers...');
       final matchingProviders = await ProviderMatchingService.findMatchingProviders(
         userRequest: userRequest,
         maxResults: maxProviders,
       );
+      print('✅ Found ${matchingProviders.length} matching providers');
       
-      // Step 3: Update request status
+      // Step 3: Store matching results FIRST (includes matchedProviders field)
+      print('\n💾 Step 3: Storing matching results...');
+      await _storeMatchingResults(userRequest.requestId!, matchingProviders);
+      print('✅ Matching results stored');
+      
+      // Step 4: Update request status LAST to trigger bidding flow
+      print('\n🔄 Step 4: Triggering bidding flow...');
       await updateRequestStatus(userRequest.requestId!, 'matched');
       
-      // Step 4: Store matching results
-      await _storeMatchingResults(userRequest.requestId!, matchingProviders);
+      // Log details for Firebase Function debugging and bidding system
+      print('\n🔥 INTEGRATION COMPLETE:');
+      print('   Request ID: ${userRequest.requestId}');
+      print('   Service Category: ${userRequest.serviceCategory}');
+      print('   Description: ${userRequest.description}');
+      print('   Matched Providers: ${matchingProviders.map((p) => '${p.name} (${p.providerId})').toList()}');
+      print('   Status: matched (bidding flow triggered)');
       
-      print('✅ Processing complete: ${matchingProviders.length} providers matched');
+      print('\n✅ Service Request → User Request → Provider Matching → Bidding Flow: SUCCESS');
       
       return {
         'success': true,
@@ -129,13 +231,22 @@ class UserRequestService {
   /// Update request status
   static Future<void> updateRequestStatus(String requestId, String status) async {
     try {
+      print('🔄 Attempting to update request $requestId status to: $status');
       await _firestore.collection('user_requests').doc(requestId).update({
         'status': status,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      print('✅ Updated request $requestId status to: $status');
+      print('✅ Successfully updated request $requestId status to: $status');
+      
+      // Verify the update worked
+      final doc = await _firestore.collection('user_requests').doc(requestId).get();
+      if (doc.exists) {
+        final currentStatus = doc.data()?['status'];
+        print('🔍 Verified current status in database: $currentStatus');
+      }
     } catch (e) {
-      print('❌ Error updating request status: $e');
+      print('❌ CRITICAL ERROR updating request status: $e');
+      rethrow; // Re-throw so we know if this is the problem
     }
   }
   
@@ -200,9 +311,31 @@ class UserRequestService {
   static Map<String, dynamic> _extractAvailability(Map<String, dynamic> data) {
     final availability = <String, dynamic>{};
     
-    // Extract availability information
-    if (data['availability'] is Map) {
-      availability.addAll(Map<String, dynamic>.from(data['availability']));
+    // First check if we have userAvailability from the data
+    if (data['userAvailability'] is Map) {
+      final userAvail = Map<String, dynamic>.from(data['userAvailability']);
+      availability.addAll(userAvail);
+      
+      // Convert 'preference' to 'preferredTime' for display compatibility
+      if (userAvail.containsKey('preference') && !userAvail.containsKey('preferredTime')) {
+        availability['preferredTime'] = userAvail['preference'];
+      }
+    }
+    
+    // Also check the new 'availability' field from Service Request Summary
+    else if (data['availability'] is Map) {
+      final avail = Map<String, dynamic>.from(data['availability']);
+      availability.addAll(avail);
+      
+      // Convert 'preference' to 'preferredTime' for display compatibility
+      if (avail.containsKey('preference') && !avail.containsKey('preferredTime')) {
+        availability['preferredTime'] = avail['preference'];
+      }
+    }
+    
+    // Handle availability as array (e.g., ['This weekend', 'Available today'])
+    else if (data['availability'] is List) {
+      availability['timeSlots'] = List<String>.from(data['availability']);
     }
     
     // Extract urgency
@@ -212,10 +345,10 @@ class UserRequestService {
       availability['urgency'] = data['priority'];
     }
     
-    // Extract preferred time
-    if (data['preferredTime'] != null) {
+    // Extract preferred time from other possible fields
+    if (data['preferredTime'] != null && !availability.containsKey('preferredTime')) {
       availability['preferredTime'] = data['preferredTime'];
-    } else if (data['preferred_time'] != null) {
+    } else if (data['preferred_time'] != null && !availability.containsKey('preferredTime')) {
       availability['preferredTime'] = data['preferred_time'];
     }
     
@@ -224,6 +357,7 @@ class UserRequestService {
       availability['schedule'] = data['schedule'];
     }
     
+    print('🔍 Extracted availability: $availability');
     return availability.isNotEmpty ? availability : {'urgency': 'normal'};
   }
   
@@ -250,14 +384,7 @@ class UserRequestService {
   static Map<String, dynamic> _extractPreferences(Map<String, dynamic> data) {
     final preferences = <String, dynamic>{};
     
-    // Extract budget/price preferences
-    if (data['budget'] != null) {
-      preferences['budget'] = data['budget'];
-    } else if (data['priceRange'] != null) {
-      preferences['priceRange'] = data['priceRange'];
-    } else if (data['price_range'] != null) {
-      preferences['priceRange'] = data['price_range'];
-    }
+    // NOTE: Budget/price preferences removed for MVP - providers set their own prices
     
     // Extract quality preferences
     if (data['qualityPreference'] != null) {
@@ -325,6 +452,7 @@ class UserRequestService {
   /// Store matching results for future reference
   static Future<void> _storeMatchingResults(String requestId, List<ProviderMatch> matches) async {
     try {
+      // Store detailed results in separate collection
       await _firestore.collection('matching_results').doc(requestId).set({
         'requestId': requestId,
         'matches': matches.map((m) => m.toMap()).toList(),
@@ -332,6 +460,17 @@ class UserRequestService {
         'topScore': matches.isNotEmpty ? matches.first.overallScore : 0.0,
         'createdAt': FieldValue.serverTimestamp(),
       });
+      
+      // CRITICAL: Update the user request with matchedProviders for bidding system
+      final matchedProviderIds = matches.map((m) => m.providerId).toList();
+      await _firestore.collection('user_requests').doc(requestId).update({
+        'matchedProviders': matchedProviderIds,
+        'matchCount': matches.length,
+        'topScore': matches.isNotEmpty ? matches.first.overallScore : 0.0,
+        'matchingCompletedAt': FieldValue.serverTimestamp(),
+      });
+      
+      print('✅ Stored ${matches.length} matching results and updated user request with provider IDs');
     } catch (e) {
       print('⚠️ Error storing matching results: $e');
     }
@@ -357,5 +496,132 @@ class UserRequestService {
       print('❌ Error getting matching results: $e');
       return [];
     }
+  }
+  
+  static Map<String, dynamic>? _extractAiPriceEstimation(Map<String, dynamic> data) {
+    if (data['aiPriceEstimation'] is Map) {
+      return Map<String, dynamic>.from(data['aiPriceEstimation']);
+    }
+    
+    // Also check alternative field names
+    if (data['priceEstimation'] is Map) {
+      return Map<String, dynamic>.from(data['priceEstimation']);
+    }
+    
+    if (data['ai_price_estimation'] is Map) {
+      return Map<String, dynamic>.from(data['ai_price_estimation']);
+    }
+    
+    // Extract from service request summary
+    if (data['serviceRequestSummary'] is Map) {
+      final summary = data['serviceRequestSummary'] as Map<String, dynamic>;
+      if (summary['priceEstimate'] is Map) {
+        return Map<String, dynamic>.from(summary['priceEstimate']);
+      }
+    }
+    
+    return null;
+  }
+  
+  /// Test the complete Service Request to User Request to Provider Matching flow
+  static Future<Map<String, dynamic>> testCompleteIntegrationFlow({
+    required String userId,
+    Map<String, dynamic>? mockServiceRequestData,
+  }) async {
+    try {
+      print('🧪 Testing complete Service Request → User Request → Provider Matching integration...');
+      
+      // Use mock data if provided, otherwise create test data
+      final testData = mockServiceRequestData ?? {
+        'serviceCategory': 'handyman',
+        'description': 'Sir handle broken on my refrigerator and I need to install a microwave',
+        'mediaUrls': ['https://example.com/photo1.jpg'],
+        'address': '333 Dexter Ave N, Seattle, WA 98109',
+        'phoneNumber': '4128888888',
+        'userAvailability': {
+          'selectedDate': '2025-08-31',
+          'timePreference': 'Evening (5PM - 8PM)',
+          'urgency': 'normal'
+        },
+        'aiPriceEstimation': {
+          'suggestedRange': {'min': 95, 'max': 238},
+          'aiModel': 'test-model',
+          'confidenceLevel': 'medium'
+        },
+        'serviceRequestSummary': {
+          'serviceDescription': 'Customer needs handyman service to fix broken refrigerator handle and install a microwave',
+          'isComplete': true
+        }
+      };
+      
+      print('📋 Test data prepared: ${testData['serviceCategory']} service');
+      
+      // Run the complete flow
+      final result = await processUserRequest(
+        userId: userId,
+        aiIntakeData: testData,
+        maxProviders: 5,
+      );
+      
+      if (result['success'] == true) {
+        print('✅ INTEGRATION TEST PASSED: Complete flow working correctly');
+        return {
+          'testPassed': true,
+          'message': 'Service Request integration with Provider Matching is working correctly',
+          'result': result,
+        };
+      } else {
+        print('❌ INTEGRATION TEST FAILED: Flow returned error');
+        return {
+          'testPassed': false,
+          'message': 'Integration test failed',
+          'error': result['error'],
+        };
+      }
+      
+    } catch (e, stackTrace) {
+      print('❌ INTEGRATION TEST ERROR: $e');
+      print('Stack trace: $stackTrace');
+      return {
+        'testPassed': false,
+        'message': 'Integration test threw exception',
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// Helper to identify which description source was used
+  static String _getDescriptionSource(Map<String, dynamic> aiIntakeData, String finalDescription) {
+    if (aiIntakeData['serviceRequestSummary'] != null) {
+      final summary = aiIntakeData['serviceRequestSummary'] as Map<String, dynamic>;
+      
+      if (summary['problemDescription']?.toString() == finalDescription) {
+        return 'problemDescription';
+      } else if (summary['serviceDescription']?.toString() == finalDescription) {
+        return 'serviceDescription';
+      } else if (summary['conversationDescription']?.toString() == finalDescription) {
+        return 'conversationDescription';
+      } else if (summary['basicDescription']?.toString() == finalDescription) {
+        return 'basicDescription';
+      }
+    }
+    
+    if (aiIntakeData['description']?.toString() == finalDescription) {
+      return 'direct description field';
+    }
+    
+    return 'generated fallback';
+  }
+
+  /// Check if content contains availability-related information
+  static bool _containsAvailabilityContent(String content) {
+    const availabilityKeywords = [
+      'selected my availability', 'availability for', 'dates:', 'morning', 'afternoon', 
+      'evening', '8am', '12pm', '5pm', '8pm', 'am -', 'pm -', 'pm)', 'am)',
+      'available', 'schedule', 'time preference', 'weekday', 'weekend', 'multiple dates'
+    ];
+    
+    String lower = content.toLowerCase();
+    return availabilityKeywords.any((keyword) => lower.contains(keyword));
   }
 } 

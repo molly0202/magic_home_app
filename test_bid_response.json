@@ -1,0 +1,15 @@
+{
+  "request_id": "e2e_test_1755479654",
+  "provider_id": "wDIHYfAmbJgreRJO6gPCobg724h1",
+  "bid_amount": 150,
+  "estimated_duration": "2-3 hours",
+  "availability": "Available now",
+  "provider_message": "I can fix this immediately. I specialize in emergency plumbing and have all necessary tools in my van. I'm located 15 minutes away.",
+  "bid_timestamp": "2025-08-17T18:15:00Z",
+  "provider_profile": {
+    "name": "Mike's Emergency Plumbing",
+    "rating": 4.8,
+    "completed_jobs": 156,
+    "specialties": ["Emergency Plumbing", "Sink Repairs", "Drain Cleaning"]
+  }
+}

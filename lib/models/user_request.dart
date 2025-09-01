@@ -15,6 +15,10 @@ class UserRequest {
   final String status; // 'pending', 'matched', 'assigned', 'completed'
   final List<String>? tags;
   final int? priority; // 1-5, where 5 is highest priority
+  final Map<String, dynamic>? aiPriceEstimation; // AI-generated price estimation
+  final String? assignedProviderId; // Provider ID when task is assigned
+  final String? selectedBidId; // Bid ID that was selected
+  final String? finalServiceSchedule; // Final confirmed service time from user
   
   UserRequest({
     this.requestId,
@@ -31,6 +35,10 @@ class UserRequest {
     this.status = 'pending',
     this.tags,
     this.priority = 3,
+    this.aiPriceEstimation,
+    this.assignedProviderId,
+    this.selectedBidId,
+    this.finalServiceSchedule,
   }) : createdAt = createdAt ?? DateTime.now();
 
   // Create from AI intake service data
@@ -46,6 +54,7 @@ class UserRequest {
     Map<String, dynamic>? preferences,
     List<String>? tags,
     int? priority,
+    Map<String, dynamic>? aiPriceEstimation,
   }) {
     return UserRequest(
       userId: userId,
@@ -59,6 +68,8 @@ class UserRequest {
       preferences: preferences ?? {},
       tags: tags ?? [],
       priority: priority ?? 3,
+      aiPriceEstimation: aiPriceEstimation,
+      finalServiceSchedule: null, // Not set during AI intake
     );
   }
 
@@ -80,12 +91,19 @@ class UserRequest {
       status: data['status'] ?? 'pending',
       tags: data['tags'] != null ? List<String>.from(data['tags']) : null,
       priority: data['priority'] ?? 3,
+      aiPriceEstimation: data['aiPriceEstimation'] != null 
+          ? Map<String, dynamic>.from(data['aiPriceEstimation']) 
+          : null,
+      assignedProviderId: data['assignedProviderId'],
+      selectedBidId: data['selectedBidId'],
+      finalServiceSchedule: data['finalServiceSchedule'],
     );
   }
 
   // Convert to Firestore document
   Map<String, dynamic> toFirestore() {
     return {
+      'requestId': requestId, // Include requestId in Firestore data
       'userId': userId,
       'serviceCategory': serviceCategory,
       'description': description,
@@ -99,6 +117,10 @@ class UserRequest {
       'status': status,
       'tags': tags,
       'priority': priority,
+      'aiPriceEstimation': aiPriceEstimation,
+      'assignedProviderId': assignedProviderId,
+      'selectedBidId': selectedBidId,
+      'finalServiceSchedule': finalServiceSchedule,
     };
   }
 
@@ -118,6 +140,10 @@ class UserRequest {
     String? status,
     List<String>? tags,
     int? priority,
+    Map<String, dynamic>? aiPriceEstimation,
+    String? assignedProviderId,
+    String? selectedBidId,
+    String? finalServiceSchedule,
   }) {
     return UserRequest(
       requestId: requestId ?? this.requestId,
@@ -134,6 +160,10 @@ class UserRequest {
       status: status ?? this.status,
       tags: tags ?? this.tags,
       priority: priority ?? this.priority,
+      aiPriceEstimation: aiPriceEstimation ?? this.aiPriceEstimation,
+      assignedProviderId: assignedProviderId ?? this.assignedProviderId,
+      selectedBidId: selectedBidId ?? this.selectedBidId,
+      finalServiceSchedule: finalServiceSchedule ?? this.finalServiceSchedule,
     );
   }
 

@@ -1,0 +1,72 @@
+{
+  "firebase_function_tests": {
+    "test_notification": {
+      "url": "https://test-notification-24e4euigxq-uc.a.run.app",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "provider_id": "wDIHYfAmbJgreRJO6gPCobg724h1",
+        "status": "verified"
+      }
+    },
+    "update_provider_status": {
+      "url": "https://update-provider-status-24e4euigxq-uc.a.run.app",
+      "method": "POST", 
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "provider_id": "wDIHYfAmbJgreRJO6gPCobg724h1",
+        "new_status": "verified",
+        "reason": "Testing status update function"
+      }
+    },
+    "send_bidding_notification_normal": {
+      "url": "https://us-central1-magic-home-01.cloudfunctions.net/send_bidding_notification",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "provider_ids": ["wDIHYfAmbJgreRJO6gPCobg724h1"],
+        "request_id": "test_req_001",
+        "task_description": "Bathroom sink repair - faucet not working properly",
+        "suggested_price": "80-120",
+        "urgency": "normal",
+        "deadline_hours": 2
+      }
+    },
+    "send_bidding_notification_high": {
+      "url": "https://us-central1-magic-home-01.cloudfunctions.net/send_bidding_notification",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "provider_ids": ["wDIHYfAmbJgreRJO6gPCobg724h1"],
+        "request_id": "test_req_002", 
+        "task_description": "Electrical outlet not working - safety concern",
+        "suggested_price": "100-180",
+        "urgency": "high",
+        "deadline_hours": 2
+      }
+    },
+    "send_bidding_notification_critical": {
+      "url": "https://us-central1-magic-home-01.cloudfunctions.net/send_bidding_notification",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "provider_ids": ["wDIHYfAmbJgreRJO6gPCobg724h1"],
+        "request_id": "test_req_003",
+        "task_description": "EMERGENCY: Gas leak detected in kitchen area",
+        "suggested_price": "200-400",
+        "urgency": "critical",
+        "deadline_hours": 1
+      }
+    }
+  }
+}

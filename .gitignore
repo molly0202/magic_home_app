@@ -84,3 +84,4 @@ MATCHING_ALGORITHM_SUMMARY.md
 
 # Sensitive local config
 lib/config/secrets.dart
+.device_id
