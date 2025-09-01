@@ -8,9 +8,16 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  print('Initializing Firebase...');
-  await Firebase.initializeApp();
-  print('Firebase initialized successfully');
+  
+  try {
+    print('Initializing Firebase...');
+    await Firebase.initializeApp();
+    print('Firebase initialized successfully');
+  } catch (e) {
+    print('Firebase initialization failed: $e');
+    // Continue anyway - app might work without Firebase for basic UI
+  }
+  
   runApp(const MagicHomeApp());
 }
 
@@ -79,7 +86,15 @@ class _MagicHomeAppState extends State<MagicHomeApp> {
           ),
         ),
       ),
-      home: _isLoading ? const LoadingScreen() : const WelcomeScreen(),
+      home: _isLoading 
+        ? const LoadingScreen() 
+        : (_user != null 
+          ? HomeScreen(
+              firebaseUser: firebase_auth.FirebaseAuth.instance.currentUser,
+              googleUser: _user,
+              googleSignIn: _googleSignIn,
+            )
+          : const WelcomeScreen()),
       onGenerateRoute: (settings) {
         print('Generating route for: ${settings.name}');
         if (settings.name == '/home') {
@@ -228,3 +243,5 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 }
+
+

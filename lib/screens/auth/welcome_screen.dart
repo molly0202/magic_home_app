@@ -192,8 +192,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             const Spacer(flex: 4),
             // Logo and app name
             const LogoWithText(
-              logoSize: 120,
-              fontSize: 40,
+              logoSize: 240,
+              fontSize: 20,
               includeText: true,
             ),
             const Spacer(flex: 3),
@@ -218,7 +218,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     textStyle: const TextStyle(
-                      fontSize: 28,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
