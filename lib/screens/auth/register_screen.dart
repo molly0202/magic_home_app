@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/auth_logo_header.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/translatable_text.dart';
 import '../../services/auth_service.dart';
 import 'phone_verification_screen.dart';
 import 'verify_email_screen.dart';
@@ -147,8 +148,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      String errorMsg = 'Registration failed: ${e.toString()}';
+      if (e.toString().contains('permission-denied')) {
+        errorMsg = 'Registration failed: Permission denied. Please try again.';
+      } else if (e.toString().contains('network')) {
+        errorMsg = 'Registration failed: Network error. Please check your connection.';
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Registration failed: ${e.toString()}')),
+        SnackBar(
+          content: Text(errorMsg),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -241,7 +252,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   const SizedBox(height: 20),
                   
                   // Password field
-                  const Text(
+                  const TranslatableText(
                     'Password',
                     style: TextStyle(
                       fontSize: 16,
@@ -277,7 +288,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   const SizedBox(height: 20),
                   
                   // Confirm Password field
-                  const Text(
+                  const TranslatableText(
                     'Confirm Password',
                     style: TextStyle(
                       fontSize: 16,
@@ -332,7 +343,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         checkColor: const Color(0xFFFBB04C),
                       ),
                       Expanded(
-                        child: Text(
+                        child: TranslatableText(
                           'By checking this box, you are agreeing to our terms and conditions.',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.8),

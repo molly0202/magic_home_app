@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/auth_logo_header.dart';
 import '../../widgets/logo_with_text.dart';
+import '../../widgets/translatable_text.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 import 'referral_code_screen.dart';
@@ -222,7 +223,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  child: const Text('Sign in'),
+                  child: const TranslatableText('Sign in'),
                 ),
               ),
             ),
@@ -235,7 +236,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   MaterialPageRoute(builder: (context) => const RegisterScreen()),
                 );
               },
-              child: const Text(
+              child: const TranslatableText(
                 'Sign up',
                 style: TextStyle(
                   color: Colors.white,
@@ -259,7 +260,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                    child: Text(
+                    child: TranslatableText(
                       'or',
                       style: TextStyle(
                         color: Colors.white,

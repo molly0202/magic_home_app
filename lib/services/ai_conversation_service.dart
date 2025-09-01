@@ -813,26 +813,23 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
           _currentState.availabilitySet = true;
         _currentState.conversationStep = 5;
           _triggerCalendar();
-          String summary = _generateServiceRequestSummary();
-          return "Perfect! Here's your summary:\n\n$summary";
+          return "Perfect! I've noted your availability. Let me get your location details next.";
         } else {
           _triggerCalendar();
           return "When works best? Morning, afternoon, or weekend?";
         }
         
       case 5:
-        // Step 5: Complete
+        // Step 5: Complete availability and move to location
         _currentState.userAvailability = {'preference': input, 'timestamp': DateTime.now().toIso8601String()};
         _currentState.availabilitySet = true;
         _currentState.conversationStep = 6;
-        String summary = _generateServiceRequestSummary();
-        return "All set! Here's your summary:\n\n$summary";
+        return "Great! Now I need your service location. Please provide your address details.";
         
       case 6:
-        // Step 6: Contact Information
-        _currentState.address = input;
+        // Step 6: This should be handled by location form UI, not text input
         _currentState.conversationStep = 7;
-        return "Thank you! Finally, I need your contact information for coordination. Please provide: 1) Your full name, 2) Phone number for the service professional to reach you.";
+        return "Let me get your location and contact details.";
         
       case 7:
         // Step 7: Market Price Range Estimation
@@ -1605,8 +1602,8 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
   // Handle contact form completion
   void onContactFormCompleted(Map<String, dynamic> contactData) {
     _currentState.contactForm = contactData;
+    _currentState.customerName = contactData['name'];
     _currentState.phoneNumber = contactData['tel'];
-    _currentState.email = contactData['email'];
     _currentState.contactFormCompleted = true;
     _currentState.conversationStep = 7;
     
@@ -1638,10 +1635,23 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
   // Enhanced service request summary
   Map<String, dynamic> getServiceRequestSummary() {
     String conversationDescription = _generateConversationDescription();
+    
+    // Get the best available description in priority order
+    String finalDescription = conversationDescription;
+    if (_currentState.serviceDescription != null && _currentState.serviceDescription!.isNotEmpty) {
+      finalDescription = _currentState.serviceDescription!;
+    } else if (_currentState.problemDescription != null && _currentState.problemDescription!.isNotEmpty) {
+      finalDescription = _currentState.problemDescription!;
+    } else if (_currentState.description != null && _currentState.description!.isNotEmpty) {
+      finalDescription = _currentState.description!;
+    }
+    
     return {
       'serviceCategory': _currentState.serviceCategory ?? 'General Service',
-      'serviceDescription': conversationDescription,
-      'problemDescription': conversationDescription,
+      'serviceDescription': finalDescription,
+      'problemDescription': _currentState.problemDescription ?? finalDescription,
+      'basicDescription': _currentState.description ?? '',
+      'conversationDescription': conversationDescription,
       'mediaUrls': _currentState.mediaUrls,
       'availability': _currentState.userAvailability ?? {},
       'locationForm': {
@@ -1651,8 +1661,8 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         'state': _currentState.state ?? '',
       },
       'contactForm': {
+        'name': _currentState.customerName ?? '',
         'tel': _currentState.phoneNumber ?? '',
-        'email': _currentState.email ?? '',
       },
       'priceEstimate': _currentState.priceEstimate ?? {},
       'customerName': _currentState.customerName ?? '',
@@ -1707,7 +1717,6 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     // Contact Information
     if (_currentState.contactFormCompleted) {
       summary += "📞 **Phone:** ${_currentState.phoneNumber}\n";
-      summary += "📧 **Email:** ${_currentState.email}\n";
     }
     
     // Price Estimation - Hourly Rate Focus
@@ -1734,10 +1743,11 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     for (ChatMessage message in _messages) {
       if (message.type == MessageType.user) {
         String content = message.content.trim();
-        // Skip service category names and simple responses
+        // Skip service category names, simple responses, and availability responses from description
         if (content.length > 10 && 
             !_isSimpleServiceCategory(content) &&
-            !_isSimpleResponse(content)) {
+            !_isSimpleResponse(content) &&
+            !_isAvailabilityResponse(content)) {
           
           // Prioritize messages that describe problems
           if (_containsProblemKeywords(content)) {
@@ -1790,6 +1800,18 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     
     String lowerContent = content.toLowerCase();
     return problemKeywords.any((keyword) => lowerContent.contains(keyword));
+  }
+
+  // Check if the input is an availability response
+  bool _isAvailabilityResponse(String content) {
+    const availabilityKeywords = [
+      'selected my availability', 'availability for', 'dates:', 'morning', 'afternoon', 
+      'evening', '8am', '12pm', '5pm', '8pm', 'am -', 'pm -', 'pm)', 'am)',
+      'available', 'schedule', 'time preference', 'weekday', 'weekend'
+    ];
+    
+    String lower = content.toLowerCase();
+    return availabilityKeywords.any((keyword) => lower.contains(keyword));
   }
   
   // Check if input is just a service category name

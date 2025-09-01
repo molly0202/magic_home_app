@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as Math;
 import 'package:http/http.dart' as http;
-import '../config/secrets.dart';
+import '../config/api_config.dart';
 
 class GoogleMapsService {
   static const String _baseUrl = 'https://maps.googleapis.com/maps/api';
@@ -19,7 +19,7 @@ class GoogleMapsService {
         '?origins=${Uri.encodeComponent(originAddress)}'
         '&destinations=${Uri.encodeComponent(destinationAddress)}'
         '&units=metric'
-        '&key=${Secrets.googleMapsApiKey}'
+        '&key=${ApiConfig.googleMapsApiKey}'
       );
       
       final response = await http.get(url);
@@ -79,7 +79,7 @@ class GoogleMapsService {
       final url = Uri.parse(
         '$_baseUrl/geocode/json'
         '?address=${Uri.encodeComponent(address)}'
-        '&key=${Secrets.googleMapsApiKey}'
+        '&key=${ApiConfig.googleMapsApiKey}'
       );
       
       final response = await http.get(url);

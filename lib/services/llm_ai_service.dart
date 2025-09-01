@@ -141,7 +141,7 @@ Always respond in a helpful, professional tone. Keep responses concise but infor
 
   // Service categorization using AI
   static Future<String> categorizeServiceWithAI(String userMessage) async {
-    const prompt = '''
+    final prompt = '''
 Based on this user message, identify the most appropriate service category.
 Return ONLY the category name: HVAC, Plumbing, Electrical, Cleaning, Appliance, Handyman, or Landscaping.
 

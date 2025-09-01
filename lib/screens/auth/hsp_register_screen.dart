@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/translatable_text.dart';
 import 'hsp_verification_screen.dart';
 import '../../services/account_merge_service.dart';
 
@@ -80,39 +81,12 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
       _errorMessage = null;
     });
 
-    String? referrerUserId;
     try {
-      final referralQuery = await FirebaseFirestore.instance
-          .collection('users')
-          .where('referralCode', isEqualTo: referralCode)
-          .limit(1)
-          .get();
+      print('🔍 Starting provider registration for: $email');
       
-      if (referralQuery.docs.isEmpty) {
-        setState(() {
-          _errorMessage = 'Invalid referral code. Please enter a valid referral code.';
-          _isLoading = false;
-        });
-        return;
-      }
-      
-      referrerUserId = referralQuery.docs.first.id;
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Unable to verify referral code. Please check your connection and try again.';
-        _isLoading = false;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
       // Check for existing authentication methods
       final existingAuthMethods = await AccountMergeService.getExistingAuthProviders(email);
+      print('✅ Auth methods check completed');
       
       if (existingAuthMethods.contains('google.com')) {
         // Google account already exists - offer to link
@@ -138,7 +112,8 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
         }
       }
       
-      // Check both users and providers collections for email
+      print('🔍 Checking for existing accounts...');
+      // Check both users and providers collections for email (now allowed by rules)
       final usersQuery = await FirebaseFirestore.instance
           .collection('users')
           .where('email', isEqualTo: email)
@@ -147,17 +122,44 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
           .collection('providers')
           .where('email', isEqualTo: email)
           .get();
+      print('✅ Account check completed: ${usersQuery.docs.length} users, ${providersQuery.docs.length} providers');
+      
       if (usersQuery.docs.isNotEmpty || providersQuery.docs.isNotEmpty) {
         setState(() {
-          _errorMessage = 'Email is already in use for another account';
+          if (usersQuery.docs.isNotEmpty) {
+            _errorMessage = 'This email is already registered as a customer account. Please use a different email for your provider account.';
+          } else {
+            _errorMessage = 'This email is already registered as a provider account. Please sign in to your existing account.';
+          }
           _isLoading = false;
         });
         return;
       }
 
+      print('🔍 Verifying referral code...');
+      // Verify referral code before creating account
+      final referralQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('referralCode', isEqualTo: referralCode)
+          .limit(1)
+          .get();
+      
+      if (referralQuery.docs.isEmpty) {
+        setState(() {
+          _errorMessage = 'Invalid referral code "$referralCode". Please check the code and try again.';
+          _isLoading = false;
+        });
+        return;
+      }
+      
+      final referrerUserId = referralQuery.docs.first.id;
+      print('✅ Referral code verified: $referralCode -> $referrerUserId');
+
+      print('🔍 Creating Firebase Auth account...');
       // Create Firebase Auth account
       final userCredential = await firebase_auth.FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
+      print('✅ Firebase Auth account created: ${userCredential.user!.uid}');
 
       if (!mounted) return;
 
@@ -169,7 +171,7 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
         'verificationStep': 'documents_pending',
         'role': 'provider',
         'referralCode': referralCode, // Always include referral code (required for providers)
-        'referred_by_user_ids': [referrerUserId!], // referrerUserId is guaranteed to be non-null
+        'referred_by_user_ids': [referrerUserId], // referrerUserId from referral verification
       };
 
       await FirebaseFirestore.instance
@@ -181,10 +183,11 @@ class _HspRegisterScreenState extends State<HspRegisterScreen> {
       try {
         await FirebaseFirestore.instance
             .collection('users')
-            .doc(referrerUserId!)
+            .doc(referrerUserId)
             .update({
           'referred_provider_ids': FieldValue.arrayUnion([userCredential.user!.uid]),
         });
+        print('✅ Updated referrer user with new provider');
       } catch (e) {
         // Log error but don't fail registration
         print('Error updating referrer user: $e');

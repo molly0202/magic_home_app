@@ -8,7 +8,8 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'dart:io';
 import '../services/ai_conversation_service.dart';
-import '../models/service_request.dart';
+import '../services/user_request_service.dart';
+import '../widgets/translatable_text.dart';
 
 class AITaskIntakeScreen extends StatefulWidget {
   final User? user;
@@ -48,7 +49,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   final TextEditingController _cityController = TextEditingController();
   final TextEditingController _stateController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
   List<DateTime> _selectedDates = [];
   List<String> _timePreferenceOptions = [
     'Any time',
@@ -79,7 +80,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     _cityController.dispose();
     _stateController.dispose();
     _phoneController.dispose();
-    _emailController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
@@ -404,19 +405,19 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     
     // Format all selected dates
     List<String> dateStrings = _selectedDates.map((date) => 
-      '${date.day}/${date.month}/${date.year}'
+      _formatDateForDisplay(date)
     ).toList();
     
     String datesText = _selectedDates.length == 1 
-        ? 'Selected date: ${dateStrings.first}'
-        : 'Selected dates: ${dateStrings.join(', ')}';
+        ? dateStrings.first
+        : dateStrings.join(', ');
     
     final availabilityData = {
       'dates': _selectedDates.map((date) => date.toIso8601String()).toList(),
       'selectedDatesCount': _selectedDates.length,
       'timePreference': _selectedTimePreference,
       'specificTime': _selectedTimePreference == 'Specific time' ? _selectedTime.format(context) : null,
-      'preference': '$datesText, Time: $timeInfo',
+      'preference': '$datesText at $timeInfo',
       'timestamp': DateTime.now().toIso8601String(),
       // Keep the single date for backward compatibility
       'date': _selectedDates.isNotEmpty ? _selectedDates.first.toIso8601String() : DateTime.now().toIso8601String(),
@@ -435,10 +436,10 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     });
     
     try {
-      // Continue conversation with availability info
+      // Continue conversation with clean availability info
       String availabilityMessage = _selectedDates.length == 1 
-          ? "I've selected my availability: ${dateStrings.first} at $timeInfo"
-          : "I've selected my availability for multiple dates: ${dateStrings.join(', ')} at $timeInfo";
+          ? "${dateStrings.first} at $timeInfo"
+          : "${dateStrings.join(', ')} at $timeInfo";
           
       await _aiService.processUserInput(availabilityMessage);
       
@@ -465,36 +466,93 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         _isLoading = true;
       });
       
-      // Create UserRequest object according to new schema
-      final userRequest = {
-        'userId': widget.user?.uid ?? 'anonymous',
-        'serviceCategory': _aiService.currentState.serviceCategory ?? 'General Service',
-        'description': _aiService.currentState.description ?? '',
-        'mediaUrls': _aiService.currentState.mediaUrls,
-        'tags': _aiService.currentState.tags,
-        'address': _aiService.currentState.address ?? '',
-        'phoneNumber': _aiService.currentState.phoneNumber ?? '',
+      if (widget.user?.uid == null) {
+        throw Exception('User must be logged in to submit a request');
+      }
+      
+      // Prepare AI intake data in the format expected by UserRequestService
+      // Get the complete service request summary for proper description
+      final serviceRequestSummary = _aiService.getServiceRequestSummary();
+      
+      // Extract data from Service Request Summary structure (not currentState)
+      final locationForm = serviceRequestSummary['locationForm'] as Map<String, dynamic>? ?? {};
+      final contactForm = serviceRequestSummary['contactForm'] as Map<String, dynamic>? ?? {};
+      
+      final aiIntakeData = {
+        'serviceCategory': serviceRequestSummary['serviceCategory'] ?? 'general',
+        'description': serviceRequestSummary['serviceDescription'] ?? 
+                      serviceRequestSummary['problemDescription'] ?? 
+                      _aiService.currentState.description ?? '',
+        'mediaUrls': serviceRequestSummary['mediaUrls'] ?? [],
+        
+        // Extract from locationForm (not currentState.address)
+        'address': _buildFullAddress(locationForm),
+        'zipcode': locationForm['zipcode'] ?? '',
+        'city': locationForm['city'] ?? '',
+        'state': locationForm['state'] ?? '',
+        
+        // Extract from contactForm (not currentState.phoneNumber)
+        'phoneNumber': contactForm['tel'] ?? _aiService.currentState.phoneNumber ?? '',
+        'email': contactForm['email'] ?? _aiService.currentState.email ?? '',
+        
+        // Use 'availability' from summary (not userAvailability from currentState)
+        'userAvailability': serviceRequestSummary['availability'] ?? _aiService.currentState.userAvailability ?? {},
+        
         'location': _aiService.currentState.location,
-        'userAvailability': _aiService.currentState.userAvailability ?? {},
-        'preferences': _aiService.currentState.preferences,
+        'preferences': _aiService.currentState.preferences ?? {},
+        'tags': serviceRequestSummary['tags'] ?? _aiService.currentState.tags ?? [],
         'priority': _aiService.currentState.priority ?? 3,
-        'createdAt': FieldValue.serverTimestamp(),
-        'status': 'pending',
-        // Additional fields for backward compatibility
-        'customer_name': widget.user?.displayName ?? 'Anonymous User',
-        'customer_photo_url': widget.user?.photoURL,
-        'service_answers': _aiService.currentState.serviceAnswers,
-        'price_estimate': _aiService.currentState.priceEstimate,
+        
+        // Extract price estimation from summary
+        'aiPriceEstimation': serviceRequestSummary['priceEstimate'] != null ? {
+          'suggestedRange': serviceRequestSummary['priceEstimate'],
+          'aiModel': 'ai-conversation-v1',
+          'confidenceLevel': 'medium',
+          'generatedAt': DateTime.now().toIso8601String(),
+        } : null,
+        
+        // Additional metadata for debugging and provider matching
+        'serviceAnswers': _aiService.currentState.serviceAnswers,
+        'conversationStep': serviceRequestSummary['conversationStep'] ?? _aiService.currentState.conversationStep,
+        'extractedInfo': serviceRequestSummary['extractedInfo'] ?? _aiService.currentState.extractedInfo,
+        'customerName': serviceRequestSummary['customerName'] ?? '',
+        'isComplete': serviceRequestSummary['isComplete'] ?? false,
+        'serviceRequestSummary': serviceRequestSummary, // Include full summary for reference
       };
       
-      // Store in Firebase using the new schema
-      await FirebaseFirestore.instance.collection('user_requests').add(userRequest);
+      print('🚀 Submitting service request via UserRequestService...');
+      print('📋 AI Intake Data: $aiIntakeData');
       
-      // Show success message
+      // Use the proper UserRequestService to process the request
+      final result = await UserRequestService.processUserRequest(
+        userId: widget.user!.uid,
+        aiIntakeData: aiIntakeData,
+      );
+      
+      print('✅ Service request processed successfully: $result');
+      
+      // Debug: Show detailed result information
+      if (result['userRequest'] != null) {
+        final userRequest = result['userRequest'] as Map<String, dynamic>;
+        print('🔍 DEBUG: Created User Request:');
+        print('   - Request ID: ${userRequest['requestId']}');
+        print('   - User ID: ${userRequest['userId']}');
+        print('   - Status: ${userRequest['status']}');
+        print('   - Service Category: ${userRequest['serviceCategory']}');
+        print('   - Description: ${userRequest['description']}');
+        print('   - Address: ${userRequest['address']}');
+        print('   - Phone: ${userRequest['phoneNumber']}');
+        print('   - Created At: ${userRequest['createdAt']}');
+        print('   - Matched Providers: ${userRequest['matchedProviders']}');
+      }
+      
+      // Show success message with request ID
+      final requestId = result['userRequest']?['requestId'] ?? 'unknown';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Service request submitted successfully!'),
+        SnackBar(
+          content: Text('Service request submitted successfully!\nRequest ID: $requestId'),
           backgroundColor: Colors.green,
+          duration: const Duration(seconds: 4),
         ),
       );
       
@@ -502,9 +560,12 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       Navigator.pop(context);
       
     } catch (e) {
-      print('Error submitting service request: $e');
+      print('❌ Error submitting service request: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error submitting request: $e')),
+        SnackBar(
+          content: Text('Error submitting request: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       setState(() {
@@ -661,7 +722,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                     ),
                     const SizedBox(height: 8),
                   ],
-                  Text(
+                  TranslatableText(
                     message.content,
                     style: TextStyle(
                       fontSize: isServiceOptions ? 15 : 16,
@@ -799,7 +860,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
             ),
             const SizedBox(width: 6),
             Flexible(
-              child: Text(
+              child: TranslatableText(
                 serviceType,
                 style: const TextStyle(
                   fontSize: 13,
@@ -942,7 +1003,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          const TranslatableText(
             'Upload Photos',
             style: TextStyle(
               fontSize: 18,
@@ -971,7 +1032,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.camera_alt),
-                  label: Text(_isLoading ? 'Uploading...' : 
+                  label: TranslatableText(_isLoading ? 'Uploading...' : 
                     (_aiService.currentState.mediaUrls.isEmpty ? 'Add Photos' : 'Add More')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFBB04C),
@@ -1214,7 +1275,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                           border: Border.all(color: Colors.green.withOpacity(0.3)),
                         ),
                         child: Text(
-                          '${date.day}/${date.month}/${date.year}',
+                          _formatDateForDisplay(date),
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -1323,7 +1384,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: Text('Continue (${_selectedDates.length} date${_selectedDates.length == 1 ? '' : 's'} selected)'),
+            child: TranslatableText('Continue (${_selectedDates.length} date${_selectedDates.length == 1 ? '' : 's'} selected)'),
           ),
           ],
         ),
@@ -1336,27 +1397,27 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     final priceEstimate = state.priceEstimate ?? {'min': 100, 'max': 500};
     
     return Container(
-      constraints: const BoxConstraints(maxHeight: 500), // Constrain max height
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Reduced vertical margin
-      child: SingleChildScrollView( // Make scrollable
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
+      margin: const EdgeInsets.all(16),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.7, // Limit height to 70% of screen
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min, // Use minimum space needed
-            children: [
-          const Text(
+        ],
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+          const TranslatableText(
             'Service Request Summary',
             style: TextStyle(
               fontSize: 18,
@@ -1373,7 +1434,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           // Service Details
           if (state.serviceAnswers.isNotEmpty) ...[
             const SizedBox(height: 12),
-            const Text('Service Details:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const TranslatableText('Service Details:', style: TextStyle(fontWeight: FontWeight.bold)),
             ...state.serviceAnswers.entries.map((entry) => 
               Padding(
                 padding: const EdgeInsets.only(left: 16, top: 4),
@@ -1418,7 +1479,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                const TranslatableText(
                   'Estimated Price Range',
                   style: TextStyle(
                     fontSize: 16,
@@ -1466,7 +1527,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text(
+                : const TranslatableText(
                     'Submit Service Request',
                     style: TextStyle(
                       fontSize: 16,
@@ -1474,8 +1535,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                     ),
                   ),
           ),
-            ],
-          ),
+        ],
         ),
       ),
     );
@@ -1487,7 +1547,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          TranslatableText(
             title,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
@@ -1596,147 +1656,137 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     // Use persistent form controllers - Make scrollable and more compact to prevent overflow
     
     return Container(
-      constraints: const BoxConstraints(maxHeight: 400), // Constrain max height
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Reduced vertical margin
-      child: SingleChildScrollView( // Make scrollable
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min, // Use minimum space needed
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            '📍 Service Location Details',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Address Field
+          TextField(
+            controller: _addressController,
+            decoration: const InputDecoration(
+              labelText: 'Street Address *',
+              hintText: '123 Main Street',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.home),
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          // City and State Row
+          Row(
             children: [
-              const Text(
-                '📍 Service Location Details',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 12), // Reduced spacing
-              
-              // Address Field
-              TextField(
-                controller: _addressController,
-                decoration: const InputDecoration(
-                  labelText: 'Street Address *',
-                  hintText: '123 Main Street',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.home),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Compact padding
-                ),
-              ),
-              const SizedBox(height: 8), // Reduced spacing
-              
-              // City and State Row
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _cityController,
-                      decoration: const InputDecoration(
-                        labelText: 'City *',
-                        hintText: 'San Francisco',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.location_city),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8), // Reduced spacing
-                  Expanded(
-                    child: TextField(
-                      controller: _stateController,
-                      decoration: const InputDecoration(
-                        labelText: 'State *',
-                        hintText: 'CA',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.map),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8), // Reduced spacing
-              
-              // Zipcode Field
-              TextField(
-                controller: _zipcodeController,
-                decoration: const InputDecoration(
-                  labelText: 'Zipcode *',
-                  hintText: '94102',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.local_post_office),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 16), // Reduced spacing
-              
-              // Submit Button
-              ElevatedButton(
-                onPressed: () {
-                  // Validate required fields
-                  if (_addressController.text.trim().isEmpty ||
-                      _cityController.text.trim().isEmpty ||
-                      _stateController.text.trim().isEmpty ||
-                      _zipcodeController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please fill in all required fields'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                  
-                  // Submit location data
-                  final locationData = {
-                    'address': _addressController.text.trim(),
-                    'city': _cityController.text.trim(),
-                    'state': _stateController.text.trim(),
-                    'zipcode': _zipcodeController.text.trim(),
-                  };
-                  
-                  _aiService.onLocationFormCompleted(locationData);
-                  
-                  setState(() {
-                    _showLocationForm = false;
-                    _showContactForm = true; // Show contact form next
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFBB04C),
-                  padding: const EdgeInsets.symmetric(vertical: 14), // Slightly reduced padding
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _cityController,
+                  decoration: const InputDecoration(
+                    labelText: 'City *',
+                    hintText: 'San Francisco',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.location_city),
                   ),
                 ),
-                child: const Text(
-                  'Continue to Contact Info',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _stateController,
+                  decoration: const InputDecoration(
+                    labelText: 'State *',
+                    hintText: 'CA',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.map),
                   ),
                 ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          
+          // Zipcode Field
+          TextField(
+            controller: _zipcodeController,
+            decoration: const InputDecoration(
+              labelText: 'Zipcode *',
+              hintText: '94102',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.local_post_office),
+            ),
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 20),
+          
+          // Submit Button
+          ElevatedButton(
+            onPressed: () {
+              // Validate required fields
+              if (_addressController.text.trim().isEmpty ||
+                  _cityController.text.trim().isEmpty ||
+                  _stateController.text.trim().isEmpty ||
+                  _zipcodeController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please fill in all required fields'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              // Submit location data
+              final locationData = {
+                'address': _addressController.text.trim(),
+                'city': _cityController.text.trim(),
+                'state': _stateController.text.trim(),
+                'zipcode': _zipcodeController.text.trim(),
+              };
+              
+              _aiService.onLocationFormCompleted(locationData);
+              
+              setState(() {
+                _showLocationForm = false;
+                _showContactForm = true; // Show contact form next
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFBB04C),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const TranslatableText(
+              'Continue to Contact Info',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1745,123 +1795,156 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     // Use persistent form controllers - Make scrollable and compact to prevent overflow
     
     return Container(
-      constraints: const BoxConstraints(maxHeight: 320), // Constrain max height
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Reduced vertical margin
-      child: SingleChildScrollView( // Make scrollable
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min, // Use minimum space needed
-            children: [
-              const Text(
-                '📞 Contact Information',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 12), // Reduced spacing
-              
-              // Phone Field
-              TextField(
-                controller: _phoneController,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number *',
-                  hintText: '+1 (555) 123-4567',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.phone),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Compact padding
-                ),
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 8), // Reduced spacing
-              
-              // Email Field
-              TextField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email Address *',
-                  hintText: 'your.email@example.com',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 16), // Reduced spacing
-              
-              // Submit Button
-              ElevatedButton(
-                onPressed: () {
-                  // Validate required fields
-                  if (_phoneController.text.trim().isEmpty ||
-                      _emailController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please fill in all required fields'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                  
-                  // Basic email validation
-                  if (!_emailController.text.contains('@') || !_emailController.text.contains('.')) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please enter a valid email address'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                  
-                  // Submit contact data
-                  final contactData = {
-                    'tel': _phoneController.text.trim(),
-                    'email': _emailController.text.trim(),
-                  };
-                  
-                  _aiService.onContactFormCompleted(contactData);
-                  
-                  setState(() {
-                    _showContactForm = false;
-                    _showSummary = true; // Show summary next
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFBB04C),
-                  padding: const EdgeInsets.symmetric(vertical: 14), // Slightly reduced padding
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Complete Service Request',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ],
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            '📞 Contact Information',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
           ),
-        ),
+          const SizedBox(height: 16),
+          
+          // Name Field
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: 'Full Name *',
+              hintText: 'John Smith',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.person),
+            ),
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 12),
+          
+          // Phone Field
+          TextField(
+            controller: _phoneController,
+            decoration: const InputDecoration(
+              labelText: 'Phone Number *',
+              hintText: '+1 (555) 123-4567',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.phone),
+            ),
+            keyboardType: TextInputType.phone,
+          ),
+          const SizedBox(height: 20),
+          
+          // Submit Button
+          ElevatedButton(
+            onPressed: () {
+              // Validate required fields
+              if (_nameController.text.trim().isEmpty ||
+                  _phoneController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please fill in all required fields'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              // Submit contact data
+              final contactData = {
+                'name': _nameController.text.trim(),
+                'tel': _phoneController.text.trim(),
+              };
+              
+              _aiService.onContactFormCompleted(contactData);
+              
+              setState(() {
+                _showContactForm = false;
+                _showSummary = true; // Show summary next
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFBB04C),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text(
+              'Complete Service Request',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  /// Build full address from location form components
+  String _buildFullAddress(Map<String, dynamic> locationForm) {
+    final address = locationForm['address']?.toString() ?? '';
+    final city = locationForm['city']?.toString() ?? '';
+    final state = locationForm['state']?.toString() ?? '';
+    final zipcode = locationForm['zipcode']?.toString() ?? '';
+    
+    // If we have a complete address, use it
+    if (address.isNotEmpty) {
+      List<String> parts = [address];
+      if (city.isNotEmpty) parts.add(city);
+      if (state.isNotEmpty) parts.add(state);
+      if (zipcode.isNotEmpty) parts.add(zipcode);
+      return parts.join(', ');
+    }
+    
+    // Fallback to currentState address if locationForm is empty
+    return _aiService.currentState.address ?? '';
+  }
+
+  /// Format date for clear display (e.g., "Sept 7th, 2025")
+  String _formatDateForDisplay(DateTime date) {
+    const monthNames = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'
+    ];
+    
+    String day = date.day.toString();
+    String suffix = _getDaySuffix(date.day);
+    String month = monthNames[date.month - 1];
+    String year = date.year.toString();
+    
+    return '$month $day$suffix, $year';
+  }
+
+  /// Get ordinal suffix for day (1st, 2nd, 3rd, 4th, etc.)
+  String _getDaySuffix(int day) {
+    if (day >= 11 && day <= 13) {
+      return 'th';
+    }
+    switch (day % 10) {
+      case 1:
+        return 'st';
+      case 2:
+        return 'nd';
+      case 3:
+        return 'rd';
+      default:
+        return 'th';
+    }
   }
 } 

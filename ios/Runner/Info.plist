@@ -46,6 +46,16 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	
+	<!-- Background Modes for Push Notifications -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	
+	<!-- Firebase AppDelegate Proxying -->
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<true/>
+	
 	<!-- Google Sign-in Section -->
 	<key>GIDClientID</key>
 	<string>441732602904-rvfcj0mu29lnp0ifs62emki322mbcsv0.apps.googleusercontent.com</string>
@@ -74,5 +84,7 @@
 	<string>We need access to your photo library for identity verification and to upload photos of your service needs.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>We need access to your contacts to find your friends on Magic Home</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need access to your location to find nearby service providers and calculate accurate service distances.</string>
 </dict>
 </plist> 
