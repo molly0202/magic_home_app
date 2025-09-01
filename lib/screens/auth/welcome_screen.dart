@@ -241,7 +241,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 28,
+                  fontSize: 16,
                   letterSpacing: 1.2,
                 ),
               ),
@@ -367,7 +367,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 child: Text.rich(
                   TextSpan(
                     text: 'Are you a service provider? ',
-                    style: const TextStyle(color: Colors.blue, fontSize: 20),
+                    style: const TextStyle(color: Colors.blue, fontSize: 12),
                     children: [
                       TextSpan(
                         text: 'Click here',

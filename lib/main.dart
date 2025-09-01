@@ -288,9 +288,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 
-<<<<<<< HEAD
 
-=======
 // Handle notification navigation
 void _handleNotificationNavigation(String notificationType, Map<String, dynamic> data) async {
   print('🔔 Handling notification navigation: $notificationType');
@@ -421,4 +419,4 @@ Future<void> _handleStatusUpdateNavigation(BuildContext context, Map<String, dyn
     // TODO: Navigate to support/help screen
   }
 }
->>>>>>> main
+
