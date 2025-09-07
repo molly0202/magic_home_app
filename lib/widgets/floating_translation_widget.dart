@@ -17,7 +17,7 @@ class FloatingTranslationWidget extends StatefulWidget {
 class _FloatingTranslationWidgetState extends State<FloatingTranslationWidget> with TickerProviderStateMixin {
   final TranslationService _translationService = TranslationService();
   bool _isDragging = false;
-  Offset _position = const Offset(20, 100);
+  Offset _position = const Offset(300, 500); // Right button side of screen
   late AnimationController _rotationController;
   late Animation<double> _rotationAnimation;
 

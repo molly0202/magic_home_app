@@ -49,6 +49,18 @@ class UserTaskService {
             continue;
           }
           
+          // Filter out old tasks without modifying database
+          final now = DateTime.now();
+          final taskAge = now.difference(request.createdAt);
+          
+          // Hide pending tasks older than 2 hours (no providers found) - don't modify database
+          if (taskAge.inHours >= 2 && request.status == 'pending') {
+            print('⏰ Hiding old pending task ${doc.id}: ${taskAge.inHours} hours old (UI filter only)');
+            continue; // Skip from display, but don't modify database
+          }
+          
+          // Keep all other tasks - users might want to see old quotes
+          
           print('📄 Processing request ${doc.id}: status=${request.status}');
           
           // Check for bidding session and bids

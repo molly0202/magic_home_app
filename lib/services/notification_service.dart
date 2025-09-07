@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -18,6 +19,70 @@ class NotificationService {
   // Set navigation callback for notification taps
   static void setNavigationCallback(Function(String notificationType, Map<String, dynamic> data) callback) {
     _navigationCallback = callback;
+  }
+
+  // Initialize FCM and register token
+  static Future<void> initializeFCM() async {
+    try {
+      // Request permission for iOS
+      await _firebaseMessaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+
+      // Get FCM token
+      final token = await _firebaseMessaging.getToken();
+      if (token != null) {
+        print('📱 FCM Token: $token');
+        
+        // Save token to user document
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .update({
+            'fcmTokens': FieldValue.arrayUnion([token]),
+            'lastTokenUpdate': FieldValue.serverTimestamp(),
+          });
+          print('✅ FCM token saved for user: ${user.uid}');
+        }
+      }
+
+      // Listen for foreground messages
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        print('📱 Received foreground message: ${message.notification?.title}');
+        _handleForegroundMessage(message);
+      });
+
+      // Listen for background message taps
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        print('📱 App opened from background message: ${message.notification?.title}');
+        _handleMessageTap(message);
+      });
+
+    } catch (e) {
+      print('❌ Error initializing FCM: $e');
+    }
+  }
+
+  static void _handleForegroundMessage(RemoteMessage message) {
+    // Handle foreground notifications - could show in-app notification
+    final data = message.data;
+    if (data['type'] == 'new_bid_received') {
+      print('📱 New bid notification received in foreground');
+      // The in-app notification service will handle this
+    }
+  }
+
+  static void _handleMessageTap(RemoteMessage message) {
+    // Handle when user taps on notification
+    final data = message.data;
+    if (data['type'] == 'new_bid_received' && _navigationCallback != null) {
+      _navigationCallback!('new_bid_received', data);
+    }
   }
 
   // Stream to listen for provider status changes
