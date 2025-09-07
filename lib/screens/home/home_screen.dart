@@ -18,6 +18,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../../services/reviews_service.dart';
 import '../../widgets/translatable_text.dart';
 import '../../services/in_app_notification_service.dart';
+import '../../services/notification_service.dart';
 import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
@@ -48,6 +49,11 @@ class _HomeScreenState extends State<HomeScreen> {
     // Initialize in-app notifications when home screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
       InAppNotificationService().initialize(context);
+      
+      // Save FCM token for authenticated user
+      if (widget.firebaseUser != null) {
+        NotificationService.saveFCMTokenForUser(widget.firebaseUser!.uid);
+      }
     });
   }
   
@@ -130,22 +136,25 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     // Icon
                     Icon(
                       icon,
                       color: isSelected ? const Color(0xFFFBB04C) : Colors.grey[600],
-                      size: 26,
+                      size: 24, // Reduced from 26
                     ),
-                    const SizedBox(height: 2), // Closer spacing
+                    const SizedBox(height: 1), // Reduced spacing
                     // Label (inside selected area)
                     TranslatableText(
                       label,
                       style: TextStyle(
                         color: isSelected ? const Color(0xFFFBB04C) : Colors.grey[600],
-                        fontSize: 12,
+                        fontSize: 10, // Reduced from 12
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -1588,6 +1597,49 @@ class _HomeScreenState extends State<HomeScreen> {
             label: const TranslatableText('Test Quote Notification'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 20),
+          
+          // Test FCM button (for debugging push notifications)
+          ElevatedButton.icon(
+            onPressed: () async {
+              print('🧪 Manual FCM Test Started...');
+              try {
+                await NotificationService.initializeFCM();
+                print('🧪 Manual FCM initialization completed');
+                
+                if (widget.firebaseUser != null) {
+                  await NotificationService.saveFCMTokenForUser(widget.firebaseUser!.uid);
+                  print('🧪 Manual FCM token save completed');
+                }
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('FCM test completed - check console logs'),
+                    backgroundColor: Colors.blue,
+                  ),
+                );
+              } catch (e) {
+                print('🧪 Manual FCM test failed: $e');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('FCM test failed: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.cloud_sync),
+            label: const TranslatableText('Test FCM Setup'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               shape: RoundedRectangleBorder(
