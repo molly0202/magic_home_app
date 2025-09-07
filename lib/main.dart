@@ -40,6 +40,10 @@ void main() async {
   await TranslationService().initialize();
   print('Translation service initialized');
   
+  // Initialize FCM for push notifications
+  await NotificationService.initializeFCM();
+  print('FCM service initialized');
+  
   // Set the background messaging handler early on
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user_request.dart';
 import '../../models/service_bid.dart';
 import '../../services/user_task_service.dart';
@@ -459,53 +460,9 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                     
                     const SizedBox(height: 12),
                     
-                    // Recommended by network
+                    // Recommended by network - show actual users
                     if (provider != null) ...[
-                      Row(
-                        children: [
-                          TranslatableText(
-                            'Recommended by 4 people in your network',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Avatar stack
-                          SizedBox(
-                            width: 80,
-                            height: 20,
-                            child: Stack(
-                              children: List.generate(4, (index) {
-                                return Positioned(
-                                  left: index * 15.0,
-                                  child: Container(
-                                    width: 20,
-                                    height: 20,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[300],
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: Colors.white,
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        String.fromCharCode(65 + index),
-                                        style: const TextStyle(
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }),
-                            ),
-                          ),
-                        ],
-                      ),
+                      _buildReferralUsersSection(provider),
                       const SizedBox(height: 12),
                     ],
                     
@@ -838,6 +795,243 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildReferralUsersSection(Map<String, dynamic> provider) {
+    final referredByUserIds = provider['referred_by_user_ids'] as List<dynamic>? ?? [];
+    
+    if (referredByUserIds.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _getNetworkReferralUsers(referredByUserIds.cast<String>()),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Row(
+            children: [
+              TranslatableText(
+                'Loading referrals...',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          );
+        }
+
+        final referralUsers = snapshot.data ?? [];
+        final displayCount = referralUsers.length;
+        
+        if (displayCount == 0) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.orange.shade200,
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header with icon wrapped in content
+              Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.people,
+                          color: Colors.blue.shade600,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: TranslatableText(
+                            'Recommended by $displayCount ${displayCount == 1 ? 'person' : 'people'} in your network',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.blue.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            softWrap: true,
+                            maxLines: 2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              
+              // User avatars and names
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: referralUsers.map((user) {
+                  final userName = user['name'] ?? 'User';
+                  final profileImageUrl = user['profileImageUrl'] as String?;
+                  
+                  return Column(
+                    children: [
+                      // Larger profile photo
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white,
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
+                          child: profileImageUrl != null
+                              ? Image.network(
+                                  profileImageUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Center(
+                                      child: Text(
+                                        userName.substring(0, 1).toUpperCase(),
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Center(
+                                  child: Text(
+                                    userName.substring(0, 1).toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      
+                      // User name
+                      Text(
+                        _getShortName(userName),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.blue.shade600,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _getNetworkReferralUsers(List<String> providerReferralIds) async {
+    final networkReferrals = <Map<String, dynamic>>[];
+    
+    try {
+      // Get current user's network/friends list
+      final currentUser = widget.user;
+      final currentUserDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+      
+      if (!currentUserDoc.exists) {
+        print('Current user document not found');
+        return networkReferrals;
+      }
+      
+      final currentUserData = currentUserDoc.data() as Map<String, dynamic>;
+      
+      // Build complete network: friends + referral relationships (both directions)
+      final userFriends = (currentUserData['friends'] as List<dynamic>?)?.cast<String>() ?? [];
+      final usersWhoReferredMe = (currentUserData['referred_by_user_ids'] as List<dynamic>?)?.cast<String>() ?? [];
+      final usersIReferred = (currentUserData['referred_user_ids'] as List<dynamic>?)?.cast<String>() ?? [];
+      
+      // Combine all network connections (remove duplicates)
+      final completeNetwork = <String>{};
+      completeNetwork.addAll(userFriends);
+      completeNetwork.addAll(usersWhoReferredMe);
+      completeNetwork.addAll(usersIReferred);
+      completeNetwork.add(currentUser.uid); // Include self
+      
+      print('🔍 Complete user network (${completeNetwork.length} people): $completeNetwork');
+      print('🔍 Provider referral IDs: $providerReferralIds');
+      
+      // Find intersection: users who are both in current user's network AND referred this provider
+      final networkReferralIds = providerReferralIds.where((referralId) => 
+          completeNetwork.contains(referralId)
+      ).toList();
+      
+      print('🔍 Network referral intersection: $networkReferralIds');
+      
+      // If no network connections, don't show the section
+      if (networkReferralIds.isEmpty) {
+        return networkReferrals;
+      }
+      
+      // Fetch user details for network referrals only
+      for (final userId in networkReferralIds.take(4)) { // Limit to 4 users for display
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
+        
+        if (userDoc.exists) {
+          final userData = userDoc.data() as Map<String, dynamic>;
+          networkReferrals.add({
+            'id': userId,
+            'name': userData['name'] ?? 'User',
+            'profileImageUrl': userData['profileImageUrl'],
+          });
+        }
+      }
+      
+      print('🔍 Found ${networkReferrals.length} actual network referrals');
+    } catch (e) {
+      print('Error fetching network referral users: $e');
+    }
+    
+    return networkReferrals;
+  }
+
+  String _getShortName(String fullName) {
+    final parts = fullName.trim().split(' ');
+    if (parts.length == 1) {
+      return parts[0].length > 8 ? '${parts[0].substring(0, 8)}...' : parts[0];
+    } else {
+      return '${parts[0]} ${parts[1].substring(0, 1)}.';
+    }
   }
 
   Future<void> _showProviderInfoDialog(String providerId, String providerName) async {

@@ -41,6 +41,15 @@ class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
   final ImagePicker _picker = ImagePicker();
   bool _isUpdatingPhoto = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize in-app notifications when home screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      InAppNotificationService().initialize(context);
+    });
+  }
   
   String? get _displayName {
     if (widget.googleUser != null) {
@@ -74,26 +83,22 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body: screens[_selectedIndex],
-      floatingActionButton: _selectedIndex == 0 ? FloatingActionButton(
-        onPressed: _onCreateServiceRequest,
-        backgroundColor: const Color(0xFFFBB04C),
-        elevation: 8,
-        child: const Icon(Icons.add, color: Colors.white, size: 28),
-      ) : null,
+      floatingActionButton: _buildFloatingFAB(),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: BottomAppBar(
         shape: const CircularNotchedRectangle(),
         notchMargin: 8,
+        height: 70,
         color: Colors.white,
-        elevation: 8,
-        child: SizedBox(
-          height: 60,
+        elevation: 10,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildBottomNavItem(0, Icons.home, 'Home'),
+              _buildBottomNavItem(0, Icons.home_filled, 'Home'),
               _buildBottomNavItem(1, Icons.assignment, 'Tasks'),
-              const SizedBox(width: 40), // Space for FAB
+              const SizedBox(width: 40), // Space for FAB notch
               _buildBottomNavItem(2, Icons.explore, 'Discover'),
               _buildBottomNavItem(3, Icons.person, 'Profile'),
             ],
@@ -105,26 +110,93 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBottomNavItem(int index, IconData icon, String label) {
     final isSelected = _selectedIndex == index;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedIndex = index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: isSelected ? const Color(0xFFFBB04C) : Colors.grey,
-            size: 24,
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedIndex = index),
+        child: Container(
+          height: 70, // Full height of bottom bar
+          width: double.infinity, // Full width touch area
+          padding: const EdgeInsets.only(top: 0, bottom: 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              // Combined icon and text in selected area
+              Container(
+                width: 60, // Larger container for icon + text
+                height: 58, // Full vertical area
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFFFBB04C).withOpacity(0.15) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Icon
+                    Icon(
+                      icon,
+                      color: isSelected ? const Color(0xFFFBB04C) : Colors.grey[600],
+                      size: 26,
+                    ),
+                    const SizedBox(height: 2), // Closer spacing
+                    // Label (inside selected area)
+                    TranslatableText(
+                      label,
+                      style: TextStyle(
+                        color: isSelected ? const Color(0xFFFBB04C) : Colors.grey[600],
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          TranslatableText(
-            label,
-            style: TextStyle(
-              color: isSelected ? const Color(0xFFFBB04C) : Colors.grey,
-              fontSize: 12,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingFAB() {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFFFBB04C),
+            const Color(0xFFFBB04C).withOpacity(0.9),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFBB04C).withOpacity(0.4),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+            spreadRadius: 1,
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(30),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(30),
+          onTap: _onCreateServiceRequest,
+          child: const Icon(
+            Icons.add,
+            color: Colors.white,
+            size: 32,
+          ),
+        ),
       ),
     );
   }
@@ -157,25 +229,29 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TranslatableText(
-                'Hello, ${_displayName ?? 'User'}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TranslatableText(
+                  'Hello, ${_displayName ?? 'User'}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const Text(
-                'Find your perfect home service',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-          ),
-              ),
-            ],
+                const Text(
+                  'Find your perfect home service',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -267,7 +343,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             flex: 3,
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(16), // Reduced padding
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -289,15 +365,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         fontWeight: FontWeight.bold,
                         color: Colors.black87,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
                     TranslatableText(
                       discount,
                       style: const TextStyle(
-                        fontSize: 36,
+                        fontSize: 32, // Reduced from 36
                         fontWeight: FontWeight.bold,
                         color: Colors.black,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
                     TranslatableText(
@@ -324,6 +404,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: Colors.grey,
                         height: 1.2,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -478,28 +560,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-                // Thumbs up/down badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.thumb_up,
-                        color: Colors.green,
-                        size: 12,
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        '👍',
-                        style: TextStyle(fontSize: 10),
-                      ),
-                    ],
-                  ),
+                const Spacer(),
+                // Heart icon (like mockup)
+                Icon(
+                  Icons.favorite_border,
+                  color: Colors.grey[600],
+                  size: 24,
                 ),
               ],
             ),
@@ -544,78 +610,63 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
           
-          // Action buttons (like Instagram)
+          // Review text and service attribution (clean, single section)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                Icon(Icons.favorite_border, size: 24, color: Colors.grey[700]),
-                const SizedBox(width: 16),
-                Icon(Icons.chat_bubble_outline, size: 24, color: Colors.grey[700]),
-                const SizedBox(width: 16),
-                Icon(Icons.share_outlined, size: 24, color: Colors.grey[700]),
-                const Spacer(),
-                if (review['serviceCategory'] != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFBB04C).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      review['serviceCategory'],
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFFFBB04C),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          
-          // Caption and details
-          Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
+            padding: const EdgeInsets.all(16),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Provider name
-                RichText(
-                  text: TextSpan(
-                    style: TextStyle(color: Colors.grey[800], fontSize: 14),
-                    children: [
-                      TextSpan(
-                        text: review['providerName'] ?? 'Provider',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const TextSpan(text: ' '),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                
                 // Review text
                 if (review['reviewText'] != null && review['reviewText'].isNotEmpty)
                   Text(
                     review['reviewText'],
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 14,
-                      color: Colors.grey[800],
-                      height: 1.3,
+                      color: Colors.black87,
+                      height: 1.4,
                     ),
                   ),
                 
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 
-                // Time ago
-                Text(
-                  review['timeAgo'] ?? 'Recently',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[500],
-                  ),
+                // Service provider attribution (like mockup)
+                Row(
+                  children: [
+                    Text(
+                      'Service by',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.verified,
+                            color: Colors.green,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            review['providerName'] ?? 'Provider',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1792,6 +1843,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  int _getConnectionCount(Map<String, dynamic> data) {
+    // Count unique connections properly (same logic as debug script)
+    final friends = (data['friends'] as List<dynamic>?)?.cast<String>() ?? [];
+    final referredBy = (data['referred_by_user_ids'] as List<dynamic>?)?.cast<String>() ?? [];
+    final referredUsers = (data['referred_user_ids'] as List<dynamic>?)?.cast<String>() ?? [];
+    final referredProviders = (data['referred_provider_ids'] as List<dynamic>?)?.cast<String>() ?? [];
+    
+    // Combine all connections and remove duplicates
+    final allConnections = <String>{};
+    allConnections.addAll(friends);
+    allConnections.addAll(referredBy);
+    allConnections.addAll(referredUsers);
+    allConnections.addAll(referredProviders);
+    
+    return allConnections.length;
+  }
+
+  int _getTaskCount(Map<String, dynamic> data) {
+    // This will be calculated dynamically from actual completed tasks
+    // For now, return 0 and let the FutureBuilder handle the real count
+    return 0; // Will be replaced with real-time data
+  }
+
+  Future<int> _getCompletedTasksCount(String userId) async {
+    try {
+      final completedTasksQuery = await FirebaseFirestore.instance
+          .collection('user_requests')
+          .where('userId', isEqualTo: userId)
+          .where('status', isEqualTo: 'completed')
+          .get();
+      
+      return completedTasksQuery.docs.length;
+    } catch (e) {
+      print('Error getting completed tasks count: $e');
+      return 0;
+    }
+  }
+
   Widget _buildProfileScreen() {
     final user = widget.firebaseUser;
     if (user == null) {
@@ -1907,9 +1996,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           Expanded(
                             child: Column(
                               children: [
-                                const Text(
-                                  '5',
-                                  style: TextStyle(
+                                Text(
+                                  '${_getConnectionCount(data)}',
+                                  style: const TextStyle(
                                     fontSize: 36,
                                     fontWeight: FontWeight.bold,
                                     color: Color(0xFFFBB04C),
@@ -1917,7 +2006,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Referrals',
+                                  'Connections',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: Colors.grey[700],
@@ -1935,17 +2024,23 @@ class _HomeScreenState extends State<HomeScreen> {
                           Expanded(
                             child: Column(
                               children: [
-                                const Text(
-                                  '12',
-                                  style: TextStyle(
-                                    fontSize: 36,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFFFBB04C),
-                                  ),
+                                FutureBuilder<int>(
+                                  future: _getCompletedTasksCount(user.uid),
+                                  builder: (context, snapshot) {
+                                    final count = snapshot.data ?? 0;
+                                    return Text(
+                                      '$count',
+                                      style: const TextStyle(
+                                        fontSize: 36,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFFFBB04C),
+                                      ),
+                                    );
+                                  },
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Tasks Completed',
+                                  'Tasks',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: Colors.grey[700],
@@ -2714,14 +2809,36 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> with SingleTi
       if (!userDoc.exists) return;
 
       final userData = userDoc.data()!;
+      final friends = List<String>.from(userData['friends'] ?? []);
       final referredByUserIds = List<String>.from(userData['referred_by_user_ids'] ?? []);
       final referredUserIds = List<String>.from(userData['referred_user_ids'] ?? []);
       final referredProviderIds = List<String>.from(userData['referred_provider_ids'] ?? []);
 
       List<Map<String, dynamic>> connections = [];
 
-      // Add users who referred this user
+      // Add friends (actual social connections)
+      for (String userId in friends) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
+        if (userDoc.exists) {
+          final data = userDoc.data()!;
+          connections.add({
+            'id': userId,
+            'name': data['name'] ?? 'User',
+            'email': data['email'] ?? '',
+            'avatar': data['profileImageUrl'] ?? 'https://picsum.photos/100/100?random=${userId.hashCode}',
+            'type': 'user',
+            'relationship': 'friend',
+            'referralCode': data['referralCode'] ?? '',
+          });
+        }
+      }
+
+      // Add users who referred this user (skip if already added as friend)
       for (String userId in referredByUserIds) {
+        if (friends.contains(userId)) continue; // Avoid duplicates
         final userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(userId)
@@ -2740,8 +2857,9 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> with SingleTi
         }
       }
 
-      // Add users referred by this user
+      // Add users referred by this user (skip duplicates)
       for (String userId in referredUserIds) {
+        if (friends.contains(userId) || referredByUserIds.contains(userId)) continue; // Avoid duplicates
         final userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(userId)

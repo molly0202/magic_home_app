@@ -29,26 +29,38 @@ class InAppNotificationService {
   void _listenForNewQuotes(String userId, BuildContext context) {
     developer.log('🔔 Starting to listen for new quotes for user: $userId');
     
-    // Listen to service_bids collection for new bids
+    // Listen to service_bids collection for new bids (with more debugging)
     FirebaseFirestore.instance
         .collection('service_bids')
         .where('userId', isEqualTo: userId)
-        .where('bidStatus', isEqualTo: 'pending')
         .snapshots()
         .listen((snapshot) {
       
+      developer.log('🔔 Received snapshot with ${snapshot.docs.length} total bids');
+      
       for (final change in snapshot.docChanges) {
+        developer.log('🔔 Document change detected: ${change.type} for ${change.doc.id}');
+        
         if (change.type == DocumentChangeType.added) {
           final bid = ServiceBid.fromFirestore(change.doc);
           final bidId = change.doc.id;
           
-          // Check if we've already shown this notification
-          if (!_shownNotifications.contains(bidId)) {
-            _shownNotifications.add(bidId);
-            developer.log('🔔 New quote detected: $bidId from provider ${bid.providerId}');
-            
-            // Get the user request details
-            _getUserRequestAndShowNotification(bid, context);
+          developer.log('🔔 New bid added: $bidId, status: ${bid.bidStatus}, user: ${bid.userId}');
+          
+          // Only show notifications for pending bids
+          if (bid.bidStatus == 'pending') {
+            // Check if we've already shown this notification
+            if (!_shownNotifications.contains(bidId)) {
+              _shownNotifications.add(bidId);
+              developer.log('🔔 Showing notification for new quote: $bidId from provider ${bid.providerId}');
+              
+              // Get the user request details
+              _getUserRequestAndShowNotification(bid, context);
+            } else {
+              developer.log('🔔 Notification already shown for bid: $bidId');
+            }
+          } else {
+            developer.log('🔔 Skipping non-pending bid: $bidId (status: ${bid.bidStatus})');
           }
         }
       }
