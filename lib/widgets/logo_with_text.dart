@@ -8,7 +8,7 @@ class LogoWithText extends StatefulWidget {
   const LogoWithText({
     super.key,
     this.logoSize = 80.0,
-    this.fontSize = 32.0,
+    this.fontSize = 20.0,
     this.includeText = true,
   });
 
