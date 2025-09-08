@@ -659,66 +659,202 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
 
   Future<void> _showTimeConfirmationDialog(ServiceBid bid) async {
     final TextEditingController timeController = TextEditingController();
+    DateTime? selectedDate;
+    TimeOfDay? selectedTime;
     
     final result = await showDialog<String>(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text(
-            'Confirm Service Time',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Please confirm when you\'d like the service to be performed:',
-                style: TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: timeController,
-                decoration: const InputDecoration(
-                  labelText: 'Service Date & Time',
-                  hintText: 'e.g., Tomorrow at 2 PM, Sept 7th at 10 AM, This weekend',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.schedule),
-                ),
-                textCapitalization: TextCapitalization.sentences,
-                maxLines: 2,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Examples: "Tomorrow at 2 PM", "Sept 7th at 10 AM", "This weekend morning"',
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text(
+                'Confirm Service Time',
                 style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (timeController.text.trim().isNotEmpty) {
-                  Navigator.of(context).pop(timeController.text.trim());
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFBB04C),
-                foregroundColor: Colors.white,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Provider availability section
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.schedule, color: Colors.blue.shade600, size: 16),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Provider Availability',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            bid.availability.isNotEmpty ? bid.availability : 'Flexible scheduling available',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.blue.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 16),
+                    
+                    const Text(
+                      'Please confirm when you\'d like the service to be performed:',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Quick calendar selection
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final date = await showDatePicker(
+                                context: context,
+                                initialDate: DateTime.now().add(const Duration(days: 1)),
+                                firstDate: DateTime.now(),
+                                lastDate: DateTime.now().add(const Duration(days: 30)),
+                              );
+                              if (date != null) {
+                                setDialogState(() {
+                                  selectedDate = date;
+                                });
+                              }
+                            },
+                            icon: const Icon(Icons.calendar_today, size: 16),
+                            label: Text(
+                              selectedDate != null 
+                                ? '${selectedDate!.month}/${selectedDate!.day}'
+                                : 'Select Date',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFFBB04C),
+                              side: const BorderSide(color: Color(0xFFFBB04C)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final time = await showTimePicker(
+                                context: context,
+                                initialTime: const TimeOfDay(hour: 10, minute: 0),
+                              );
+                              if (time != null) {
+                                setDialogState(() {
+                                  selectedTime = time;
+                                });
+                              }
+                            },
+                            icon: const Icon(Icons.access_time, size: 16),
+                            label: Text(
+                              selectedTime != null 
+                                ? '${selectedTime!.format(context)}'
+                                : 'Select Time',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFFBB04C),
+                              side: const BorderSide(color: Color(0xFFFBB04C)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 12),
+                    const Text(
+                      'OR',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Text input for custom time
+                    TextField(
+                      controller: timeController,
+                      decoration: const InputDecoration(
+                        labelText: 'Custom Date & Time',
+                        hintText: 'e.g., Tomorrow at 2 PM, This weekend',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.edit_calendar),
+                        isDense: true,
+                      ),
+                      textCapitalization: TextCapitalization.sentences,
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Examples: "Tomorrow at 2 PM", "Sept 7th at 10 AM", "This weekend morning"',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: const Text('Accept Quote'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    String finalTime = '';
+                    
+                    // Use calendar selection if both date and time are selected
+                    if (selectedDate != null && selectedTime != null) {
+                      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                      finalTime = '${months[selectedDate!.month - 1]} ${selectedDate!.day} at ${selectedTime!.format(context)}';
+                    } 
+                    // Use custom text if provided
+                    else if (timeController.text.trim().isNotEmpty) {
+                      finalTime = timeController.text.trim();
+                    }
+                    
+                    if (finalTime.isNotEmpty) {
+                      Navigator.of(context).pop(finalTime);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFBB04C),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Accept Quote'),
+                ),
+              ],
+            );
+          },
         );
       },
     );

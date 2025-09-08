@@ -89,27 +89,74 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body: screens[_selectedIndex],
-      floatingActionButton: _buildFloatingFAB(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8,
-        height: 70,
-        color: Colors.white,
-        elevation: 10,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildBottomNavItem(0, Icons.home_filled, 'Home'),
-              _buildBottomNavItem(1, Icons.assignment, 'Tasks'),
-              const SizedBox(width: 40), // Space for FAB notch
-              _buildBottomNavItem(2, Icons.explore, 'Discover'),
-              _buildBottomNavItem(3, Icons.person, 'Profile'),
+      floatingActionButton: Container(
+        width: 60,
+        height: 60,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFFFBB04C),
+              const Color(0xFFFBB04C).withOpacity(0.9),
             ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          shape: BoxShape.circle, // Ensures perfect round shape
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFBB04C).withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(), // Perfect circle shape
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: _onCreateServiceRequest,
+            child: const Center(
+              child: Icon(
+                Icons.add,
+                color: Colors.white,
+                size: 32,
+              ),
+            ),
           ),
         ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        backgroundColor: Colors.white,
+        selectedItemColor: const Color(0xFFFBB04C),
+        unselectedItemColor: Colors.grey[600],
+        selectedFontSize: 12,
+        unselectedFontSize: 11,
+        iconSize: 26,
+        elevation: 10,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_filled),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.assignment),
+            label: 'Tasks',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.explore),
+            label: 'Discover',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
       ),
     );
   }
@@ -119,45 +166,37 @@ class _HomeScreenState extends State<HomeScreen> {
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _selectedIndex = index),
-        child: Container(
-          height: 70, // Full height of bottom bar
-          width: double.infinity, // Full width touch area
-          padding: const EdgeInsets.only(top: 0, bottom: 8),
+        child: SizedBox(
+          height: 72, // Fixed height that definitely fits
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Combined icon and text in selected area
+              // Simple icon with background
               Container(
-                width: 60, // Larger container for icon + text
-                height: 58, // Full vertical area
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: isSelected ? const Color(0xFFFBB04C).withOpacity(0.15) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Icon
-                    Icon(
-                      icon,
-                      color: isSelected ? const Color(0xFFFBB04C) : Colors.grey[600],
-                      size: 24, // Reduced from 26
-                    ),
-                    const SizedBox(height: 1), // Reduced spacing
-                    // Label (inside selected area)
-                    TranslatableText(
-                      label,
-                      style: TextStyle(
-                        color: isSelected ? const Color(0xFFFBB04C) : Colors.grey[600],
-                        fontSize: 10, // Reduced from 12
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                child: Icon(
+                  icon,
+                  color: isSelected ? const Color(0xFFFBB04C) : Colors.grey[600],
+                  size: 24,
                 ),
+              ),
+              const SizedBox(height: 4),
+              // Compact label
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? const Color(0xFFFBB04C) : Colors.grey[600],
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.clip,
               ),
             ],
           ),
