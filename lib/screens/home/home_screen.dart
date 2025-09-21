@@ -75,59 +75,47 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
+  Future<String> _getUserDisplayName() async {
+    try {
+      if (widget.firebaseUser != null) {
+        // Get user's actual name from Firebase
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.firebaseUser!.uid)
+            .get();
+        
+        if (userDoc.exists) {
+          final userData = userDoc.data() as Map<String, dynamic>;
+          final name = userData['name'] as String?;
+          if (name != null && name.isNotEmpty) {
+            return name;
+          }
+        }
+      }
+      
+      // Fallback to display name or email
+      return _displayName ?? widget.firebaseUser?.email?.split('@')[0] ?? 'User';
+    } catch (e) {
+      print('Error getting user display name: $e');
+      return _displayName ?? 'User';
+    }
+  }
+
 
 
   @override
   Widget build(BuildContext context) {
     final List<Widget> screens = [
-      _buildHomeScreen(),
-      _buildTasksScreen(),
-      _buildDiscoverScreen(),
-      _buildProfileScreen(),
+      _buildHomeScreen(),      // 0: Home
+      _buildDiscoverScreen(),  // 1: Discover  
+      _buildTasksScreen(),     // 2: Tasks
+      _buildFriendsScreen(),   // 3: Friends (My Connections)
+      _buildProfileScreen(),   // 4: Profile
     ];
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body: screens[_selectedIndex],
-      floatingActionButton: Container(
-        width: 60,
-        height: 60,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              const Color(0xFFFBB04C),
-              const Color(0xFFFBB04C).withOpacity(0.9),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          shape: BoxShape.circle, // Ensures perfect round shape
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFBB04C).withOpacity(0.4),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          shape: const CircleBorder(), // Perfect circle shape
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: _onCreateServiceRequest,
-            child: const Center(
-              child: Icon(
-                Icons.add,
-                color: Colors.white,
-                size: 32,
-              ),
-            ),
-          ),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
@@ -141,16 +129,20 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 10,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home_filled),
+            icon: Icon(Icons.home),
             label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.explore),
+            label: 'Discover',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.assignment),
             label: 'Tasks',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.explore),
-            label: 'Discover',
+            icon: Icon(Icons.people),
+            label: 'Friends',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
@@ -255,8 +247,13 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           children: [
             _buildHeader(),
-            _buildPromotionalBanner(),
-            const SizedBox(height: 20),
+            _buildPromotionalCarousel(),
+            const SizedBox(height: 24),
+            
+            // Prominent "Start a New Task" button
+            _buildStartNewTaskButton(),
+            
+            const SizedBox(height: 24),
             _buildServiceProviderFeed(),
           ],
         ),
@@ -281,15 +278,21 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TranslatableText(
-                  'Hello, ${_displayName ?? 'User'}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+              FutureBuilder<String>(
+                future: _getUserDisplayName(),
+                builder: (context, snapshot) {
+                  final userName = snapshot.data ?? _displayName ?? 'User';
+                  return TranslatableText(
+                    'Hello, $userName',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
+              ),
                 const Text(
                   'Find your perfect home service',
                   style: TextStyle(
@@ -336,6 +339,140 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPromotionalCarousel() {
+    final promoData = [
+      {
+        'title': 'DEEP CLEANING SERVICE',
+        'discount': '10% OFF',
+        'promoCode': 'DCFS',
+        'description': 'Professional deep cleaning for your home',
+        'image': 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=400',
+      },
+      {
+        'title': 'HANDYMAN SERVICES', 
+        'discount': '15% OFF',
+        'promoCode': 'HANDY15',
+        'description': 'Expert handyman for all your home repairs',
+        'image': 'https://images.unsplash.com/photo-1621905251918-48416bd8575a?w=400',
+      },
+      {
+        'title': 'GARDEN MAINTENANCE',
+        'discount': '20% OFF', 
+        'promoCode': 'GARDEN20',
+        'description': 'Keep your garden beautiful year-round',
+        'image': 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
+      },
+    ];
+
+    return Container(
+      height: 180,
+      margin: const EdgeInsets.symmetric(vertical: 16),
+      child: PageView.builder(
+        itemCount: promoData.length,
+        itemBuilder: (context, index) {
+          final promo = promoData[index];
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: const LinearGradient(
+                colors: [Color(0xFFF5F5F5), Colors.white],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  spreadRadius: 0,
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                // Left side - Text content
+                Expanded(
+                  flex: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'sendhelper',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          promo['title']!,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          promo['discount']!,
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'ENTER PROMO CODE',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Text(
+                          promo['promoCode']!,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFFBB04C),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Right side - Image
+                Expanded(
+                  flex: 2,
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+                    child: Image.network(
+                      promo['image']!,
+                      fit: BoxFit.cover,
+                      height: double.infinity,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.image, size: 40, color: Colors.grey),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -480,6 +617,62 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildStartNewTaskButton() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFBB04C), Color(0xFFFF8C42)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFBB04C).withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: SizedBox(
+        width: double.infinity,
+        height: 60,
+        child: ElevatedButton.icon(
+          onPressed: _onCreateServiceRequest,
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.smart_toy, // Robot icon
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          label: const TranslatableText(
+            'Start a New Task',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildServiceProviderFeed() {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _loadRecentReviews(),
@@ -534,12 +727,146 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        return Column(
-          children: snapshot.data!
-              .map((review) => _buildInstagramStylePost(review))
-              .toList(),
-        );
+        return _build2ColumnPostsGrid(snapshot.data!);
       },
+    );
+  }
+
+  Widget _build2ColumnPostsGrid(List<Map<String, dynamic>> reviews) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.55, // Even taller cards for portrait photos
+        ),
+        itemCount: reviews.length,
+        itemBuilder: (context, index) {
+          return _buildCompactPostCard(reviews[index]);
+        },
+      ),
+    );
+  }
+
+  Widget _buildCompactPostCard(Map<String, dynamic> review) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Image section with proper aspect ratio
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            child: AspectRatio(
+              aspectRatio: 3/4, // Portrait ratio (width smaller than height)
+              child: Container(
+                width: double.infinity,
+                child: review['photoUrls'] != null && 
+                       (review['photoUrls'] as List).isNotEmpty
+                    ? Image.network(
+                        (review['photoUrls'] as List)[0],
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.grey[200],
+                          child: const Icon(Icons.image, size: 40, color: Colors.grey),
+                        ),
+                      )
+                    : Container(
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.image, size: 40, color: Colors.grey),
+                      ),
+              ),
+            ),
+          ),
+          
+          // Content section
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // User info
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundImage: review['customerAvatar'] != null
+                            ? NetworkImage(review['customerAvatar'])
+                            : null,
+                        backgroundColor: Colors.grey[300],
+                        child: review['customerAvatar'] == null
+                            ? Icon(Icons.person, color: Colors.grey[600], size: 14)
+                            : null,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          review['customerName'] ?? 'Anonymous',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.favorite_border,
+                        color: Colors.grey,
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Review text
+                  Expanded(
+                    child: Text(
+                      review['reviewText'] ?? review['review'] ?? 'Great service!',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.black87,
+                        height: 1.3,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 4),
+                  
+                  // Service provider
+                  Text(
+                    'Service by ${review['providerName'] ?? 'Provider'}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1687,6 +2014,23 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFriendsScreen() {
+    // Show My Connections page
+    if (widget.firebaseUser != null) {
+      return MyConnectionsScreen();
+    }
+    
+    return const Center(
+      child: Text(
+        'Please log in to view your connections',
+        style: TextStyle(
+          fontSize: 16,
+          color: Colors.grey,
+        ),
       ),
     );
   }
