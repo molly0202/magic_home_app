@@ -242,103 +242,91 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHomeScreen() {
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildPromotionalCarousel(),
-            const SizedBox(height: 24),
-            
-            // Prominent "Start a New Task" button
-            _buildStartNewTaskButton(),
-            
-            const SizedBox(height: 24),
-            _buildServiceProviderFeed(),
-          ],
-        ),
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      body: Column(
+        children: [
+          // Sticky/frozen header on top
+          _buildHeader(),
+          
+          // Scrollable content below header
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _buildPromotionalCarousel(),
+                  const SizedBox(height: 12), // Reduced spacing
+                  
+                  // Prominent "Start a New Task" button
+                  _buildStartNewTaskButton(),
+                  
+                  const SizedBox(height: 4), // Much smaller gap
+                  _buildServiceProviderFeed(),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12), // Better positioning - less top padding
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFFBB04C), Color(0xFFFF8C42)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.white,
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-              FutureBuilder<String>(
-                future: _getUserDisplayName(),
-                builder: (context, snapshot) {
-                  final userName = snapshot.data ?? _displayName ?? 'User';
-                  return TranslatableText(
-                    'Hello, $userName',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  );
-                },
-              ),
-                const Text(
-                  'Find your perfect home service',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  '50',
-                  style: TextStyle(
-                    color: Color(0xFFFBB04C),
-                    fontSize: 18,
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Simple user greeting
+            FutureBuilder<String>(
+              future: _getUserDisplayName(),
+              builder: (context, snapshot) {
+                final userName = snapshot.data ?? _displayName ?? 'User';
+                return Text(
+                  'Hello, $userName',
+                  style: const TextStyle(
+                    color: Color(0xFFFBB04C), // Orange/yellow color
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
-                ),
-                const SizedBox(width: 4),
-                Container(
-                  width: 20,
-                  height: 20,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFBB04C),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.star,
-                    color: Colors.white,
-                    size: 12,
-                  ),
-                ),
-              ],
+                  overflow: TextOverflow.ellipsis,
+                );
+              },
             ),
-          ),
-        ],
+            
+            // + button for creating posts
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBB04C), // Orange/yellow background
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: IconButton(
+                onPressed: () {
+                  // Navigate to create post screen (placeholder for now)
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Create post feature coming soon!'),
+                      backgroundColor: Color(0xFFFBB04C),
+                    ),
+                  );
+                },
+                icon: const Icon(
+                  Icons.add,
+                  color: Colors.white, // White icon on orange background
+                  size: 20,
+                ),
+                padding: EdgeInsets.zero,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -368,15 +356,18 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     ];
 
-    return Container(
-      height: 180,
-      margin: const EdgeInsets.symmetric(vertical: 16),
-      child: PageView.builder(
-        itemCount: promoData.length,
-        itemBuilder: (context, index) {
-          final promo = promoData[index];
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
+    return Column(
+      children: [
+        Container(
+          height: 140, // Smaller height
+          margin: const EdgeInsets.symmetric(vertical: 16),
+          child: PageView.builder(
+            controller: PageController(viewportFraction: 0.75), // Show 1.5 banners
+            itemCount: promoData.length,
+            itemBuilder: (context, index) {
+              final promo = promoData[index];
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               gradient: const LinearGradient(
@@ -474,6 +465,26 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
       ),
+    ),
+    
+    // Gray dots indicator
+    const SizedBox(height: 12),
+    Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(
+        promoData.length,
+        (index) => Container(
+          width: 8,
+          height: 8,
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey[400], // Gray dots
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    ),
+    ],
     );
   }
 
