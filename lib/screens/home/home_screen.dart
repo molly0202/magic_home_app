@@ -19,6 +19,7 @@ import '../../services/reviews_service.dart';
 import '../../widgets/translatable_text.dart';
 import '../../services/in_app_notification_service.dart';
 import '../../services/notification_service.dart';
+import '../social/full_screen_post_screen.dart';
 import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
@@ -260,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   // Prominent "Start a New Task" button
                   _buildStartNewTaskButton(),
                   
-                  const SizedBox(height: 4), // Much smaller gap
+                  const SizedBox(height: 0), // No gap - posts directly below button
                   _buildServiceProviderFeed(),
                 ],
               ),
@@ -744,15 +745,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _build2ColumnPostsGrid(List<Map<String, dynamic>> reviews) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: GridView.builder(
+    return Transform.translate(
+      offset: const Offset(0, -8), // Pull posts up by 8px to eliminate gap
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 0), // No top padding - connect directly to button
+        child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 12,
+          crossAxisSpacing: 6, // Reduced from 8 to 6
+          mainAxisSpacing: 8,  // Reduced from 12 to 8
           childAspectRatio: 0.55, // Even taller cards for portrait photos
         ),
         itemCount: reviews.length,
@@ -760,22 +763,25 @@ class _HomeScreenState extends State<HomeScreen> {
           return _buildCompactPostCard(reviews[index]);
         },
       ),
+    ),
     );
   }
 
   Widget _buildCompactPostCard(Map<String, dynamic> review) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+    return GestureDetector(
+      onTap: () => _openFullScreenPost(review),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -836,10 +842,31 @@ class _HomeScreenState extends State<HomeScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const Icon(
-                        Icons.favorite_border,
-                        color: Colors.grey,
-                        size: 16,
+                      FutureBuilder<int>(
+                        future: _getPostLikeCount(review['reviewId'] ?? review['id']),
+                        builder: (context, snapshot) {
+                          final likeCount = snapshot.data ?? 0;
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.favorite_border,
+                                color: Colors.grey[600],
+                                size: 14,
+                              ),
+                              if (likeCount > 0) ...[
+                                const SizedBox(width: 2),
+                                Text(
+                                  '$likeCount',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -878,7 +905,35 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+    ),
     );
+  }
+
+  void _openFullScreenPost(Map<String, dynamic> review) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FullScreenPostScreen(
+          review: review,
+          currentUser: widget.firebaseUser,
+        ),
+      ),
+    );
+  }
+
+  Future<int> _getPostLikeCount(String? reviewId) async {
+    if (reviewId == null) return 0;
+    
+    try {
+      final likesQuery = await FirebaseFirestore.instance
+          .collection('post_likes')
+          .where('reviewId', isEqualTo: reviewId)
+          .get();
+      
+      return likesQuery.docs.length;
+    } catch (e) {
+      return 0;
+    }
   }
 
   Future<List<Map<String, dynamic>>> _loadRecentReviews() async {

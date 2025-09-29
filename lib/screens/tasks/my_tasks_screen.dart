@@ -5,7 +5,7 @@ import '../../models/user_request.dart';
 import '../../services/user_task_service.dart';
 import '../../widgets/translatable_text.dart';
 import 'task_detail_screen.dart';
-
+import '../ai_task_intake_screen.dart';
 import '../reviews/customer_review_screen.dart';
 
 class MyTasksScreen extends StatefulWidget {
@@ -43,6 +43,17 @@ class _MyTasksScreenState extends State<MyTasksScreen>
     });
   }
 
+  void _createNewTask() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AITaskIntakeScreen(
+          user: widget.user,
+        ),
+      ),
+    );
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -75,10 +86,27 @@ class _MyTasksScreenState extends State<MyTasksScreen>
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black87),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshStreams,
-            tooltip: 'Refresh Tasks',
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            child: ElevatedButton(
+              onPressed: _createNewTask,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFBB04C),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                elevation: 2,
+              ),
+              child: const Text(
+                'New Task',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ),
         ],
         bottom: TabBar(
