@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math' as math;
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import 'dart:async';
 
 enum MessageType { user, ai, system }
 
@@ -126,6 +126,58 @@ class AIConversationService {
   static final AIConversationService _instance = AIConversationService._internal();
   factory AIConversationService() => _instance;
   AIConversationService._internal();
+
+  // Stream controller for notifying UI of message changes
+  final StreamController<List<ChatMessage>> _messagesController = StreamController<List<ChatMessage>>.broadcast();
+  Stream<List<ChatMessage>> get messagesStream => _messagesController.stream;
+  
+  // Stream controller for notifying UI of conversation state changes
+  final StreamController<ConversationState> _conversationStateController = StreamController<ConversationState>.broadcast();
+  Stream<ConversationState> get conversationStateStream => _conversationStateController.stream;
+
+  /// Test Gemini API with a simple request
+  Future<String> testGeminiAPI() async {
+    try {
+      print('🧪 Testing Gemini API...');
+      print('🔑 API Key: ${ApiConfig.geminiApiKey.substring(0, 10)}...');
+      print('🌐 Base URL: ${ApiConfig.geminiBaseUrl}');
+      
+      final response = await http.post(
+        Uri.parse('${ApiConfig.geminiBaseUrl}?key=${ApiConfig.geminiApiKey}'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'contents': [{
+            'parts': [{'text': 'Hello, this is a test. Please respond with "API is working".'}]
+          }],
+          'generationConfig': {
+            'maxOutputTokens': 50,
+          },
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      print('📤 Test request sent...');
+      print('📥 Response status: ${response.statusCode}');
+      print('📄 Response body: ${response.body.substring(0, response.body.length.clamp(0, 200))}...');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+          final responseText = data['candidates'][0]['content']['parts'][0]['text'];
+          print('✅ Gemini API test successful: $responseText');
+          return responseText;
+        }
+      }
+      
+      print('❌ Gemini API test failed: ${response.statusCode} - ${response.body}');
+      return 'API test failed: ${response.statusCode}';
+      
+    } catch (e) {
+      print('❌ Gemini API test error: $e');
+      return 'API test error: $e';
+    }
+  }
   
   // Callbacks for UI interactions
   Function(Map<String, dynamic>)? onServiceRequestComplete;
@@ -255,6 +307,16 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
 
   void _addMessage(ChatMessage message) {
     _messages.add(message);
+    _messagesController.add(List.from(_messages));
+  }
+  
+  void _notifyConversationStateChanged() {
+    _conversationStateController.add(_currentState);
+  }
+
+  /// Public method to add messages from external services
+  void addMessage(ChatMessage message) {
+    _addMessage(message);
   }
 
   Future<String> processUserInput(String input) async {
@@ -327,20 +389,25 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
 
   Future<String> _generateGeminiResponse(String input) async {
     try {
+      print('🤖 Starting AI response generation for: "${input.substring(0, input.length.clamp(0, 50))}..."');
+      
       // Check if ANY AI is configured, not just Gemini
       if (!ApiConfig.isAnyAiConfigured) {
+        print('⚠️ No AI configured, using mock response');
         return await _generateMockResponse(input);
       }
       
       // If Gemini is specifically configured, use it
       if (ApiConfig.isGeminiConfigured) {
+        print('🎯 Gemini configured, calling Gemini API...');
         return await _callGeminiAPI(input);
       }
       
       // If other AI is configured but not Gemini, fall back to mock
+      print('⚠️ Gemini not configured, using mock response');
       return await _generateMockResponse(input);
     } catch (e) {
-      print('Error generating Gemini response: $e');
+      print('❌ Error generating Gemini response: $e');
       return _generateFallbackResponse(input);
     }
   }
@@ -350,6 +417,8 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     
     while (retryCount < ApiConfig.maxRetries) {
       try {
+        print('📡 Gemini API Call - Attempt ${retryCount + 1}/${ApiConfig.maxRetries}');
+        
         // Build comprehensive conversation context
         final conversationContext = _buildEnhancedConversationContext();
         final userMessage = _buildContextualUserMessage(input);
@@ -360,6 +429,9 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
             "parts": [{"text": "$_systemPrompt\n\n$conversationContext\n\nUser: $userMessage"}]
           }
         ];
+
+        print('📤 Sending request to Gemini API...');
+        final startTime = DateTime.now();
 
         final response = await http.post(
           Uri.parse('${ApiConfig.geminiBaseUrl}?key=${ApiConfig.geminiApiKey}'),
@@ -386,32 +458,43 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
               }
             ],
           }),
-        ).timeout(ApiConfig.apiTimeout);
+        ).timeout(const Duration(seconds: 10)); // Reduced timeout for faster failure
+
+        final duration = DateTime.now().difference(startTime);
+        print('📥 Response received in ${duration.inMilliseconds}ms - Status: ${response.statusCode}');
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
+          print('📋 Response data structure: ${data.keys}');
+          
           if (data['candidates'] != null && data['candidates'].isNotEmpty) {
             final responseText = data['candidates'][0]['content']['parts'][0]['text'];
-            print('Gemini API call successful');
+            print('✅ Gemini API call successful - Response length: ${responseText.length}');
             
             // Advance conversation step based on response content
             _advanceConversationStep(responseText);
             
             return responseText.trim();
+          } else {
+            print('⚠️ No candidates in response: $data');
+            throw Exception('No candidates in Gemini API response');
           }
         }
         
+        print('❌ Gemini API error: ${response.statusCode} - ${response.body}');
         throw Exception('Gemini API error: ${response.statusCode} - ${response.body}');
         
       } catch (e) {
         retryCount++;
-        print('Gemini API call attempt $retryCount failed: $e');
+        print('❌ Gemini API call attempt $retryCount failed: $e');
+        print('🔍 Error type: ${e.runtimeType}');
         
         if (retryCount >= ApiConfig.maxRetries) {
-          print('Max retries reached, falling back to mock response');
+          print('🚫 Max retries reached, falling back to mock response');
           return _generateFallbackResponse(input);
         }
         
+        print('⏳ Waiting ${retryCount * 2}s before retry...');
         // Wait before retry with exponential backoff
         await Future.delayed(Duration(seconds: retryCount * 2));
       }
@@ -538,7 +621,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         
         // Auto-advance to photos after 3 conversation rounds in details
         if (step2Rounds >= 3) {
-          _currentState.conversationStep = 3;
+      _currentState.conversationStep = 3;
           _currentState.photoUploadRequested = true;
           print('📝 Step 2: Auto-advancing to photos after $step2Rounds rounds of details');
         }
@@ -670,8 +753,6 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     }
     
     // More concise mock flow with attempt tracking
-    String stepKey = 'step_${_currentState.conversationStep}_attempts';
-    int attempts = _currentState.extractedInfo[stepKey] ?? 0;
     
     if (_currentState.conversationStep == 2) {
       // Handle Step 2 conversation rounds for details gathering
@@ -685,7 +766,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
       
       // After 3 rounds, auto-advance to photos
       if (step2Rounds >= 3) {
-        _currentState.conversationStep = 3;
+      _currentState.conversationStep = 3;
         _currentState.photoUploadRequested = true;
         return "Perfect! I have enough details now. Photos would really help professionals provide accurate quotes. Ready to upload some?";
       } else {
@@ -848,51 +929,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     }
   }
 
-  String _getServiceSpecificQuestions() {
-    // Concise questions for each service category
-    switch (_currentState.serviceCategory) {
-      case 'Cleaning':
-        return "Which areas need cleaning?";
-      case 'Plumbing':
-        return "What's the plumbing issue?";
-      case 'Electrical':
-        return "What electrical problem?";
-      case 'HVAC':
-        return "Heating or cooling issue?";
-      case 'Appliance Repair':
-        return "Which appliance is broken?";
-      case 'Landscaping':
-        return "What yard work is needed?";
-      case 'Pest Control':
-        return "What pest problem?";
-      case 'Roofing':
-        return "What's the roof issue?";
-      case 'Painting':
-        return "What needs painting?";
-      case 'Handyman':
-        return "What needs fixing?";
-      default:
-        return "What specific service?";
-    }
-  }
 
-  String _getCurrentQuestionKey() {
-    // This method would typically return the key for the current question in serviceAnswers
-    // For now, it's a placeholder.
-    return 'question_${_currentState.conversationStep}';
-  }
-
-  bool _needMoreServiceDetails() {
-    // This method would typically check if more details are needed for the current question
-    // For now, it's a placeholder.
-    return _currentState.serviceAnswers[_getCurrentQuestionKey()] == null || _currentState.serviceAnswers[_getCurrentQuestionKey()]!.isEmpty;
-  }
-
-  String _getNextServiceQuestion() {
-    // This method would typically return the next question to ask
-    // For now, it's a placeholder.
-    return _getServiceSpecificQuestions();
-  }
 
   void _extractContactInfo(String input) {
     // This method would typically extract contact information from the user's input
@@ -1222,7 +1259,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
       int hourlyMax = hourlyRates['max'] ?? 0;
       int hourlyAvg = hourlyRates['avg'] ?? 0;
       
-      result += '💰 **\$${hourlyMin}-\$${hourlyMax}/hour** (avg: \$${hourlyAvg}/hour) $currency\n';
+      result += '💰 **\$$hourlyMin-\$$hourlyMax/hour** (avg: \$$hourlyAvg/hour) $currency\n';
       result += '⏱️ Estimated Duration: $estimatedHours hours';
     } else {
       // Fallback: convert project pricing to hourly rate estimate
@@ -1244,7 +1281,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
             int hourlyRateMax = (max / minHours).round();
             int hourlyRateAvg = (avg / avgHours).round();
             
-            result += '💰 **\$${hourlyRateMin}-\$${hourlyRateMax}/hour** (avg: \$${hourlyRateAvg}/hour) $currency\n';
+            result += '💰 **\$$hourlyRateMin-\$$hourlyRateMax/hour** (avg: \$$hourlyRateAvg/hour) $currency\n';
             result += '⏱️ Estimated Duration: $estimatedHours hours';
           } catch (e) {
             // Simple fallback
@@ -1257,7 +1294,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         try {
           int hours = int.parse(timeRange.trim());
           int hourlyRate = (avg / hours).round();
-          result += '💰 **Estimated Rate: \$${hourlyRate}/hour** $currency\n';
+            result += '💰 **Estimated Rate: \$$hourlyRate/hour** $currency\n';
           result += '⏱️ Estimated Duration: $hours hours';
         } catch (e) {
           result += '💰 **Estimated Rate: \$${(avg / 2).round()}/hour** $currency\n';
@@ -1303,12 +1340,13 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     String? bestCategory;
     double highestScore = 0.0;
     
-    categoryScores.forEach((category, score) {
+    for (String category in categoryScores.keys) {
+      double score = categoryScores[category]!;
       if (score > highestScore) {
         highestScore = score;
         bestCategory = category;
       }
-    });
+    }
     
     // Return best category if confidence is high enough, otherwise default to Handyman
     String finalCategory = (highestScore > 0.3) ? bestCategory! : 'Handyman';
@@ -1372,13 +1410,15 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     };
     
     // Initialize all category scores to 0
-    categoryKeywords.keys.forEach((category) {
+    for (String category in categoryKeywords.keys) {
       scores[category] = 0.0;
-    });
+    }
     
     // Calculate scores based on keyword matches
-    categoryKeywords.forEach((category, keywords) {
-      keywords.forEach((keyword, weight) {
+    for (String category in categoryKeywords.keys) {
+      Map<String, double> keywords = categoryKeywords[category]!;
+      for (String keyword in keywords.keys) {
+        double weight = keywords[keyword]!;
         if (lowerInput.contains(keyword)) {
           scores[category] = scores[category]! + weight;
           
@@ -1388,13 +1428,13 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
             scores[category] = scores[category]! + (weight * 0.5);
           }
         }
-      });
+      }
       
       // Normalize score by number of keywords to prevent bias toward categories with more keywords
       if (keywords.isNotEmpty) {
         scores[category] = scores[category]! / keywords.length;
       }
-    });
+    }
     
     // Apply category-specific rules and bonuses
     _applyCategoryRules(lowerInput, scores);
@@ -1529,7 +1569,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
         return "Perfect! I'm here to help with your home service needs. Could you tell me more about what's happening? The more details you share, the better I can connect you with the right professional.";
     }
   }
-  
+
   String _generateFallbackResponse(String input) {
     // More intelligent fallback based on conversation state
     if (_currentState.serviceCategory == null && _currentState.conversationStep == 0) {
@@ -1567,6 +1607,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     if (!_currentState.availabilitySet) {
       _currentState.availabilitySet = true;
       _currentState.conversationStep = 5;
+      _notifyConversationStateChanged();
       
       // Move to location form
       _addMessage(ChatMessage(
@@ -1589,6 +1630,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     _currentState.state = locationData['state'];
     _currentState.locationFormCompleted = true;
     _currentState.conversationStep = 6;
+    _notifyConversationStateChanged();
     
     _addMessage(ChatMessage(
       content: "Perfect! Now I need your contact information.",
@@ -1606,6 +1648,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     _currentState.phoneNumber = contactData['tel'];
     _currentState.contactFormCompleted = true;
     _currentState.conversationStep = 7;
+    _notifyConversationStateChanged();
     
     // Calculate price estimation
     _calculateNetworkPrice();
@@ -1618,6 +1661,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
     
     // Move to final summary
     _currentState.conversationStep = 8;
+    _notifyConversationStateChanged(); // Notify UI to show summary
     String summary = _generateServiceRequestSummary();
     
     _addMessage(ChatMessage(
@@ -1833,8 +1877,6 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
   
   // Format price estimate specifically for summary - clean hourly rate focus
   String _formatSummaryPriceEstimate(Map<String, dynamic> priceEstimate) {
-    String currency = priceEstimate['currency'] ?? 'USD';
-    
     // Primary focus: Clean hourly rate display
     if (priceEstimate.containsKey('hourly_rates')) {
       Map<String, dynamic> hourlyRates = priceEstimate['hourly_rates'];
@@ -1842,7 +1884,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
       int hourlyMax = hourlyRates['max'] ?? 0;
       int hourlyAvg = hourlyRates['avg'] ?? 0;
       
-      return '\$${hourlyMin}-\$${hourlyMax}/hour (avg: \$${hourlyAvg}/hour)';
+      return '\$$hourlyMin-\$$hourlyMax/hour (avg: \$$hourlyAvg/hour)';
     } else {
       // Fallback: convert project pricing to hourly rate estimate
       int min = priceEstimate['min'] ?? 0;
@@ -1864,7 +1906,7 @@ Remember: Be brief, avoid repetition, trigger UI functions, keep moving forward.
             int hourlyRateMax = (max / minHours).round();
             int hourlyRateAvg = (avg / avgHours).round();
             
-            return '\$${hourlyRateMin}-\$${hourlyRateMax}/hour (avg: \$${hourlyRateAvg}/hour)';
+            return '\$$hourlyRateMin-\$$hourlyRateMax/hour (avg: \$$hourlyRateAvg/hour)';
           } catch (e) {
             // Simple fallback
             return '\$${(avg / 3).round()}/hour (estimated)';

@@ -46,11 +46,13 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	
-	<!-- Background Modes for Push Notifications -->
+	<!-- Background Modes for Push Notifications - DISABLED for Personal Apple Account -->
+	<!--
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
 	</array>
+	-->
 	
 	<!-- Firebase AppDelegate Proxying -->
 	<key>FirebaseAppDelegateProxyEnabled</key>

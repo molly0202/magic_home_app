@@ -50,6 +50,11 @@ app.*.map.json
 **/ios/Runner.xcworkspace/xcuserdata/
 **/ios/Runner.xcodeproj/xcuserdata/
 
+# Auto-generated plugin registrants
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Podfile
+**/ios/Runner.xcodeproj/project.pbxproj
+
 # Firebase config files
 google-services.json
 GoogleService-Info.plist
@@ -84,4 +89,5 @@ MATCHING_ALGORITHM_SUMMARY.md
 
 # Sensitive local config
 lib/config/secrets.dart
+lib/config/elevenlabs_secrets.dart
 .device_id
