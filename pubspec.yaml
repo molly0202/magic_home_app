@@ -53,11 +53,23 @@ dependencies:
   google_maps_flutter: ^2.12.3
   translator: ^1.0.3+1
   
+  # ElevenLabs Integration
+  web_socket_channel: ^2.4.0  # WebSocket for ElevenLabs conversation API
+  audioplayers: ^5.2.1        # Audio playback for TTS
+  permission_handler: ^11.3.0  # Microphone permissions
+  path_provider: ^2.1.1        # Temporary file storage for iOS audio
+  record: ^5.1.2               # Audio recording for voice input
+  
   # Firebase - temporarily disable Auth
   # firebase_auth: ^4.10.0
+  
+dependency_overrides:
+  record_linux: ^1.0.0  # Override problematic Linux version
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
   mockito: ^5.4.4
   build_runner: ^2.4.8

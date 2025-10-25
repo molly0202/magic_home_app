@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'dart:io';
+import 'dart:async';
 import '../services/ai_conversation_service.dart';
 import '../services/user_request_service.dart';
+import '../services/elevenlabs_conversation_service.dart';
 import '../widgets/translatable_text.dart';
 
 class AITaskIntakeScreen extends StatefulWidget {
@@ -23,25 +23,37 @@ class AITaskIntakeScreen extends StatefulWidget {
   State<AITaskIntakeScreen> createState() => _AITaskIntakeScreenState();
 }
 
-class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
+class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> with TickerProviderStateMixin {
   final AIConversationService _aiService = AIConversationService();
+  final ElevenLabsConversationService _elevenLabsService = ElevenLabsConversationService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
-  late stt.SpeechToText _speech;
   
   bool _isLoading = false;
   bool _isTyping = false;
+  bool _isListening = false;
   bool _showPhotoUpload = false;
   bool _showCalendar = false;
   bool _showLocationForm = false;
   bool _showContactForm = false;
   bool _showSummary = false;
-  bool _isListening = false;
-  bool _speechEnabled = false;
+  bool _isPhoneCallActive = false;
+  bool _isConnectingToCall = false;
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   String _selectedTimePreference = 'Any time';
+  
+  // Phone button floating position
+  bool _isDraggingPhone = false;
+  Offset _phonePosition = const Offset(20, 350); // Middle left side of screen
+  late AnimationController _phoneAnimationController;
+  
+  // Photo upload floating button
+  bool _isDraggingPhoto = false;
+  Offset _photoButtonPosition = const Offset(20, 270); // Above phone button
+  late AnimationController _photoAnimationController;
+  List<String> _uploadedPhotosInSession = []; // Track uploaded photos
   
   // Form controllers to persist data
   final TextEditingController _addressController = TextEditingController();
@@ -62,9 +74,65 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
   @override
   void initState() {
     super.initState();
-    _speech = stt.SpeechToText();
-    _initializeSpeech();
+    // Local speech-to-text removed - using ElevenLabs only
     _aiService.startConversation();
+    
+    // Initialize phone button animation
+    _phoneAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    // Initialize photo button animation
+    _photoAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    // Initialize ElevenLabs for text mode
+    _initializeElevenLabsForTextMode();
+    
+    // Test ElevenLabs connection after a delay
+    Future.delayed(const Duration(seconds: 3), () {
+      _testElevenLabsConnection();
+    });
+    
+    // Listen to ElevenLabs error messages for user feedback
+    _elevenLabsService.errorStream.listen((errorMessage) {
+      _showInfoSnackBar(errorMessage);
+    });
+    
+    // Listen to ElevenLabs status changes
+    _elevenLabsService.statusStream.listen((status) {
+      _handleElevenLabsStatusChange(status);
+    });
+    
+    // Photo upload button is now always shown (no need to listen for keywords)
+    
+    // Listen to AI service message changes
+    _aiService.messagesStream.listen((messages) {
+      if (mounted) {
+        setState(() {});
+        _scrollToBottom();
+      }
+    });
+    
+    // Listen to conversation state changes to auto-show summary
+    _aiService.conversationStateStream.listen((state) {
+      if (mounted && state.conversationStep == 8 && !_showSummary) {
+        // Conversation reached summary step - show summary
+        setState(() {
+          _showSummary = true;
+          // Hide other UI elements
+          _showPhotoUpload = false;
+          _showCalendar = false;
+          _showLocationForm = false;
+          _showContactForm = false;
+        });
+        _scrollToBottom();
+      }
+    });
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom();
     });
@@ -81,82 +149,107 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     _stateController.dispose();
     _phoneController.dispose();
     _nameController.dispose();
+    // Dispose animation controllers
+    _phoneAnimationController.dispose();
+    _photoAnimationController.dispose();
+    // Dispose ElevenLabs service
+    _elevenLabsService.dispose();
     super.dispose();
   }
 
-  Future<void> _initializeSpeech() async {
+  /// Handle ElevenLabs status changes
+  /// Initialize ElevenLabs for text mode
+  Future<void> _initializeElevenLabsForTextMode() async {
     try {
-      _speechEnabled = await _speech.initialize(
-        onStatus: (val) {
-          setState(() {
-            _isListening = val == 'listening';
-          });
-        },
-        onError: (val) {
-          print('Speech recognition error: $val');
-          setState(() {
-            _isListening = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Speech recognition error: ${val.errorMsg}')),
-          );
-        },
-      );
+      print('🔧 Initializing ElevenLabs for text mode...');
+      final initialized = await _elevenLabsService.initialize();
+      print('🔍 Initialize result: $initialized');
+      if (initialized) {
+        print('✅ ElevenLabs initialized for text mode');
+        // Set mode to text for text-only responses
+        _elevenLabsService.setMode(ConversationMode.text);
+        print('🔍 Mode set to text');
+        print('✅ ElevenLabs ready for text mode (using TTS API)');
+      } else {
+        print('❌ Failed to initialize ElevenLabs for text mode');
+      }
     } catch (e) {
-      print('Speech initialization error: $e');
-      _speechEnabled = false;
+      print('❌ Error initializing ElevenLabs for text mode: $e');
     }
   }
 
-  Future<void> _startListening() async {
-    if (!_speechEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Speech recognition not available')),
-      );
-      return;
-    }
-
-    if (_isListening) {
-      _stopListening();
-      return;
-    }
-
-    try {
-      await _speech.listen(
-        onResult: (val) {
-          setState(() {
-            _messageController.text = val.recognizedWords;
-          });
-          
-          // Auto-send if speech is final and not empty
-          if (val.hasConfidenceRating && val.confidence > 0.8) {
-            if (val.recognizedWords.isNotEmpty) {
-              _sendMessage();
-            }
-          }
-        },
-        listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 5),
-        partialResults: true,
-        localeId: 'en_US',
-        onSoundLevelChange: (level) {
-          // Could add visual feedback for sound level
-        },
-      );
-    } catch (e) {
-      print('Error starting speech recognition: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error starting speech recognition: $e')),
-      );
+  /// Test ElevenLabs connection
+  Future<void> _testElevenLabsConnection() async {
+    print('🧪 Testing ElevenLabs connection...');
+    print('🔍 Status: ${_elevenLabsService.status}');
+    print('🔍 Mode: ${_elevenLabsService.mode}');
+    
+    // For text mode, we don't need WebSocket to be active
+    if (_elevenLabsService.mode == ConversationMode.text) {
+      print('✅ ElevenLabs initialized for text mode');
+    } else if (_elevenLabsService.status == ConversationStatus.active) {
+      print('✅ ElevenLabs is connected and active for voice mode');
+    } else {
+      print('⚠️ ElevenLabs voice mode not active. Status: ${_elevenLabsService.status}');
     }
   }
 
-  Future<void> _stopListening() async {
-    await _speech.stop();
-    setState(() {
-      _isListening = false;
-    });
+  void _handleElevenLabsStatusChange(ConversationStatus status) {
+    if (status == ConversationStatus.error) {
+      _showErrorSnackBar('Connection error. Please try again.');
+    } else if (status == ConversationStatus.disconnected) {
+      // Don't show message for normal disconnection
+    } else if (status == ConversationStatus.connecting) {
+      // Only show connecting message if starting a phone call
+      if (_isPhoneCallActive || _isConnectingToCall) {
+        _showInfoSnackBar('Connecting to voice service, please wait...');
+      }
+    } else if (status == ConversationStatus.connected) {
+      // Text mode connected - no message needed
+    } else if (status == ConversationStatus.active) {
+      // Only show active message for voice mode
+      if (_isPhoneCallActive) {
+        _showInfoSnackBar('Voice call connected.');
+      }
+    }
   }
+
+  /// Initialize speech recognition
+  // Local speech-to-text methods removed - using ElevenLabs only
+
+  /// Handle microphone button tap - for speech-to-text
+  Future<void> _handleMicrophoneButtonTap() async {
+    if (_isLoading) return;
+
+    // Microphone button only sends text, doesn't trigger speech recognition
+    if (_messageController.text.trim().isNotEmpty) {
+      print('📤 Sending message...');
+      await _sendMessage();
+    } else {
+      print('ℹ️ No text to send. Use phone button for voice mode.');
+      _showInfoSnackBar('Type a message or use phone button for voice');
+    }
+  }
+
+  /// Handle "Done" button tap - confirms completion and proceeds to next step
+  Future<void> _handleDoneButtonTap() async {
+    if (_isLoading) return;
+    
+    print('✅ Done button tapped');
+    
+    // Send "Done" message to ElevenLabs
+    _messageController.text = "Done";
+    await _sendMessage();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Marked as complete! The agent will proceed.'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
@@ -174,10 +267,6 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     final message = _messageController.text.trim();
     _messageController.clear();
     
-    // Stop listening if active
-    if (_isListening) {
-      _stopListening();
-    }
     
     setState(() {
       _isLoading = true;
@@ -185,45 +274,59 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     });
 
     try {
-      await _aiService.processUserInput(message);
+      // Add user message to transcript first
+      _aiService.messages.add(ChatMessage(
+        content: message,
+        type: MessageType.user,
+        timestamp: DateTime.now(),
+      ));
       
-      setState(() {
-        // Reset all special UI states first
-        _showPhotoUpload = false;
-        _showCalendar = false;
-        _showLocationForm = false;
-        _showContactForm = false;
-        _showSummary = false;
+      // Always use ElevenLabs for ALL responses (text and voice)
+      print('🤖 Sending message to ElevenLabs for AI response');
+      print('🔍 ElevenLabs status: ${_elevenLabsService.status}');
+      
+      // CRITICAL: Always set mode to TEXT when sending typed messages
+      // This ensures voice mode doesn't stay active from previous phone call
+      if (!_isPhoneCallActive) {
+        _elevenLabsService.setMode(ConversationMode.text);
+        print('✅ Mode set to TEXT (no audio) for typed message');
+      }
+      
+      // If not connected, connect first (for text mode)
+      if (_elevenLabsService.status != ConversationStatus.active) {
+        print('🔌 ElevenLabs not connected - connecting now for text mode...');
         
-        // Check if we need to show special UI elements based on new 8-step flow
-        if (_aiService.currentState.conversationStep == 3) {
-          _showPhotoUpload = true;
-        } else if (_aiService.currentState.conversationStep == 4) {
-          _showCalendar = true;
-          print('🗓️ Calendar UI should be shown now - Step 4 (Calendar Requested: ${_aiService.currentState.calendarRequested})');
-        } else if (_aiService.currentState.conversationStep == 5 && _aiService.currentState.availabilitySet) {
-          // Only show location form if availability is actually set
-          _showLocationForm = true;
-          _showCalendar = false; // Hide calendar when moving to location
-          print('📍 Location Form UI should be shown now - Step 5 (Availability Set: ${_aiService.currentState.availabilitySet})');
-        } else if (_aiService.currentState.conversationStep == 6 && _aiService.currentState.locationFormCompleted) {
-          // Only show contact form if location form is completed
-          _showContactForm = true;
-          _showLocationForm = false; // Hide location form
-          print('📞 Contact Form UI should be shown now - Step 6 (Location Completed: ${_aiService.currentState.locationFormCompleted})');
-        } else if (_aiService.currentState.conversationStep >= 8) {
-          _showSummary = true;
-          print('📋 Summary UI should be shown now - Step 8+');
+        try {
+          await _elevenLabsService.connect();
+          print('✅ WebSocket connected');
+          
+          // For text mode, we MUST call startSession() to activate the conversation
+          // But mode is already set to TEXT, so it won't start the microphone
+          await _elevenLabsService.startSession();
+          print('✅ Session started for text mode');
+          
+          // Wait a moment for the session to be ready
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          print('✅ ElevenLabs connected and ready for text mode (microphone OFF)');
+        } catch (e) {
+          print('❌ Failed to connect ElevenLabs: $e');
+          throw Exception('Failed to connect to voice service');
         }
-        
-        // CRITICAL: Force calendar to show at step 4, prevent immediate advancement
-        if (_aiService.currentState.conversationStep == 4 && !_aiService.currentState.availabilitySet) {
-          _showCalendar = true;
-          _showLocationForm = false; // Ensure no conflict
-          _showContactForm = false;
-          print('🔄 FORCE: Calendar UI enabled - Step 4 (Availability NOT set yet)');
-        }
-      });
+      }
+      
+      // Verify connection before sending
+      // Text mode needs at least 'connected' status, voice mode needs 'active'
+      if (_elevenLabsService.status != ConversationStatus.active && 
+          _elevenLabsService.status != ConversationStatus.connected) {
+        throw Exception('Voice service not connected - cannot send message');
+      }
+      
+      final timestamp = DateTime.now().toIso8601String();
+      print('📨 [$timestamp] UI calling _elevenLabsService.sendMessage()');
+      print('   Message: "$message"');
+      await _elevenLabsService.sendMessage(message);
+      print('✅ [$timestamp] sendMessage() returned successfully');
       
     } catch (e) {
       print('Error sending message: $e');
@@ -239,13 +342,14 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scrollToBottom();
       });
+      
     }
   }
 
-  Future<void> _uploadPhotos() async {
+  Future<void> _uploadPhotos({bool fromFloatingButton = false}) async {
     try {
       // Show photo source selection dialog
-      final ImageSource? source = await showDialog<ImageSource>(
+      final String? action = await showDialog<String>(
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
@@ -253,14 +357,19 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
             content: const Text('How would you like to add photos?'),
             actions: [
               TextButton.icon(
-                onPressed: () => Navigator.pop(context, ImageSource.camera),
+                onPressed: () => Navigator.pop(context, 'camera'),
                 icon: const Icon(Icons.camera_alt),
                 label: const Text('Take Photo'),
               ),
               TextButton.icon(
-                onPressed: () => Navigator.pop(context, ImageSource.gallery),
+                onPressed: () => Navigator.pop(context, 'gallery_single'),
                 icon: const Icon(Icons.photo_library),
-                label: const Text('Choose from Gallery'),
+                label: const Text('Choose One Photo'),
+              ),
+              TextButton.icon(
+                onPressed: () => Navigator.pop(context, 'gallery_multiple'),
+                icon: const Icon(Icons.photo_library),
+                label: const Text('Choose Multiple Photos'),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -271,48 +380,99 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         },
       );
 
-      if (source == null) return;
+      if (action == null) return;
 
       setState(() {
         _isLoading = true;
       });
 
-      XFile? image;
+      List<XFile> images = [];
       
-      image = await _picker.pickImage(
-        source: source,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 80,
-      );
+      if (action == 'camera') {
+        final XFile? image = await _picker.pickImage(
+          source: ImageSource.camera,
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 80,
+        );
+        if (image != null) images.add(image);
+      } else if (action == 'gallery_single') {
+        final XFile? image = await _picker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 80,
+        );
+        if (image != null) images.add(image);
+      } else if (action == 'gallery_multiple') {
+        final List<XFile> pickedImages = await _picker.pickMultiImage(
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 80,
+        );
+        images.addAll(pickedImages);
+      }
 
-      if (image != null) {
-        try {
-          final String downloadUrl = await _uploadImageToFirebase(File(image.path));
-          _aiService.onPhotoUploaded(downloadUrl);
-          
-          // Add system message
-          setState(() {
-            _aiService.messages.add(ChatMessage(
-              content: "Photo uploaded successfully!",
-              type: MessageType.system,
-              timestamp: DateTime.now(),
-              imageUrl: downloadUrl,
-            ));
-          });
+      if (images.isNotEmpty) {
+        int successCount = 0;
+        int failCount = 0;
+        
+        for (final image in images) {
+          try {
+            final String downloadUrl = await _uploadImageToFirebase(File(image.path));
+            _aiService.onPhotoUploaded(downloadUrl);
+            _uploadedPhotosInSession.add(downloadUrl);
+            successCount++;
+            
+            // Add system message for each photo
+            setState(() {
+              _aiService.messages.add(ChatMessage(
+                content: "Photo ${successCount} uploaded successfully!",
+                type: MessageType.system,
+                timestamp: DateTime.now(),
+                imageUrl: downloadUrl,
+              ));
+            });
+          } catch (e) {
+            print('Error uploading photo: $e');
+            failCount++;
+          }
+        }
 
-          _scrollToBottom();
+        _scrollToBottom();
 
+        // Show summary message
+        if (successCount > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Photo uploaded successfully!'),
+            SnackBar(
+              content: Text('$successCount photo(s) uploaded successfully!${failCount > 0 ? ' ($failCount failed)' : ''}'),
               backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
             ),
           );
-        } catch (e) {
-          print('Error uploading photo: $e');
+          
+          // If from floating button, send confirmation message to ElevenLabs
+          if (fromFloatingButton && successCount > 0) {
+            final message = successCount == 1 
+                ? "I've uploaded 1 photo" 
+                : "I've uploaded $successCount photos";
+            
+            // Add user message to transcript
+            _aiService.messages.add(ChatMessage(
+              content: message,
+              type: MessageType.user,
+              timestamp: DateTime.now(),
+            ));
+            
+            // Force send text message even in voice mode (photo upload confirmation)
+            await _elevenLabsService.sendMessage(message, forceTextInVoiceMode: true);
+          }
+        } else if (failCount > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error uploading photo: $e')),
+            SnackBar(
+              content: Text('Failed to upload $failCount photo(s)'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
@@ -441,7 +601,10 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           ? "${dateStrings.first} at $timeInfo"
           : "${dateStrings.join(', ')} at $timeInfo";
           
-      await _aiService.processUserInput(availabilityMessage);
+      // If ElevenLabs phone call is active, don't use local AI
+      if (!_isPhoneCallActive) {
+        await _aiService.processUserInput(availabilityMessage);
+      }
       
       setState(() {
         _isLoading = false;
@@ -574,6 +737,254 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
     }
   }
 
+  /// Build voice mode UI
+  Widget _buildVoiceModeUI() {
+    return StreamBuilder<bool>(
+      stream: _elevenLabsService.speakingStream,
+      initialData: false,
+      builder: (context, speakingSnapshot) {
+        final isSpeaking = speakingSnapshot.data ?? false;
+        
+        return StreamBuilder<bool>(
+          stream: _elevenLabsService.listeningStream,
+          initialData: false,
+          builder: (context, listeningSnapshot) {
+            final isListening = listeningSnapshot.data ?? false;
+            
+            return StreamBuilder<bool>(
+              stream: _elevenLabsService.bufferingStream,
+              initialData: false,
+              builder: (context, bufferingSnapshot) {
+                final isBuffering = bufferingSnapshot.data ?? false;
+            
+            // Get recent conversation messages (last 5 for rolling window)
+            final messages = _aiService.messages;
+            final recentMessages = messages.length > 5 
+                ? messages.sublist(messages.length - 5) 
+                : messages;
+            
+            return Container(
+              width: double.infinity,
+              height: double.infinity,
+              color: const Color(0xFFFBB04C),
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    // Top section with pulse animation
+                    const SizedBox(height: 40),
+                    _buildPulseVisualization(isSpeaking, isListening),
+                    
+                    // Buffering indicator
+                    if (isBuffering)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withOpacity(0.8)),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Buffering...',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white.withOpacity(0.8),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    
+                    const SizedBox(height: 30),
+                    
+                    // Rolling conversation window
+                    Expanded(
+                      child: _buildRollingConversationWindow(recentMessages),
+                    ),
+                    
+                    // Bottom section with Upload Photo button
+                    Padding(
+                      padding: const EdgeInsets.only(top: 20, bottom: 40),
+                      child: ElevatedButton(
+                        onPressed: () {
+                          _uploadPhotos(fromFloatingButton: true);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFFFBB04C),
+                          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          elevation: 4,
+                        ),
+                        child: const Text(
+                          'Upload Photo',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+  
+  /// Build rolling conversation window
+  Widget _buildRollingConversationWindow(List<ChatMessage> recentMessages) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: NotificationListener<ScrollNotification>(
+        child: ListView.builder(
+          reverse: false, // Start from top, scroll to show newest at bottom
+          padding: const EdgeInsets.only(bottom: 20),
+          itemCount: recentMessages.length,
+          itemBuilder: (context, index) {
+            final message = recentMessages[index];
+            final isAI = message.type == MessageType.ai;
+            final isUser = message.type == MessageType.user;
+            
+            // Skip system messages in voice mode
+            if (message.type == MessageType.system) {
+              return const SizedBox.shrink();
+            }
+            
+            // Skip service boxes in voice mode
+            if (message.metadata?['isServiceBox'] == true) {
+              return const SizedBox.shrink();
+            }
+            
+            // Skip service options message in voice mode
+            if (message.metadata?['isServiceOptions'] == true) {
+              return const SizedBox.shrink();
+            }
+            
+            // Skip the initial "select a service" message in voice mode
+            if (isAI && (message.content.toLowerCase().contains('select a service') || 
+                         message.content.toLowerCase().contains('which service do you need'))) {
+              return const SizedBox.shrink();
+            }
+            
+            return AnimatedOpacity(
+              duration: const Duration(milliseconds: 300),
+              opacity: 1.0,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (isAI) ...[
+                      // AI message - prominent display
+                      Text(
+                        message.content,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          height: 1.4,
+                        ),
+                      ),
+                    ] else if (isUser) ...[
+                      // User message - lighter style
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          message.content,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.white.withOpacity(0.95),
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+  
+  /// Build pulse visualization widget
+  Widget _buildPulseVisualization(bool isSpeaking, bool isListening) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 1500),
+      builder: (context, value, child) {
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: isSpeaking || isListening ? 120 : 100,
+          height: isSpeaking || isListening ? 120 : 100,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withOpacity(0.3),
+            boxShadow: [
+              if (isSpeaking || isListening)
+                BoxShadow(
+                  color: Colors.white.withOpacity(0.4 * value),
+                  blurRadius: 40 * value,
+                  spreadRadius: 20 * value,
+                ),
+            ],
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.5),
+            ),
+            child: Center(
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                ),
+                child: Icon(
+                  isSpeaking ? Icons.volume_up : (isListening ? Icons.mic : Icons.graphic_eq),
+                  color: const Color(0xFFFBB04C),
+                  size: 32,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      onEnd: () {
+        // Restart animation for continuous pulse
+        if (mounted && (isSpeaking || isListening)) {
+          setState(() {});
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -610,45 +1021,57 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // Chat messages
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _aiService.messages.length + (_isTyping ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (_isTyping && index == _aiService.messages.length) {
-                  return _buildTypingIndicator();
-                }
+          // Show voice mode UI when phone call is active
+          if (_isPhoneCallActive)
+            _buildVoiceModeUI()
+          else
+            // Show normal chat UI when in text mode
+            Column(
+              children: [
+                // Chat messages
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _aiService.messages.length + (_isTyping ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (_isTyping && index == _aiService.messages.length) {
+                        return _buildTypingIndicator();
+                      }
+                      
+                      final message = _aiService.messages[index];
+                      
+                      // Check if this is the start of service boxes and we haven't rendered them yet
+                      if (message.metadata?['isServiceBox'] == true && _isFirstServiceBox(index)) {
+                        return _buildServiceBoxesGrid(index);
+                      }
+                      
+                      // Skip service boxes that are already handled in the grid
+                      if (message.metadata?['isServiceBox'] == true && !_isFirstServiceBox(index)) {
+                        return const SizedBox.shrink();
+                      }
+                      
+                      return _buildMessageBubble(message);
+                    },
+                  ),
+                ),
                 
-                final message = _aiService.messages[index];
+                // Special UI elements
+                if (_showPhotoUpload) _buildPhotoUploadSection(),
+                if (_showCalendar) _buildCalendarSection(),
+                if (_showLocationForm) _buildLocationFormSection(),
+                if (_showContactForm) _buildContactFormSection(),
+                if (_showSummary) _buildSummarySection(),
                 
-                // Check if this is the start of service boxes and we haven't rendered them yet
-                if (message.metadata?['isServiceBox'] == true && _isFirstServiceBox(index)) {
-                  return _buildServiceBoxesGrid(index);
-                }
-                
-                // Skip service boxes that are already handled in the grid
-                if (message.metadata?['isServiceBox'] == true && !_isFirstServiceBox(index)) {
-                  return const SizedBox.shrink();
-                }
-                
-                return _buildMessageBubble(message);
-              },
+                // Input area
+                _buildInputArea(),
+              ],
             ),
-          ),
           
-          // Special UI elements
-          if (_showPhotoUpload) _buildPhotoUploadSection(),
-          if (_showCalendar) _buildCalendarSection(),
-          if (_showLocationForm) _buildLocationFormSection(),
-          if (_showContactForm) _buildContactFormSection(),
-          if (_showSummary) _buildSummarySection(),
-          
-          // Input area
-          _buildInputArea(),
+          // Floating phone button (always show for mode switching)
+          _buildFloatingPhoneButton(),
         ],
       ),
     );
@@ -703,22 +1126,63 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (message.imageUrl != null) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        message.imageUrl!,
-                        width: double.infinity,
-                        height: 200,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
+                    Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            message.imageUrl!,
                             width: double.infinity,
                             height: 200,
-                            color: Colors.grey[300],
-                            child: const Icon(Icons.image_not_supported, size: 50),
-                          );
-                        },
-                      ),
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                width: double.infinity,
+                                height: 200,
+                                color: Colors.grey[300],
+                                child: const Icon(Icons.image_not_supported, size: 50),
+                              );
+                            },
+                          ),
+                        ),
+                        // Done button at bottom right of photo
+                        Positioned(
+                          bottom: 8,
+                          right: 8,
+                          child: GestureDetector(
+                            onTap: _handleDoneButtonTap,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.3),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle, color: Colors.white, size: 16),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Done',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -1053,7 +1517,10 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                     });
                     
                     // Trigger AI to ask about availability after photos are done
-                    await _aiService.processUserInput("I'm done uploading photos.");
+                    // If ElevenLabs phone call is active, don't use local AI
+                    if (!_isPhoneCallActive) {
+                      await _aiService.processUserInput("I'm done uploading photos.");
+                    }
                     
                     setState(() {
                       // Show calendar UI for the next step
@@ -1394,12 +1861,16 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
 
   Widget _buildSummarySection() {
     final state = _aiService.currentState;
+    final summary = _aiService.getServiceRequestSummary();
     final priceEstimate = state.priceEstimate ?? {'min': 100, 'max': 500};
+    final locationForm = summary['locationForm'] as Map<String, dynamic>? ?? {};
+    final contactForm = summary['contactForm'] as Map<String, dynamic>? ?? {};
+    final availability = summary['availability'] as Map<String, dynamic>? ?? state.userAvailability ?? {};
     
     return Container(
       margin: const EdgeInsets.all(16),
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.7, // Limit height to 70% of screen
+        maxHeight: MediaQuery.of(context).size.height * 0.7,
       ),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1413,59 +1884,142 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
         ],
       ),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-          const TranslatableText(
-            'Service Request Summary',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
-          
-          // Service Information
-          _buildSummaryItem('Service Type', state.serviceCategory ?? 'General Service'),
-          _buildSummaryItem('Description', state.description ?? 'No description provided'),
-          
-          // Service Details
-          if (state.serviceAnswers.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            const TranslatableText('Service Details:', style: TextStyle(fontWeight: FontWeight.bold)),
-            ...state.serviceAnswers.entries.map((entry) => 
-              Padding(
-                padding: const EdgeInsets.only(left: 16, top: 4),
-                child: Text('• ${entry.value}', style: const TextStyle(fontSize: 14)),
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFBB04C).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.summarize, color: Color(0xFFFBB04C), size: 24),
               ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: TranslatableText(
+                  'Service Request Summary',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          
+          // Service Information Section
+          _buildSummaryCategorySection(
+            'Service Details',
+            Icons.home_repair_service,
+            [
+              if (state.serviceCategory != null)
+                _buildSummaryItem('Service Type', state.serviceCategory!),
+              if (state.description != null && state.description!.isNotEmpty)
+                _buildSummaryItem('Description', state.description!),
+            ],
+          ),
+          
+          // Service Details/Answers
+          if (state.serviceAnswers.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildSummaryCategorySection(
+              'Additional Details',
+              Icons.info_outline,
+              state.serviceAnswers.entries.map((entry) => 
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('• ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Expanded(child: Text(entry.value, style: const TextStyle(fontSize: 14))),
+                    ],
+                  ),
+                ),
+              ).toList(),
             ),
           ],
           
-          // Media
+          // Photos Section
           if (state.mediaUrls.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text('Photos/Videos: ${state.mediaUrls.length} uploaded', 
-                 style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            _buildSummaryCategorySection(
+              'Photos',
+              Icons.photo_library,
+              [
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                    const SizedBox(width: 8),
+                    Text('${state.mediaUrls.length} photo${state.mediaUrls.length == 1 ? '' : 's'} uploaded', 
+                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ],
+            ),
           ],
           
-          // Availability
-          if (state.userAvailability != null) ...[
-            const SizedBox(height: 12),
-            _buildSummaryItem('Availability', state.userAvailability!['preference']?.toString() ?? 'Not specified'),
+          // Availability Section
+          if (availability.isNotEmpty && availability['preference'] != null) ...[
+            const SizedBox(height: 16),
+            _buildSummaryCategorySection(
+              'Availability',
+              Icons.calendar_today,
+              [
+                _buildSummaryItem('Preferred Time', availability['preference']?.toString() ?? 'Not specified'),
+                if (availability['dates'] != null && (availability['dates'] as List).isNotEmpty)
+                  _buildSummaryItem('Selected Dates', (availability['dates'] as List).join(', ')),
+              ],
+            ),
           ],
           
-          // Location
-          if (state.address != null && state.address!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _buildSummaryItem('Service Address', state.address!),
+          // Location Section
+          if (locationForm.isNotEmpty || (state.address != null && state.address!.isNotEmpty)) ...[
+            const SizedBox(height: 16),
+            _buildSummaryCategorySection(
+              'Service Location',
+              Icons.location_on,
+              [
+                if (locationForm['address'] != null && locationForm['address'].toString().isNotEmpty)
+                  _buildSummaryItem('Address', locationForm['address'].toString()),
+                if (locationForm['city'] != null && locationForm['city'].toString().isNotEmpty)
+                  _buildSummaryItem('City', locationForm['city'].toString()),
+                if (locationForm['state'] != null && locationForm['state'].toString().isNotEmpty)
+                  _buildSummaryItem('State', locationForm['state'].toString()),
+                if (locationForm['zipcode'] != null && locationForm['zipcode'].toString().isNotEmpty)
+                  _buildSummaryItem('Zip Code', locationForm['zipcode'].toString()),
+                // Fallback to state.address if locationForm is empty
+                if (locationForm.isEmpty && state.address != null && state.address!.isNotEmpty)
+                  _buildSummaryItem('Address', state.address!),
+              ],
+            ),
           ],
           
-          // Contact Information
-          if (state.phoneNumber != null && state.phoneNumber!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _buildSummaryItem('Phone Number', state.phoneNumber!),
+          // Contact Information Section
+          if (contactForm.isNotEmpty || (state.phoneNumber != null && state.phoneNumber!.isNotEmpty)) ...[
+            const SizedBox(height: 16),
+            _buildSummaryCategorySection(
+              'Contact Information',
+              Icons.contact_phone,
+              [
+                if (contactForm['name'] != null && contactForm['name'].toString().isNotEmpty)
+                  _buildSummaryItem('Name', contactForm['name'].toString()),
+                if (contactForm['tel'] != null && contactForm['tel'].toString().isNotEmpty)
+                  _buildSummaryItem('Phone', contactForm['tel'].toString()),
+                if (contactForm['email'] != null && contactForm['email'].toString().isNotEmpty)
+                  _buildSummaryItem('Email', contactForm['email'].toString()),
+                // Fallback to state.phoneNumber if contactForm is empty
+                if (contactForm.isEmpty && state.phoneNumber != null && state.phoneNumber!.isNotEmpty)
+                  _buildSummaryItem('Phone', state.phoneNumber!),
+              ],
+            ),
           ],
           
           // Price Estimate
@@ -1563,6 +2117,40 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       ),
     );
   }
+  
+  Widget _buildSummaryCategorySection(String title, IconData icon, List<Widget> children) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: const Color(0xFFFBB04C)),
+              const SizedBox(width: 8),
+              TranslatableText(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
 
   Widget _buildInputArea() {
     return Container(
@@ -1607,7 +2195,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
           ),
           const SizedBox(width: 8),
           GestureDetector(
-            onTap: _isLoading ? null : (_messageController.text.trim().isNotEmpty ? _sendMessage : _startListening),
+            onTap: _isLoading ? null : _handleMicrophoneButtonTap,
             child: Container(
               width: 48,
               height: 48,
@@ -1618,6 +2206,13 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
                         ? Colors.red 
                         : const Color(0xFFFBB04C),
                 shape: BoxShape.circle,
+                boxShadow: _isListening ? [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.3),
+                    blurRadius: 8,
+                    spreadRadius: 2,
+                  ),
+                ] : null,
               ),
               child: _isLoading
                   ? const SizedBox(
@@ -1946,5 +2541,422 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> {
       default:
         return 'th';
     }
+  }
+
+  /// Build floating draggable phone call button
+  Widget _buildFloatingPhoneButton() {
+    return StreamBuilder<ConversationStatus>(
+      stream: _elevenLabsService.statusStream,
+      initialData: _elevenLabsService.status,
+      builder: (context, statusSnapshot) {
+        final status = statusSnapshot.data ?? ConversationStatus.disconnected;
+        
+        return StreamBuilder<bool>(
+          stream: _elevenLabsService.speakingStream,
+          initialData: false,
+          builder: (context, speakingSnapshot) {
+            final isSpeaking = speakingSnapshot.data ?? false;
+            
+            return StreamBuilder<bool>(
+              stream: _elevenLabsService.listeningStream,
+              initialData: false,
+              builder: (context, listeningSnapshot) {
+                final isListening = listeningSnapshot.data ?? false;
+                
+                return Positioned(
+                  left: _phonePosition.dx,
+                  top: _phonePosition.dy,
+                  child: GestureDetector(
+                    onPanStart: (details) {
+                      setState(() {
+                        _isDraggingPhone = true;
+                      });
+                    },
+                    onPanUpdate: (details) {
+                      if (_isDraggingPhone) {
+                        setState(() {
+                          final buttonSize = _isPhoneCallActive ? 60.0 : 52.0;
+                          _phonePosition = Offset(
+                            (_phonePosition.dx + details.delta.dx).clamp(0.0, MediaQuery.of(context).size.width - buttonSize),
+                            (_phonePosition.dy + details.delta.dy).clamp(0.0, MediaQuery.of(context).size.height - buttonSize),
+                          );
+                        });
+                      }
+                    },
+                    onPanEnd: (details) {
+                      setState(() {
+                        _isDraggingPhone = false;
+                      });
+                    },
+                    onTap: _handlePhoneButtonPressed,
+                    child: AnimatedBuilder(
+                      animation: _phoneAnimationController,
+                      builder: (context, child) {
+                        final buttonSize = _isPhoneCallActive ? 60.0 : 52.0;
+                        final borderRadius = _isPhoneCallActive ? 30.0 : 26.0;
+                        
+                        return Material(
+                          elevation: 8,
+                          borderRadius: BorderRadius.circular(borderRadius),
+                          child: Container(
+                            width: buttonSize,
+                            height: buttonSize,
+                            decoration: BoxDecoration(
+                              color: _getPhoneButtonColor(status, isSpeaking, isListening),
+                              borderRadius: BorderRadius.circular(borderRadius),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _getPhoneButtonColor(status, isSpeaking, isListening).withOpacity(0.4),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Center(
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 300),
+                                child: _getPhoneButtonIcon(status, isSpeaking, isListening),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Get phone button color based on status
+  Color _getPhoneButtonColor(ConversationStatus status, bool isSpeaking, bool isListening) {
+    if (status == ConversationStatus.error) {
+      return Colors.red;
+    } else if (status == ConversationStatus.active && (isSpeaking || isListening)) {
+      return Colors.green;
+    } else if (status == ConversationStatus.active || status == ConversationStatus.connected) {
+      return const Color(0xFF1976D2);
+    } else if (status == ConversationStatus.connecting) {
+      return Colors.orange;
+    } else {
+      return const Color(0xFF1976D2);
+    }
+  }
+
+  /// Get phone button icon based on status
+  Widget _getPhoneButtonIcon(ConversationStatus status, bool isSpeaking, bool isListening) {
+    final iconSize = _isPhoneCallActive ? 28.0 : 24.0;
+    
+    if (status == ConversationStatus.error) {
+      return Icon(
+        Icons.error,
+        color: Colors.white,
+        size: iconSize,
+        key: const ValueKey('error'),
+      );
+    } else if (status == ConversationStatus.connecting) {
+      return SizedBox(
+        width: iconSize - 4,
+        height: iconSize - 4,
+        child: const CircularProgressIndicator(
+          color: Colors.white,
+          strokeWidth: 2.5,
+          key: ValueKey('connecting'),
+        ),
+      );
+    } else if (_isPhoneCallActive && isSpeaking) {
+      // Voice mode active and AI is speaking
+      return Icon(
+        Icons.volume_up,
+        color: Colors.white,
+        size: iconSize,
+        key: const ValueKey('speaking'),
+      );
+    } else if (_isPhoneCallActive && isListening) {
+      // Voice mode active and listening to user
+      return Icon(
+        Icons.mic,
+        color: Colors.white,
+        size: iconSize,
+        key: const ValueKey('listening'),
+      );
+    } else if (_isPhoneCallActive) {
+      // Voice mode active - show horizontal phone (end call)
+      return Icon(
+        Icons.call_end,
+        color: Colors.white,
+        size: iconSize,
+        key: const ValueKey('active_call_end'),
+      );
+    } else {
+      // Text mode - show vertical phone (start call)
+      return Icon(
+        Icons.call,
+        color: Colors.white,
+        size: iconSize,
+        key: const ValueKey('call'),
+      );
+    }
+  }
+
+  /// Handle phone button press
+  Future<void> _handlePhoneButtonPressed() async {
+    // Use _isPhoneCallActive to determine current mode instead of status
+    // This correctly tracks whether we're in voice mode or text mode
+    if (_isPhoneCallActive) {
+      // Currently in voice mode - end it and switch to text mode
+      await _endPhoneCall();
+    } else {
+      // Currently in text mode or disconnected - start voice mode
+      await _startPhoneCall();
+    }
+  }
+
+  /// Start phone call with ElevenLabs
+  Future<void> _startPhoneCall() async {
+    try {
+      print('🎤 Starting ElevenLabs phone call...');
+      setState(() {
+        _isConnectingToCall = true;
+      });
+
+      // Test ElevenLabs connection first
+      print('🧪 Testing ElevenLabs connection...');
+      final testResult = await _elevenLabsService.testConnection();
+      if (!testResult) {
+        print('❌ ElevenLabs connection test failed');
+        _showErrorSnackBar('ElevenLabs connection test failed. Please check your API key.');
+        setState(() {
+          _isConnectingToCall = false;
+        });
+        return;
+      }
+
+      // Initialize ElevenLabs service
+      print('🔧 Initializing ElevenLabs service...');
+      final initialized = await _elevenLabsService.initialize();
+      if (!initialized) {
+        print('❌ ElevenLabs initialization failed');
+        _showErrorSnackBar('Voice service initialization failed. Please check microphone permissions in Settings.');
+        setState(() {
+          _isConnectingToCall = false;
+        });
+        return;
+      }
+
+      print('✅ ElevenLabs service initialized, checking connection...');
+      
+      // Only connect if not already connected (check for both 'connected' and 'active')
+      if (_elevenLabsService.status != ConversationStatus.active && 
+          _elevenLabsService.status != ConversationStatus.connected) {
+        print('🔌 Not connected - establishing connection...');
+        
+        // Set mode to voice BEFORE connecting
+        _elevenLabsService.setMode(ConversationMode.voice);
+        print('✅ Mode set to VOICE before connecting');
+        
+        // Connect to ElevenLabs with timeout
+        final connected = await _elevenLabsService.connect().timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            print('⏰ ElevenLabs connection timed out after 15s');
+            return false;
+          },
+        );
+        
+        if (!connected) {
+          print('❌ ElevenLabs connection failed');
+          _showErrorSnackBar('Voice service connection failed. Please try again or use text chat.');
+          setState(() {
+            _isConnectingToCall = false;
+          });
+          return;
+        }
+
+        print('🚀 Starting ElevenLabs session...');
+        await _elevenLabsService.startSession();
+      } else {
+        print('✅ Already connected - reusing existing connection');
+        // Set mode to voice for phone call
+        _elevenLabsService.setMode(ConversationMode.voice);
+        print('✅ Mode set to VOICE');
+        
+        // Always call startSession when switching to voice mode
+        // This ensures the microphone is properly initialized
+        print('🚀 Starting ElevenLabs session for voice mode...');
+        await _elevenLabsService.startSession();
+      }
+      
+      // Start ElevenLabs voice listening (not regular speech-to-text)
+      print('🎤 Starting ElevenLabs voice listening...');
+      await _elevenLabsService.startListening();
+      
+      setState(() {
+        _isPhoneCallActive = true;
+        _isConnectingToCall = false;
+      });
+
+      print('✅ Voice call connected successfully');
+      // Show phone call started message
+      _showInfoSnackBar('📞 Voice call started! Start speaking...');
+      
+    } catch (e) {
+      print('❌ Error starting phone call: $e');
+      _showErrorSnackBar('Failed to start phone call: ${e.toString()}');
+      setState(() {
+        _isConnectingToCall = false;
+      });
+    }
+  }
+
+  /// End phone call - but keep connection alive for text mode
+  Future<void> _endPhoneCall() async {
+    try {
+      print('📞 Ending voice conversation...');
+      
+      // Set mode back to text
+      _elevenLabsService.setMode(ConversationMode.text);
+      
+      // DON'T disconnect - just stop listening so we can continue in text mode
+      // The WebSocket stays alive for text-based conversation
+      await _elevenLabsService.stopListening();
+      print('🛑 Voice input stopped - ready for text mode');
+      
+      setState(() {
+        _isPhoneCallActive = false;
+        _isConnectingToCall = false;
+      });
+
+      print('✅ Voice conversation ended - continuing in text mode');
+      _showInfoSnackBar('📞 Voice ended - you can now type messages');
+      
+    } catch (e) {
+      print('❌ Error ending phone call: $e');
+      _showErrorSnackBar('Failed to end voice call: ${e.toString()}');
+    }
+  }
+
+  /// Show error snack bar
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  /// Show info snack bar
+  void _showInfoSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.blue,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+  
+  /// Build floating photo upload button
+  Widget _buildFloatingPhotoButton() {
+    return Positioned(
+      left: _photoButtonPosition.dx,
+      top: _photoButtonPosition.dy,
+      child: GestureDetector(
+        onPanStart: (details) {
+          setState(() {
+            _isDraggingPhoto = true;
+          });
+        },
+        onPanUpdate: (details) {
+          if (_isDraggingPhoto) {
+            setState(() {
+              _photoButtonPosition = Offset(
+                (_photoButtonPosition.dx + details.delta.dx).clamp(0.0, MediaQuery.of(context).size.width - 60),
+                (_photoButtonPosition.dy + details.delta.dy).clamp(0.0, MediaQuery.of(context).size.height - 60),
+              );
+            });
+          }
+        },
+        onPanEnd: (details) {
+          setState(() {
+            _isDraggingPhoto = false;
+          });
+        },
+        onTap: () {
+          _uploadPhotos(fromFloatingButton: true);
+        },
+        child: AnimatedBuilder(
+          animation: _photoAnimationController,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: 1.0 + (_photoAnimationController.value * 0.2),
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(28),
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.orange.shade400,
+                        Colors.orange.shade600,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.orange.withOpacity(0.5),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: Icon(
+                          Icons.camera_alt,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                      if (_uploadedPhotosInSession.isNotEmpty)
+                        Positioned(
+                          right: 4,
+                          top: 4,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              '${_uploadedPhotosInSession.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 } 
