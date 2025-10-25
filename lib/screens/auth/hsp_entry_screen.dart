@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'hsp_login_screen.dart';
-import 'hsp_register_screen.dart';
+import 'hsp_phone_login_screen.dart';
+import 'hsp_phone_register_screen.dart';
 
 class HspEntryScreen extends StatelessWidget {
   const HspEntryScreen({super.key});
@@ -34,7 +34,7 @@ class HspEntryScreen extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const HspLoginScreen()),
+                      MaterialPageRoute(builder: (context) => const HspPhoneLoginScreen()),
                     );
                   },
                   style: ElevatedButton.styleFrom(
@@ -63,7 +63,7 @@ class HspEntryScreen extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const HspRegisterScreen()),
+                      MaterialPageRoute(builder: (context) => const HspPhoneRegisterScreen()),
                     );
                   },
                   style: OutlinedButton.styleFrom(

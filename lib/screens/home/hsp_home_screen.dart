@@ -242,13 +242,23 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     addressController.dispose();
   }
 
-  void _navigateToVerification() {
+  void _navigateToVerification() async {
+    // Get current provider data to pass phone number
+    final providerDoc = await FirebaseFirestore.instance
+        .collection('providers')
+        .doc(widget.user.uid)
+        .get();
+    
+    final providerData = providerDoc.data() as Map<String, dynamic>?;
+    final phoneNumber = providerData?['phoneNumber'];
+    
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => HspVerificationScreen(
           user: widget.user,
-          email: widget.user.email ?? '',
+          email: widget.user.email,
+          phoneNumber: phoneNumber,
         ),
       ),
     );
@@ -270,6 +280,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         return 'Verified';
       case 'rejected':
         return 'Application Rejected';
+      case 'testing_mode':
+        return 'Pending Verification (Test)';
       default:
         // Check if user has completed initial setup but hasn't submitted docs
         if (verificationStep == 'documents_pending') {
@@ -278,6 +290,10 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         // If documents are submitted but status isn't set properly
         if (verificationStep == 'documents_submitted') {
           return 'Under Review';
+        }
+        // If verification was skipped for testing
+        if (verificationStep == 'skipped_for_testing') {
+          return 'Pending Verification (Test)';
         }
         return 'Pending Verification';
     }
@@ -292,6 +308,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     switch (status) {
       case 'pending_verification':
       case 'under_review':
+      case 'testing_mode':
         return Colors.orange;
       case 'verified':
       case 'active':
@@ -303,6 +320,10 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         if (verificationStep == 'documents_submitted') {
           return Colors.orange;
         }
+        // If verification was skipped for testing
+        if (verificationStep == 'skipped_for_testing') {
+          return Colors.orange;
+        }
         return Colors.grey;
     }
   }
@@ -311,7 +332,10 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     final status = (providerData?['status'] as String?)?.toLowerCase();
     final verificationStep = providerData?['verificationStep'] as String?;
     final needsVerification = (status == 'pending_verification' || 
-                              verificationStep == 'documents_pending') &&
+                              status == 'testing_mode' ||
+                              status == 'under_review' ||
+                              verificationStep == 'documents_pending' ||
+                              verificationStep == 'skipped_for_testing') &&
                               status != 'verified' && status != 'active';
 
     // Completely hide panel if user has dismissed it for this status
@@ -431,24 +455,25 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
             const Text(
-              'Complete your document submission to start taking new task requests.',
+              'Complete your verification and storefront setup to start receiving service requests.',
               style: TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Required documents:',
+              'You can update your information anytime before approval:',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             const Text(
-              '• Government ID\n'
-              '• Business License\n'
-              '• Insurance Certificate',
+              '• Upload/update verification documents\n'
+              '• Edit company and contact information\n'
+              '• Update service offerings and intake questions\n'
+              '• Add work showcase photos and team profiles',
               style: TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Tap on the status above to continue with verification.',
+              'Tap on the status above to edit your verification and storefront.',
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.orange,

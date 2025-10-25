@@ -12,9 +12,20 @@ service firebase.storage {
       allow write: if request.auth != null && request.resource.size < 25 * 1024 * 1024;
     }
     
-    // Temporary permissive rule for profile pictures (for debugging)
+    // Profile pictures
     match /profile_pictures/{allPaths=**} {
       allow read, write: if request.auth != null;
+    }
+    
+    // Provider verification documents (specific rule)
+    match /providers/{userId}/verification_documents/{fileName} {
+      allow read, write: if request.auth != null && request.auth.uid == userId
+                        && request.resource.size < 25 * 1024 * 1024; // 25MB - removed content type restriction for testing
+    }
+    
+    // Provider documents and storefront content (permissive rule for debugging)
+    match /providers/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
     // Allow service request attachments (images, videos, and PDFs)

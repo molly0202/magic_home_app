@@ -5,16 +5,20 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../services/email_service.dart';
+import '../../services/admin_notification_service.dart';
 import '../home/hsp_home_screen.dart';
+import 'hsp_storefront_setup_screen.dart';
 
 class HspVerificationScreen extends StatefulWidget {
   final firebase_auth.User user;
-  final String email;
+  final String? email;
+  final String? phoneNumber;
 
   const HspVerificationScreen({
     super.key,
     required this.user,
-    required this.email,
+    this.email,
+    this.phoneNumber,
   });
 
   @override
@@ -38,12 +42,126 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
   final ImagePicker _picker = ImagePicker();
 
   @override
+  void initState() {
+    super.initState();
+    // Pre-fill phone number if provided from phone authentication
+    if (widget.phoneNumber != null) {
+      _phoneController.text = widget.phoneNumber!;
+    }
+    
+    // Debug authentication state
+    _checkAuthState();
+    
+    // Load existing provider data for editing
+    _loadExistingProviderData();
+  }
+  
+  Future<void> _loadExistingProviderData() async {
+    try {
+      final providerDoc = await FirebaseFirestore.instance
+          .collection('providers')
+          .doc(widget.user.uid)
+          .get();
+      
+      if (providerDoc.exists) {
+        final data = providerDoc.data() as Map<String, dynamic>;
+        
+        setState(() {
+          // Pre-fill form fields with existing data
+          _companyNameController.text = data['companyName'] ?? '';
+          _legalRepNameController.text = data['legalRepresentativeName'] ?? '';
+          _phoneController.text = data['phoneNumber'] ?? widget.phoneNumber ?? '';
+          _addressController.text = data['address'] ?? '';
+          _backgroundCheckConsent = data['backgroundCheckConsent'] ?? false;
+        });
+        
+        print('✅ Loaded existing provider data for editing');
+      }
+    } catch (e) {
+      print('❌ Error loading existing provider data: $e');
+    }
+  }
+  
+  void _checkAuthState() {
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    print('🔍 Authentication State Check:');
+    print('   User: ${user?.uid ?? "NOT AUTHENTICATED"}');
+    print('   Email: ${user?.email ?? "N/A"}');
+    print('   Phone: ${user?.phoneNumber ?? "N/A"}');
+    print('   Provider ID: ${widget.user.uid}');
+    print('   Auth method: ${user?.providerData.map((p) => p.providerId).toList() ?? "None"}');
+    
+    if (user == null) {
+      print('🚨 USER NOT AUTHENTICATED - This will cause upload failures!');
+    } else {
+      print('✅ User is authenticated');
+    }
+  }
+
+  @override
   void dispose() {
     _companyNameController.dispose();
     _legalRepNameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
     super.dispose();
+  }
+
+  Future<String> _uploadDocumentWithRetry(File file, String documentType) async {
+    const maxRetries = 3;
+    
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        print('📤 Uploading $documentType (attempt $attempt/$maxRetries)');
+        print('📁 File path: ${file.path}');
+        print('📏 File size: ${await file.length()} bytes');
+        print('👤 User ID: ${widget.user.uid}');
+        
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('providers')
+            .child(widget.user.uid)
+            .child('verification_documents')
+            .child('${documentType}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+        
+        print('🗂️ Storage path: ${storageRef.fullPath}');
+        
+        // Add timeout and better error handling
+        final uploadTask = storageRef.putFile(file);
+        
+        // Set a reasonable timeout
+        final snapshot = await uploadTask.timeout(
+          const Duration(seconds: 60),
+          onTimeout: () {
+            throw Exception('Upload timeout - please check your internet connection and try again');
+          },
+        );
+        
+        final downloadUrl = await snapshot.ref.getDownloadURL();
+        
+        print('✅ $documentType uploaded successfully to: $downloadUrl');
+        return downloadUrl;
+        
+      } catch (e) {
+        print('❌ Upload attempt $attempt failed: $e');
+        print('🔍 Error type: ${e.runtimeType}');
+        if (e.toString().contains('permission')) {
+          print('🚨 Permission denied - check Firebase Storage rules');
+        }
+        if (e.toString().contains('network')) {
+          print('🌐 Network error - check internet connection');
+        }
+        
+        if (attempt == maxRetries) {
+          throw Exception('Failed to upload $documentType after $maxRetries attempts: $e');
+        }
+        
+        // Wait before retry (exponential backoff)
+        await Future.delayed(Duration(seconds: attempt * 2));
+      }
+    }
+    
+    throw Exception('Upload failed after all retries');
   }
 
   Future<void> _pickFile(String documentType) async {
@@ -131,6 +249,59 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
     }
   }
 
+  Future<void> _skipVerificationForTesting() async {
+    // Temporary function to skip document upload for testing
+    setState(() {
+      _isLoading = true;
+      _errorMessage = 'Skipping document upload for testing...';
+    });
+
+    try {
+      // Create provider profile without documents
+      await FirebaseFirestore.instance
+          .collection('providers')
+          .doc(widget.user.uid)
+          .update({
+        'companyName': _companyNameController.text.trim(),
+        'legalRepresentativeName': _legalRepNameController.text.trim(),
+        'phoneNumber': widget.phoneNumber ?? _phoneController.text.trim(),
+        'address': _addressController.text.trim(),
+        'backgroundCheckConsent': _backgroundCheckConsent,
+        'verificationStep': 'skipped_for_testing',
+        'status': 'testing_mode',
+        'verificationDocuments': {
+          'governmentId': 'skipped_for_testing',
+          'businessLicense': 'skipped_for_testing', 
+          'insurance': 'skipped_for_testing',
+        },
+        'submittedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+
+      // Navigate to storefront setup
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HspStorefrontSetupScreen(
+            user: widget.user,
+            email: widget.email,
+            phoneNumber: widget.phoneNumber,
+          ),
+        ),
+        (route) => false,
+      );
+
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Skip failed: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _submitVerification() async {
     // Validation
     if (_companyNameController.text.trim().isEmpty ||
@@ -187,28 +358,42 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
         _errorMessage = 'Uploading documents to server...';
       });
 
-      // Send verification email to admin with document attachments FIRST
+      // Upload documents to Firebase Storage and notify admins
+      Map<String, String> documentUrls = {};
       try {
-        await EmailService.sendVerificationEmailWithAttachments(
-          providerData: {
-            'uid': widget.user.uid,
-            'email': widget.email,
-            'companyName': _companyNameController.text.trim(),
-            'legalRepresentativeName': _legalRepNameController.text.trim(),
-            'phoneNumber': _phoneController.text.trim(),
-            'address': _addressController.text.trim(),
-          },
-          documentFiles: {
-            'governmentId': _governmentIdFile!,
-            'businessLicense': _businessLicenseFile!,
-            'insurance': _insuranceFile!,
-          },
+        // Upload each document with retry logic
+        setState(() {
+          _errorMessage = 'Uploading government ID...';
+        });
+        documentUrls['governmentId'] = await _uploadDocumentWithRetry(_governmentIdFile!, 'governmentId');
+        
+        setState(() {
+          _errorMessage = 'Uploading business license...';
+        });
+        documentUrls['businessLicense'] = await _uploadDocumentWithRetry(_businessLicenseFile!, 'businessLicense');
+        
+        setState(() {
+          _errorMessage = 'Uploading insurance certificate...';
+        });
+        documentUrls['insurance'] = await _uploadDocumentWithRetry(_insuranceFile!, 'insurance');
+        
+        print('✅ All documents uploaded successfully');
+        
+        // Notify admins via push notification and Firestore
+        await AdminNotificationService.notifyProviderVerificationSubmitted(
+          providerId: widget.user.uid,
+          providerName: _legalRepNameController.text.trim(),
+          phoneNumber: widget.phoneNumber ?? _phoneController.text.trim(),
+          email: widget.email,
+          documentUrls: documentUrls,
         );
-        print('✅ Document upload and email sending completed');
+        
+        print('✅ Admin notifications sent');
+        
       } catch (uploadError) {
         print('❌ Document upload failed: $uploadError');
         setState(() {
-          _errorMessage = 'Document upload failed: ${uploadError.toString()}. Please try again.';
+          _errorMessage = 'Document upload failed: ${uploadError.toString()}\n\nTap "Skip Upload for Testing" to continue without documents.';
           _isLoading = false;
         });
         return;
@@ -242,11 +427,15 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
       // Small delay to show success message
       await Future.delayed(const Duration(seconds: 1));
 
-      // Navigate to HSP home screen
+      // Navigate to storefront setup screen
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
-          builder: (context) => HspHomeScreen(user: widget.user),
+          builder: (context) => HspStorefrontSetupScreen(
+            user: widget.user,
+            email: widget.email,
+            phoneNumber: widget.phoneNumber,
+          ),
         ),
         (route) => false,
       );
@@ -344,17 +533,7 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text(
-              'Close',
-              style: TextStyle(color: Color(0xFFFBB04C)),
-            ),
-          ),
-        ],
+        automaticallyImplyLeading: false, // Remove back button too
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -515,6 +694,30 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Temporary skip button for testing
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: _isLoading ? null : _skipVerificationForTesting,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.grey,
+                  side: const BorderSide(color: Colors.grey),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Skip Upload for Testing',
+                  style: TextStyle(
+                    fontSize: 16,
+                  ),
+                ),
               ),
             ),
           ],

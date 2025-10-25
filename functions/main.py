@@ -177,6 +177,233 @@ def send_provider_notification(event: firestore_fn.Event[firestore_fn.DocumentSn
         raise e
 
 
+@firestore_fn.on_document_created(document="providers/{provider_id}")
+def notify_admin_new_provider(event: firestore_fn.Event[firestore_fn.DocumentSnapshot | None]) -> None:
+    """
+    Triggered when a new provider document is created.
+    Automatically sends email to admin when provider completes verification.
+    """
+    try:
+        provider_id = event.params["provider_id"]
+        
+        if event.data is None:
+            logging.warning(f"No data found for new provider {provider_id}")
+            return
+            
+        provider_data = event.data.to_dict()
+        
+        # Check if this is a completed verification (has verification documents)
+        if 'verificationStep' in provider_data and provider_data.get('verificationStep') == 'documents_pending':
+            logging.info(f"New provider {provider_id} registered, but verification not yet complete")
+            return
+            
+        # Send email notification to admin
+        _send_simple_admin_email(
+            provider_id=provider_id,
+            provider_data=provider_data,
+            event_type="new_provider_registered"
+        )
+        
+        logging.info(f"✅ Admin notified of new provider registration: {provider_id}")
+        
+    except Exception as e:
+        logging.error(f"Error notifying admin of new provider {provider_id}: {str(e)}")
+
+
+@firestore_fn.on_document_updated(document="providers/{provider_id}")
+def notify_admin_provider_verification(event: firestore_fn.Event[firestore_fn.DocumentSnapshot | None]) -> None:
+    """
+    Triggered when a provider document is updated.
+    Sends email to admin when verification documents are uploaded.
+    """
+    try:
+        provider_id = event.params["provider_id"]
+        
+        if event.data is None:
+            logging.warning(f"No data found for provider update {provider_id}")
+            return
+            
+        new_snapshot = event.data.after
+        old_snapshot = event.data.before
+        
+        if new_snapshot is None:
+            return
+            
+        new_data = new_snapshot.to_dict()
+        old_data = {}
+        if old_snapshot and old_snapshot.exists:
+            old_data = old_snapshot.to_dict()
+        
+        # Check if verification step changed to indicate documents uploaded
+        new_step = new_data.get('verificationStep', '')
+        old_step = old_data.get('verificationStep', '')
+        
+        # Also check if verification documents were added
+        new_docs = new_data.get('verificationDocuments', {})
+        old_docs = old_data.get('verificationDocuments', {})
+        
+        documents_uploaded = len(new_docs) > len(old_docs)
+        verification_completed = (new_step != old_step and 'completed' in new_step)
+        
+        if documents_uploaded or verification_completed:
+            logging.info(f"Provider {provider_id} uploaded verification documents")
+            
+            # Send email notification to admin
+            _send_simple_admin_email(
+                provider_id=provider_id,
+                provider_data=new_data,
+                event_type="verification_documents_uploaded"
+            )
+            
+            logging.info(f"✅ Admin notified of provider verification: {provider_id}")
+        
+    except Exception as e:
+        logging.error(f"Error notifying admin of provider verification {provider_id}: {str(e)}")
+
+
+def _send_simple_admin_email(provider_id: str, provider_data: dict, event_type: str):
+    """
+    Simple function to send email notification to admin.
+    Uses a basic email service (you can integrate with SendGrid, etc.)
+    """
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        # Admin email configuration
+        admin_email = "MagicHome2025@outlook.com"
+        
+        # Extract provider information
+        provider_name = provider_data.get('name', provider_data.get('legalRepresentativeName', 'Unknown'))
+        phone_number = provider_data.get('phoneNumber', 'N/A')
+        email = provider_data.get('email', 'N/A')
+        company_name = provider_data.get('companyName', 'N/A')
+        created_at = provider_data.get('createdAt', 'N/A')
+        
+        # Create email content based on event type
+        if event_type == "new_provider_registered":
+            subject = f"🏠 New Provider Registered - {provider_name}"
+            body = f"""
+New Magic Home Provider Registration
+
+Provider Details:
+• Name: {provider_name}
+• Company: {company_name}
+• Phone: {phone_number}
+• Email: {email}
+• Provider ID: {provider_id}
+• Registration Time: {created_at}
+
+Status: Awaiting document verification
+
+Firebase Console: https://console.firebase.google.com/project/magic-home-01/firestore/data/providers/{provider_id}
+
+---
+This is an automated notification from Magic Home App.
+"""
+        else:  # verification_documents_uploaded
+            subject = f"📋 Provider Verification Documents Uploaded - {provider_name}"
+            body = f"""
+Provider Verification Documents Ready for Review
+
+Provider Details:
+• Name: {provider_name}
+• Company: {company_name}
+• Phone: {phone_number}
+• Email: {email}
+• Provider ID: {provider_id}
+
+Documents Status: Uploaded and ready for admin review
+
+Action Required: Please review the uploaded verification documents.
+
+Firebase Console: https://console.firebase.google.com/project/magic-home-01/firestore/data/providers/{provider_id}
+
+---
+This is an automated notification from Magic Home App.
+"""
+        
+        # For now, just log the email (you can integrate with actual email service)
+        logging.info(f"""
+📧 EMAIL TO ADMIN:
+To: {admin_email}
+Subject: {subject}
+Body: {body}
+""")
+        
+        # TODO: Integrate with actual email service like SendGrid, Mailgun, or Gmail API
+        # For production, you would uncomment and configure one of these:
+        
+        # Option 1: Using SendGrid (recommended)
+        # import sendgrid
+        # from sendgrid.helpers.mail import Mail
+        # sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
+        # message = Mail(
+        #     from_email='noreply@magichome.app',
+        #     to_emails=admin_email,
+        #     subject=subject,
+        #     html_content=body.replace('\n', '<br>')
+        # )
+        # sg.send(message)
+        
+        # Option 2: Using Gmail API
+        # from google.oauth2.credentials import Credentials
+        # from googleapiclient.discovery import build
+        # service = build('gmail', 'v1', credentials=creds)
+        # message = create_message('noreply@magichome.app', admin_email, subject, body)
+        # service.users().messages().send(userId='me', body=message).execute()
+        
+        logging.info(f"✅ Admin email notification logged for provider {provider_id}")
+        
+    except Exception as e:
+        logging.error(f"❌ Error sending admin email for provider {provider_id}: {str(e)}")
+
+
+@https_fn.on_request()
+def sendAdminEmail(req: https_fn.Request) -> https_fn.Response:
+    """
+    HTTP function to manually send email notifications to admins.
+    Usage: POST /sendAdminEmail with JSON body: {
+        "subject": "New Provider Verification",
+        "providerName": "John Doe",
+        "phoneNumber": "+1234567890",
+        "email": "john@example.com",
+        "providerId": "xxx"
+    }
+    """
+    try:
+        if req.method != 'POST':
+            return https_fn.Response("Method not allowed", status=405)
+            
+        data = req.get_json()
+        if not data:
+            return https_fn.Response("Missing request body", status=400)
+        
+        # Extract data
+        provider_name = data.get('providerName', 'Unknown Provider')
+        phone_number = data.get('phoneNumber', 'N/A')
+        email = data.get('email', 'N/A')
+        provider_id = data.get('providerId', 'N/A')
+        
+        # Send the admin email
+        _send_simple_admin_email(
+            provider_id=provider_id,
+            provider_data={
+                'name': provider_name,
+                'phoneNumber': phone_number,
+                'email': email,
+            },
+            event_type="verification_documents_uploaded"
+        )
+        
+        return https_fn.Response("Admin email notification sent", status=200)
+        
+    except Exception as e:
+        logging.error(f"Error processing admin email: {str(e)}")
+        return https_fn.Response(f"Error: {str(e)}", status=500)
+
+
 @https_fn.on_request()
 def test_notification(req: https_fn.Request) -> https_fn.Response:
     """

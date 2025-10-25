@@ -77,7 +77,7 @@ class _FloatingTranslationWidgetState extends State<FloatingTranslationWidget> w
                   return Transform.rotate(
                     angle: _rotationAnimation.value * 0.5, // Subtle rotation
                     child: Material(
-                      elevation: 6,
+                      elevation: 2, // Reduced elevation for less prominence
                       borderRadius: BorderRadius.circular(28),
                       child: Container(
                         width: 56,
@@ -85,8 +85,8 @@ class _FloatingTranslationWidgetState extends State<FloatingTranslationWidget> w
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              Colors.lightBlue.shade300,
-                              Colors.lightBlue.shade500,
+                              Colors.lightBlue.shade300.withOpacity(0.5), // 50% transparent
+                              Colors.lightBlue.shade500.withOpacity(0.5), // 50% transparent
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -94,9 +94,9 @@ class _FloatingTranslationWidgetState extends State<FloatingTranslationWidget> w
                           borderRadius: BorderRadius.circular(28),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.lightBlue.withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
+                              color: Colors.lightBlue.withOpacity(0.15), // Reduced shadow opacity
+                              blurRadius: 4, // Reduced blur for subtler shadow
+                              offset: const Offset(0, 2), // Reduced offset
                             ),
                           ],
                         ),
@@ -122,8 +122,8 @@ class _FloatingTranslationWidgetState extends State<FloatingTranslationWidget> w
           const SizedBox(height: 2),
           Text(
             _getCurrentLanguageCode(),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.9), // Slightly transparent text
               fontSize: 10,
               fontWeight: FontWeight.bold,
             ),
@@ -173,9 +173,9 @@ class _FloatingTranslationWidgetState extends State<FloatingTranslationWidget> w
 
   Widget _getCurrentLanguageDisplay() {
     if (!_translationService.isTranslationEnabled) {
-      return const Icon(
+      return Icon(
         Icons.translate,
-        color: Colors.white,
+        color: Colors.white.withOpacity(0.9), // Slightly transparent icon
         size: 24,
       );
     }

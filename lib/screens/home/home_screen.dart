@@ -3269,28 +3269,22 @@ class MyConnectionsScreen extends StatefulWidget {
   State<MyConnectionsScreen> createState() => _MyConnectionsScreenState();
 }
 
-class _MyConnectionsScreenState extends State<MyConnectionsScreen> with SingleTickerProviderStateMixin {
-  final TextEditingController _referralCodeController = TextEditingController();
+class _MyConnectionsScreenState extends State<MyConnectionsScreen> {
   final TextEditingController _usernameController = TextEditingController();
-  late TabController _tabController;
   bool _isLoading = false;
   bool _showSearchInput = false;
-  int _currentSearchTab = 0; // 0 = referral code, 1 = username
   Map<String, dynamic>? _pendingConnection;
   List<Map<String, dynamic>> _connections = [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadConnections();
   }
 
   @override
   void dispose() {
-    _referralCodeController.dispose();
     _usernameController.dispose();
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -3409,86 +3403,6 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> with SingleTi
     }
   }
 
-  Future<void> _lookupReferralCode() async {
-    final referralCode = _referralCodeController.text.trim();
-    if (referralCode.isEmpty) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      // Check in users collection
-      final usersQuery = await FirebaseFirestore.instance
-          .collection('users')
-          .where('referralCode', isEqualTo: referralCode)
-          .limit(1)
-          .get();
-
-      if (usersQuery.docs.isNotEmpty) {
-        final doc = usersQuery.docs.first;
-        final data = doc.data();
-        setState(() {
-          _pendingConnection = {
-            'id': doc.id,
-            'name': data['name'] ?? 'User',
-            'email': data['email'] ?? '',
-            'avatar': data['profileImageUrl'] ?? 'https://picsum.photos/100/100?random=${doc.id.hashCode}',
-            'type': 'user',
-            'referralCode': referralCode,
-          };
-          _showSearchInput = false;
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // Check in providers collection
-      final providersQuery = await FirebaseFirestore.instance
-          .collection('providers')
-          .where('referralCode', isEqualTo: referralCode)
-          .limit(1)
-          .get();
-
-      if (providersQuery.docs.isNotEmpty) {
-        final doc = providersQuery.docs.first;
-        final data = doc.data();
-        setState(() {
-          _pendingConnection = {
-            'id': doc.id,
-            'name': data['companyName'] ?? data['legalRepresentativeName'] ?? 'Provider',
-            'email': data['email'] ?? '',
-            'avatar': data['profileImageUrl'] ?? 'https://picsum.photos/100/100?random=${doc.id.hashCode}',
-            'type': 'provider',
-            'referralCode': referralCode,
-          };
-          _showSearchInput = false;
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // Not found
-      setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Referral code not found. Please check and try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error looking up referral code: $e');
-      setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error looking up referral code. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   Future<void> _lookupUsername() async {
     final username = _usernameController.text.trim();
@@ -3643,7 +3557,6 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> with SingleTi
 
       setState(() {
         _pendingConnection = null;
-        _referralCodeController.clear();
         _usernameController.clear();
         _isLoading = false;
       });
@@ -3794,10 +3707,10 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> with SingleTi
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
+        leading: Navigator.canPop(context) ? IconButton(
           icon: const Icon(Icons.arrow_back, color: Color(0xFFFBB04C)),
           onPressed: () => Navigator.pop(context),
-        ),
+        ) : null,
         title: const Text(
           'My Connections',
           style: TextStyle(
@@ -3813,8 +3726,6 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> with SingleTi
               setState(() {
                 _showSearchInput = true;
                 _pendingConnection = null;
-                _currentSearchTab = 0;
-                _tabController.animateTo(0);
               });
             },
           ),
@@ -3855,46 +3766,11 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> with SingleTi
                             ),
                           ),
                           const SizedBox(height: 20),
-                          // Tab bar
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: TabBar(
-                              controller: _tabController,
-                              indicator: BoxDecoration(
-                                color: const Color(0xFFFBB04C),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              labelColor: Colors.white,
-                              unselectedLabelColor: Colors.grey[600],
-                              labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                              onTap: (index) {
-                                setState(() {
-                                  _currentSearchTab = index;
-                                });
-                              },
-                              tabs: const [
-                                Tab(text: 'Referral Code'),
-                                Tab(text: 'Username'),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          // Tab content
-                          SizedBox(
-                            height: 120,
-                            child: TabBarView(
-                              controller: _tabController,
-                              children: [
-                                // Referral Code Tab
-                                Column(
-                                  children: [
+                          // Username input
                           TextField(
-                            controller: _referralCodeController,
+                            controller: _usernameController,
                             decoration: const InputDecoration(
-                              hintText: 'Enter referral code',
+                              hintText: 'Enter username',
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.all(Radius.circular(12)),
                               ),
@@ -3906,61 +3782,20 @@ class _MyConnectionsScreenState extends State<MyConnectionsScreen> with SingleTi
                             textAlign: TextAlign.center,
                             style: const TextStyle(fontSize: 16),
                           ),
-                                    const SizedBox(height: 16),
+                          const SizedBox(height: 16),
                           ElevatedButton(
-                            onPressed: _lookupReferralCode,
+                            onPressed: _lookupUsername,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFFFBB04C),
                               foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 32),
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 32),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
                             child: const Text(
-                                        'Search',
+                              'Search',
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                // Username Tab
-                                Column(
-                                  children: [
-                                    TextField(
-                                      controller: _usernameController,
-                                      decoration: const InputDecoration(
-                                        hintText: 'Enter username',
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                                          borderSide: BorderSide(color: Color(0xFFFBB04C), width: 2),
-                                        ),
-                                      ),
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(fontSize: 16),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    ElevatedButton(
-                                      onPressed: _lookupUsername,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFFFBB04C),
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 32),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'Search',
-                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
                             ),
                           ),
                         ],

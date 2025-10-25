@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'firebase_options.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
@@ -19,7 +20,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 // Top-level function to handle background messages
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Initialize Firebase in background handler
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   print('Handling a background message: ${message.messageId}');
   print('Background message data: ${message.data}');
   
@@ -33,7 +36,9 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   print('Initializing Firebase...');
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   print('Firebase initialized successfully');
   
   // Initialize translation service
