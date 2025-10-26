@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/user_request.dart';
+import 'full_screen_media_viewer.dart';
 
 class ServiceRequestCard extends StatelessWidget {
   final UserRequest userRequest;
@@ -226,27 +227,74 @@ class ServiceRequestCard extends StatelessWidget {
         itemBuilder: (context, index) {
           final url = userRequest.mediaUrls[index];
           final isImage = url.toLowerCase().contains(RegExp(r'\.(jpg|jpeg|png|gif|webp)'));
+          final isVideo = url.toLowerCase().contains(RegExp(r'\.(mp4|mov|avi|mkv)'));
           
-          return Container(
-            width: 80,
-            margin: EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey[300]!),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: isImage
-                  ? Image.network(
-                      url,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => 
-                          _buildMediaPlaceholder(Icons.broken_image),
-                    )
-                  : _buildMediaPlaceholder(Icons.videocam),
+          return GestureDetector(
+            onTap: () => _showFullScreenMedia(context, url, isImage, isVideo),
+            child: Container(
+              width: 80,
+              margin: EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: isImage
+                        ? Image.network(
+                            url,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            errorBuilder: (context, error, stackTrace) => 
+                                _buildMediaPlaceholder(Icons.broken_image),
+                          )
+                        : _buildMediaPlaceholder(isVideo ? Icons.play_circle_filled : Icons.attachment),
+                  ),
+                  // Tap indicator
+                  Positioned(
+                    bottom: 4,
+                    right: 4,
+                    child: Container(
+                      padding: EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Icon(
+                        isVideo ? Icons.play_arrow : Icons.zoom_in,
+                        color: Colors.white,
+                        size: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showFullScreenMedia(BuildContext context, String url, bool isImage, bool isVideo) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FullScreenMediaViewer(
+          mediaUrl: url,
+          isImage: isImage,
+          isVideo: isVideo,
+        ),
       ),
     );
   }

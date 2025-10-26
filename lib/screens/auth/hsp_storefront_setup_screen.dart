@@ -11,12 +11,14 @@ class HspStorefrontSetupScreen extends StatefulWidget {
   final firebase_auth.User user;
   final String? email;
   final String? phoneNumber;
+  final int initialPage;
 
   const HspStorefrontSetupScreen({
     super.key,
     required this.user,
     this.email,
     this.phoneNumber,
+    this.initialPage = 0,
   });
 
   @override
@@ -24,7 +26,7 @@ class HspStorefrontSetupScreen extends StatefulWidget {
 }
 
 class _HspStorefrontSetupScreenState extends State<HspStorefrontSetupScreen> {
-  final PageController _pageController = PageController();
+  late final PageController _pageController;
   int _currentPage = 0;
   bool _isLoading = false;
   String? _errorMessage;
@@ -40,80 +42,135 @@ class _HspStorefrontSetupScreenState extends State<HspStorefrontSetupScreen> {
   
   final ImagePicker _picker = ImagePicker();
 
-  // Predefined service categories
+  // Predefined service categories (no default questions - providers add their own)
   final List<ServiceCategory> _availableServices = [
     ServiceCategory(
       id: 'plumbing',
       name: 'Plumbing',
       icon: Icons.plumbing,
-      defaultQuestions: [
-        'What type of plumbing issue are you experiencing?',
-        'Is this an emergency repair?',
-        'When did you first notice the problem?',
-        'Have you attempted any repairs yourself?',
-      ],
     ),
     ServiceCategory(
       id: 'electrical',
       name: 'Electrical',
       icon: Icons.electrical_services,
-      defaultQuestions: [
-        'What electrical work do you need?',
-        'Is this for new installation or repair?',
-        'Do you have permits if required?',
-        'When would you like the work completed?',
-      ],
     ),
     ServiceCategory(
       id: 'hvac',
       name: 'HVAC',
       icon: Icons.air,
-      defaultQuestions: [
-        'What HVAC service do you need?',
-        'What is the age of your current system?',
-        'Are you experiencing any specific issues?',
-        'What is the square footage of the area?',
-      ],
     ),
     ServiceCategory(
       id: 'cleaning',
       name: 'Cleaning',
       icon: Icons.cleaning_services,
-      defaultQuestions: [
-        'What type of cleaning service do you need?',
-        'How large is the space to be cleaned?',
-        'How often would you like cleaning service?',
-        'Are there any special requirements or preferences?',
-      ],
     ),
     ServiceCategory(
       id: 'landscaping',
       name: 'Landscaping',
       icon: Icons.grass,
-      defaultQuestions: [
-        'What landscaping services do you need?',
-        'What is the size of your yard/property?',
-        'Do you have a preferred timeline?',
-        'Are there any specific plants or features you want?',
-      ],
     ),
     ServiceCategory(
       id: 'handyman',
       name: 'Handyman',
       icon: Icons.handyman,
-      defaultQuestions: [
-        'What repairs or tasks do you need completed?',
-        'How urgent is this work?',
-        'Do you have materials or should we provide them?',
-        'Are there any access restrictions we should know about?',
-      ],
+    ),
+    // Chinese service categories
+    ServiceCategory(
+      id: 'moving',
+      name: '搬家 (Moving)',
+      icon: Icons.local_shipping,
+    ),
+    ServiceCategory(
+      id: 'confinement_nanny',
+      name: '月嫂 (Confinement Nanny)',
+      icon: Icons.baby_changing_station,
+    ),
+    ServiceCategory(
+      id: 'cooking',
+      name: '做饭 (Cooking)',
+      icon: Icons.restaurant,
+    ),
+    ServiceCategory(
+      id: 'hourly_worker',
+      name: '钟点工 (Hourly Worker)',
+      icon: Icons.schedule,
+    ),
+    ServiceCategory(
+      id: 'elderly_care',
+      name: '老年陪护 (Elderly Care)',
+      icon: Icons.elderly,
     ),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPage = widget.initialPage;
+    _pageController = PageController(initialPage: widget.initialPage);
+    _loadExistingStorefrontData();
+  }
 
   @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadExistingStorefrontData() async {
+    try {
+      final providerDoc = await FirebaseFirestore.instance
+          .collection('providers')
+          .doc(widget.user.uid)
+          .get();
+
+      if (providerDoc.exists) {
+        final data = providerDoc.data() as Map<String, dynamic>;
+        
+        setState(() {
+          // Load existing services
+          final servicesData = data['services'] as List<dynamic>? ?? [];
+          _selectedServices = servicesData.map((service) => ServiceCategory(
+            id: service['id'] ?? '',
+            name: service['name'] ?? '',
+            icon: _getIconForService(service['id']),
+            intakeQuestions: List<String>.from(service['intakeQuestions'] ?? []),
+          )).toList();
+
+          // Load existing employees
+          final employeesData = data['employees'] as List<dynamic>? ?? [];
+          _employeeProfiles = employeesData.map((employee) => EmployeeProfile(
+            name: employee['name'] ?? '',
+            role: employee['role'] ?? '',
+            bio: employee['bio'] ?? '',
+            photo: null, // Can't reload File objects, but photoUrl is stored separately
+          )).toList();
+
+          // Note: Work showcase photos are URLs, can't reload as File objects
+          // They'll show as empty in edit mode, but that's OK for editing
+        });
+
+        print('✅ Loaded existing storefront data for editing');
+      }
+    } catch (e) {
+      print('❌ Error loading existing storefront data: $e');
+    }
+  }
+
+  IconData _getIconForService(String? serviceId) {
+    switch (serviceId) {
+      case 'plumbing': return Icons.plumbing;
+      case 'electrical': return Icons.electrical_services;
+      case 'hvac': return Icons.air;
+      case 'cleaning': return Icons.cleaning_services;
+      case 'landscaping': return Icons.grass;
+      case 'handyman': return Icons.handyman;
+      case 'moving': return Icons.local_shipping;
+      case 'confinement_nanny': return Icons.baby_changing_station;
+      case 'cooking': return Icons.restaurant;
+      case 'hourly_worker': return Icons.schedule;
+      case 'elderly_care': return Icons.elderly;
+      default: return Icons.build;
+    }
   }
 
   Future<void> _pickWorkShowcasePhoto() async {
@@ -656,13 +713,13 @@ class _HspStorefrontSetupScreenState extends State<HspStorefrontSetupScreen> {
                         value: isSelected,
                         onChanged: (value) {
                           setState(() {
-                            if (value == true) {
-                              _selectedServices.add(ServiceCategory(
-                                id: service.id,
-                                name: service.name,
-                                icon: service.icon,
-                                intakeQuestions: List.from(service.defaultQuestions),
-                              ));
+                        if (value == true) {
+                          _selectedServices.add(ServiceCategory(
+                            id: service.id,
+                            name: service.name,
+                            icon: service.icon,
+                            intakeQuestions: [], // Start with empty questions - providers add their own
+                          ));
                             } else {
                               _selectedServices.removeWhere((s) => s.id == service.id);
                             }
@@ -699,12 +756,17 @@ class _HspStorefrontSetupScreenState extends State<HspStorefrontSetupScreen> {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            ...(_selectedServices
+                            
+                            // Show questions if any exist
+                            if (_selectedServices
                                 .firstWhere((s) => s.id == service.id)
-                                .intakeQuestions
-                                .asMap()
-                                .entries
-                                .map((entry) {
+                                .intakeQuestions.isNotEmpty)
+                              ...(_selectedServices
+                                  .firstWhere((s) => s.id == service.id)
+                                  .intakeQuestions
+                                  .asMap()
+                                  .entries
+                                  .map((entry) {
                               final questionIndex = entry.key;
                               final question = entry.value;
                               return Padding(
@@ -745,24 +807,68 @@ class _HspStorefrontSetupScreenState extends State<HspStorefrontSetupScreen> {
                                   ],
                                 ),
                               );
-                            })),
-                            const SizedBox(height: 8),
-                            OutlinedButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  final serviceIndex = _selectedServices
-                                      .indexWhere((s) => s.id == service.id);
-                                  if (serviceIndex != -1) {
-                                    _selectedServices[serviceIndex]
-                                        .intakeQuestions
-                                        .add('What specific details do you need for this service?');
-                                  }
-                                });
-                              },
-                              icon: const Icon(Icons.add),
-                              label: const Text('Add Custom Question'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFFFBB04C),
+                            }))
+                            else
+                              // Show message when no questions added yet
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.blue[200]!),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      Icons.quiz_outlined,
+                                      color: Colors.blue[600],
+                                      size: 32,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'No questions added yet',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue[700],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Add questions you need to ask customers for this service',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: Colors.blue[600],
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            
+                            const SizedBox(height: 12),
+                            
+                            // Add question button
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    final serviceIndex = _selectedServices
+                                        .indexWhere((s) => s.id == service.id);
+                                    if (serviceIndex != -1) {
+                                      _selectedServices[serviceIndex]
+                                          .intakeQuestions
+                                          .add('');
+                                    }
+                                  });
+                                },
+                                icon: const Icon(Icons.add),
+                                label: const Text('Add Question'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFBB04C),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
                               ),
                             ),
                           ],
@@ -791,16 +897,13 @@ class ServiceCategory {
   final String name;
   final IconData icon;
   List<String> intakeQuestions;
-  List<String> defaultQuestions;
 
   ServiceCategory({
     required this.id,
     required this.name,
     required this.icon,
     List<String>? intakeQuestions,
-    List<String>? defaultQuestions,
-  }) : intakeQuestions = intakeQuestions ?? [],
-       defaultQuestions = defaultQuestions ?? [];
+  }) : intakeQuestions = intakeQuestions ?? [];
 }
 
 class EmployeeProfile {

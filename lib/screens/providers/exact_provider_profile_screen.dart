@@ -179,17 +179,32 @@ class _ExactProviderProfileScreenState extends State<ExactProviderProfileScreen>
                   
                   const SizedBox(height: 20),
                   
-                  // Recommended Users Section (exactly like HSP)
+                  // Services Offered Section
+                  _buildServicesOffered(data),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Team Members Section
+                  _buildTeamMembers(data),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Recommended Users Section
                   _buildRecommendedUsers(data),
                   
                   const SizedBox(height: 20),
                   
-                  // Company Description Section (exactly like HSP, but read-only)
+                  // Work Showcase Section
+                  _buildWorkShowcase(data),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Company Description Section
                   _buildCompanyDescription(data),
                   
                   const SizedBox(height: 20),
                   
-                  // Reviews Section (exactly like HSP)
+                  // Reviews Section
                   _buildReviews(),
                   
                   const SizedBox(height: 40),
@@ -225,6 +240,222 @@ class _ExactProviderProfileScreenState extends State<ExactProviderProfileScreen>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildServicesOffered(Map<String, dynamic> data) {
+    final services = data['services'] as List<dynamic>? ?? [];
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.build, color: Color(0xFFFBB04C), size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Services Offered',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          if (services.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Center(
+                child: Text(
+                  'No services listed yet',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: services.map<Widget>((service) {
+                final serviceName = service['name'] ?? 'Service';
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFBB04C).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFFBB04C).withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    serviceName,
+                    style: const TextStyle(
+                      color: Color(0xFFFBB04C),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeamMembers(Map<String, dynamic> data) {
+    final employees = data['employees'] as List<dynamic>? ?? [];
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.group, color: Color(0xFFFBB04C), size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Our Team',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          if (employees.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Center(
+                child: Text(
+                  'No team members listed yet',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            )
+          else
+            Column(
+              children: employees.map<Widget>((employee) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[200]!),
+                  ),
+                  child: Row(
+                    children: [
+                      // Employee photo
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFFFBB04C), width: 2),
+                        ),
+                        child: ClipOval(
+                          child: employee['photoUrl'] != null
+                              ? Image.network(
+                                  employee['photoUrl'],
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      color: Colors.grey[300],
+                                      child: const Icon(Icons.person, color: Colors.grey),
+                                    );
+                                  },
+                                )
+                              : Container(
+                                  color: Colors.grey[300],
+                                  child: const Icon(Icons.person, color: Colors.grey),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      
+                      // Employee info
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              employee['name'] ?? 'Team Member',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            if (employee['role'] != null)
+                              Text(
+                                employee['role'],
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 14,
+                                ),
+                              ),
+                            if (employee['bio'] != null && employee['bio'].isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  employee['bio'],
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontSize: 12,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+        ],
+      ),
     );
   }
 
@@ -299,16 +530,23 @@ class _ExactProviderProfileScreenState extends State<ExactProviderProfileScreen>
                     final photoUrl = user['photoURL'] ?? user['profileImageUrl'];
                     
                     return Container(
-                      width: 60,
+                      width: 80,
                       margin: const EdgeInsets.only(right: 12),
                       child: Column(
                         children: [
                           Container(
-                            width: 50,
-                            height: 50,
+                            width: 60,
+                            height: 60,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: Colors.grey[300],
+                              border: Border.all(color: const Color(0xFFFBB04C), width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
                             child: ClipOval(
                               child: photoUrl != null
@@ -316,26 +554,33 @@ class _ExactProviderProfileScreenState extends State<ExactProviderProfileScreen>
                                       photoUrl,
                                       fit: BoxFit.cover,
                                       errorBuilder: (context, error, stackTrace) {
-                                        return Icon(
-                                          Icons.person,
-                                          color: Colors.grey[600],
-                                          size: 24,
+                                        return Container(
+                                          color: const Color(0xFFFBB04C).withOpacity(0.1),
+                                          child: Icon(
+                                            Icons.person,
+                                            color: const Color(0xFFFBB04C),
+                                            size: 30,
+                                          ),
                                         );
                                       },
                                     )
-                                  : Icon(
-                                      Icons.person,
-                                      color: Colors.grey[600],
-                                      size: 24,
+                                  : Container(
+                                      color: const Color(0xFFFBB04C).withOpacity(0.1),
+                                      child: Icon(
+                                        Icons.person,
+                                        color: const Color(0xFFFBB04C),
+                                        size: 30,
+                                      ),
                                     ),
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
                           Text(
                             _getShortName(displayName),
                             style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
                             ),
                             textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,
@@ -349,6 +594,144 @@ class _ExactProviderProfileScreenState extends State<ExactProviderProfileScreen>
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildWorkShowcase(Map<String, dynamic> data) {
+    final showcasePhotos = data['workShowcasePhotos'] as List<dynamic>? ?? [];
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.photo_library, color: Color(0xFFFBB04C), size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Our Work',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          if (showcasePhotos.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Center(
+                child: Text(
+                  'No work photos available yet',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            )
+          else
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 1,
+              ),
+              itemCount: showcasePhotos.length,
+              itemBuilder: (context, index) {
+                final photoUrl = showcasePhotos[index];
+                return GestureDetector(
+                  onTap: () {
+                    // Show full screen image
+                    _showFullScreenImage(context, photoUrl);
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        photoUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: Colors.grey[200],
+                            child: const Icon(
+                              Icons.image,
+                              color: Colors.grey,
+                              size: 40,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showFullScreenImage(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            Center(
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Text(
+                    'Failed to load image',
+                    style: TextStyle(color: Colors.white),
+                  );
+                },
+              ),
+            ),
+            Positioned(
+              top: 40,
+              right: 20,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

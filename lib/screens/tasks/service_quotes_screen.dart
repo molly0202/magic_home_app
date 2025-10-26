@@ -5,7 +5,9 @@ import '../../models/user_request.dart';
 import '../../models/service_bid.dart';
 import '../../services/user_task_service.dart';
 import '../../widgets/translatable_text.dart';
+import 'quote_acceptance_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/exact_provider_profile_screen.dart';
 
 class ServiceQuotesScreen extends StatefulWidget {
@@ -420,41 +422,90 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                     // Price and benchmark
                     Row(
                       children: [
-                        TranslatableText(
-                          'Quote',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
+                        // Show consultation type or price
+                        if (_isConsultationBid(bid)) ...[
+                          // Show consultation type instead of price
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    bid.bidMessage.contains('PHONE_CONSULTATION') ? Icons.phone : Icons.location_on,
+                                    color: Colors.blue,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      bid.bidMessage.contains('PHONE_CONSULTATION') 
+                                          ? 'Need Phone Consultation'
+                                          : 'Need In-Person Consultation',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'Consultation Required',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '\$${bid.priceQuote.toInt()}',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: priceBenchmark['color'].withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: TranslatableText(
-                            priceBenchmark['label'],
+                        ] else ...[
+                          // Show price for regular quotes
+                          TranslatableText(
+                            'Quote',
                             style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: priceBenchmark['color'],
+                              fontSize: 14,
+                              color: Colors.grey[600],
                             ),
                           ),
-                        ),
+                          const Spacer(),
+                          Text(
+                            '\$${bid.priceQuote.toInt()}',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: priceBenchmark['color'].withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: TranslatableText(
+                              priceBenchmark['label'],
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: priceBenchmark['color'],
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     
@@ -522,39 +573,66 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
                     ),
                     const SizedBox(height: 8),
                     
-                    // Action buttons based on status
+                    // Action buttons based on status and bid type
                     if (bid.bidStatus == 'pending' && widget.task.status != 'assigned') ...[
-                      // Accept Quote button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _isAcceptingBid ? null : () => _showTimeConfirmationDialog(bid),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                      // Check if this is a consultation bid
+                      if (_isConsultationBid(bid)) ...[
+                        // Call Provider button for consultations
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _callProvider(bid.providerId),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            icon: const Icon(Icons.phone),
+                            label: const Text(
+                              'Call Service Provider',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                          child: _isAcceptingBid
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const TranslatableText(
-                                  'Accept Quote',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
                         ),
-                      ),
+                      ] else ...[
+                        // Accept Quote button for price quotes
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _isAcceptingBid ? null : () => _navigateToQuoteAcceptance(bid),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: _isAcceptingBid
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const TranslatableText(
+                                    'Accept Quote',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
                     ] else if (bid.bidStatus == 'accepted') ...[
                       Container(
                         width: double.infinity,
@@ -917,6 +995,117 @@ class _ServiceQuotesScreenState extends State<ServiceQuotesScreen> {
           _isAcceptingBid = false;
         });
       }
+    }
+  }
+
+  void _navigateToQuoteAcceptance(ServiceBid bid) async {
+    // Navigate to full-screen quote acceptance
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QuoteAcceptanceScreen(
+          bid: bid,
+          userId: widget.user.uid,
+        ),
+      ),
+    );
+    
+    // If quote was accepted successfully, refresh the screen
+    if (result == true) {
+      setState(() {
+        // Refresh bids or navigate back
+      });
+    }
+  }
+
+  bool _isConsultationBid(ServiceBid bid) {
+    // Check if this bid is a consultation request
+    return bid.bidMessage.contains('PHONE_CONSULTATION:') || 
+           bid.bidMessage.contains('IN_PERSON_CONSULTATION:');
+  }
+
+  Future<void> _callProvider(String providerId) async {
+    try {
+      // Get provider's phone number
+      final providerDoc = await FirebaseFirestore.instance
+          .collection('providers')
+          .doc(providerId)
+          .get();
+      
+      if (providerDoc.exists) {
+        final data = providerDoc.data() as Map<String, dynamic>;
+        final phoneNumber = data['phoneNumber'] ?? data['phone'];
+        
+        if (phoneNumber != null) {
+          // Show phone number and make call
+          final shouldCall = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Call Service Provider'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Call ${data['companyName'] ?? 'Provider'}?'),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.phone, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        Text(
+                          phoneNumber,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                  icon: const Icon(Icons.phone, color: Colors.white),
+                  label: const Text('Call', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          );
+          
+          if (shouldCall == true) {
+            final uri = Uri.parse('tel:$phoneNumber');
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Unable to make phone call')),
+              );
+            }
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Provider phone number not available')),
+          );
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
   }
 

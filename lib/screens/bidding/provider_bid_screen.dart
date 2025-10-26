@@ -36,6 +36,9 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
   Map<String, dynamic>? _currentBenchmark;
   bool _canBid = true;
   String? _eligibilityMessage;
+  
+  // New consultation options
+  String _quoteType = 'price'; // 'price', 'phone_consultation', 'in_person_consultation'
 
   @override
   void initState() {
@@ -73,8 +76,8 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
     // Set default availability
     _availabilityController.text = "Available today";
     
-    // Set default message template
-    _messageController.text = "I'm experienced in this type of work and can complete it professionally. I'm available at the time mentioned and committed to quality service.";
+    // Remove default message - let providers write their own
+    _messageController.text = "";
   }
 
   void _startDeadlineTimer() {
@@ -119,18 +122,36 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
   }
 
   void _submitBid() async {
-    if (!_formKey.currentState!.validate() || !_canBid) return;
+    // For consultation options, skip form validation since no price is required
+    if (_quoteType == 'price' && !_formKey.currentState!.validate()) return;
+    if (!_canBid) return;
 
     setState(() => _isSubmitting = true);
 
     try {
       print('🔍 PROVIDER_BID_SCREEN: Starting bid submission...');
+      print('🔍 Quote type: $_quoteType');
+      
+      // Handle different quote types
+      double priceQuote;
+      String bidMessage = _messageController.text.trim();
+      
+      if (_quoteType == 'phone_consultation') {
+        priceQuote = 1.0; // Use minimal price for consultation (system requirement)
+        bidMessage = 'PHONE_CONSULTATION: $bidMessage';
+      } else if (_quoteType == 'in_person_consultation') {
+        priceQuote = 1.0; // Use minimal price for consultation (system requirement)
+        bidMessage = 'IN_PERSON_CONSULTATION: $bidMessage';
+      } else {
+        priceQuote = double.parse(_priceController.text);
+        bidMessage = 'PRICE_QUOTE: $bidMessage';
+      }
       
       final result = await BiddingService.submitBid(
         requestId: widget.requestId,
-        priceQuote: double.parse(_priceController.text),
+        priceQuote: priceQuote,
         availability: _availabilityController.text.trim(),
-        bidMessage: _messageController.text.trim(),
+        bidMessage: bidMessage,
       );
 
       print('🔍 PROVIDER_BID_SCREEN: Bid submission result: $result');
@@ -403,77 +424,300 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            SizedBox(height: 12),
+            SizedBox(height: 16),
             
-            TextFormField(
-              controller: _priceController,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: 'Price Quote (\$)',
-                hintText: 'Enter your price',
-                prefixIcon: Icon(Icons.attach_money),
-                border: OutlineInputBorder(),
-                suffixIcon: _currentBenchmark != null 
-                    ? Icon(
-                        _currentBenchmark!['icon'],
-                        color: _currentBenchmark!['color'],
-                      )
-                    : null,
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a price';
-                }
-                final price = double.tryParse(value);
-                if (price == null || price <= 0) {
-                  return 'Please enter a valid price';
-                }
-                return null;
-              },
-              onChanged: _onPriceChanged,
-            ),
-            
-            // Real-time price benchmark feedback
-            if (_currentBenchmark != null) ...[
-              SizedBox(height: 12),
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _currentBenchmark!['color'].withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: _currentBenchmark!['color'],
-                    width: 1,
+            // Quote type selection
+            Column(
+              children: [
+                // Direct price quote option
+                GestureDetector(
+                  onTap: () => setState(() => _quoteType = 'price'),
+                  child: Container(
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _quoteType == 'price' ? const Color(0xFFFBB04C).withOpacity(0.1) : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _quoteType == 'price' ? const Color(0xFFFBB04C) : Colors.grey[300]!,
+                        width: _quoteType == 'price' ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.attach_money,
+                          color: _quoteType == 'price' ? const Color(0xFFFBB04C) : Colors.grey[600],
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Provide Direct Quote',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: _quoteType == 'price' ? const Color(0xFFFBB04C) : Colors.black87,
+                                ),
+                              ),
+                              Text(
+                                'I can provide a price estimate now',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Radio<String>(
+                          value: 'price',
+                          groupValue: _quoteType,
+                          onChanged: (value) => setState(() => _quoteType = value!),
+                          activeColor: const Color(0xFFFBB04C),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _currentBenchmark!['icon'],
-                      color: _currentBenchmark!['color'],
-                      size: 20,
+                
+                SizedBox(height: 12),
+                
+                // Phone consultation option
+                GestureDetector(
+                  onTap: () => setState(() => _quoteType = 'phone_consultation'),
+                  child: Container(
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _quoteType == 'phone_consultation' ? Colors.blue.withOpacity(0.1) : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _quoteType == 'phone_consultation' ? Colors.blue : Colors.grey[300]!,
+                        width: _quoteType == 'phone_consultation' ? 2 : 1,
+                      ),
                     ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _currentBenchmark!['message'],
-                            style: TextStyle(
-                              fontWeight: FontWeight.w500,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.phone,
+                          color: _quoteType == 'phone_consultation' ? Colors.blue : Colors.grey[600],
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Need Phone Consultation',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: _quoteType == 'phone_consultation' ? Colors.blue : Colors.black87,
+                                ),
+                              ),
+                              Text(
+                                'I need to discuss details before pricing',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Radio<String>(
+                          value: 'phone_consultation',
+                          groupValue: _quoteType,
+                          onChanged: (value) => setState(() => _quoteType = value!),
+                          activeColor: Colors.blue,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                SizedBox(height: 12),
+                
+                // In-person consultation option
+                GestureDetector(
+                  onTap: () => setState(() => _quoteType = 'in_person_consultation'),
+                  child: Container(
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _quoteType == 'in_person_consultation' ? Colors.purple.withOpacity(0.1) : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _quoteType == 'in_person_consultation' ? Colors.purple : Colors.grey[300]!,
+                        width: _quoteType == 'in_person_consultation' ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.person_pin_circle,
+                          color: _quoteType == 'in_person_consultation' ? Colors.purple : Colors.grey[600],
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Need In-Person Consultation',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: _quoteType == 'in_person_consultation' ? Colors.purple : Colors.black87,
+                                ),
+                              ),
+                              Text(
+                                'I need to visit the location before pricing',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Radio<String>(
+                          value: 'in_person_consultation',
+                          groupValue: _quoteType,
+                          onChanged: (value) => setState(() => _quoteType = value!),
+                          activeColor: Colors.purple,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            SizedBox(height: 16),
+            
+            // Price input - only show for direct quote
+            if (_quoteType == 'price')
+              Column(
+                children: [
+                  TextFormField(
+                    controller: _priceController,
+                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: 'Price Quote (\$)',
+                      hintText: 'Enter your price',
+                      prefixIcon: Icon(Icons.attach_money),
+                      border: OutlineInputBorder(),
+                      suffixIcon: _currentBenchmark != null 
+                          ? Icon(
+                              _currentBenchmark!['icon'],
                               color: _currentBenchmark!['color'],
+                            )
+                          : null,
+                    ),
+                    validator: (value) {
+                      // Only validate price for direct quote option
+                      if (_quoteType == 'price') {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter a price';
+                        }
+                        final price = double.tryParse(value);
+                        if (price == null || price <= 0) {
+                          return 'Please enter a valid price';
+                        }
+                      }
+                      // No validation needed for consultation options
+                      return null;
+                    },
+                    onChanged: _onPriceChanged,
+                  ),
+                  
+                  // Real-time price benchmark feedback
+                  if (_currentBenchmark != null) ...[
+                    SizedBox(height: 12),
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _currentBenchmark!['color'].withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _currentBenchmark!['color'],
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _currentBenchmark!['icon'],
+                            color: _currentBenchmark!['color'],
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _currentBenchmark!['message'],
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    color: _currentBenchmark!['color'],
+                                  ),
+                                ),
+                                if (_currentBenchmark!['isAIGenerated'] == true)
+                                  Text(
+                                    'AI-powered analysis',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                          if (_currentBenchmark!['isAIGenerated'] == true)
-                            Text(
-                              'AI-powered analysis',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
                         ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            
+            // Consultation message
+            if (_quoteType != 'price') ...[
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue[200]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          _quoteType == 'phone_consultation' ? Icons.phone : Icons.location_on,
+                          color: Colors.blue[600],
+                          size: 20,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          _quoteType == 'phone_consultation' 
+                              ? 'Phone Consultation Required'
+                              : 'In-Person Consultation Required',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      _quoteType == 'phone_consultation'
+                          ? 'Customer will be able to call you directly to discuss the project details and get a quote.'
+                          : 'Customer will be able to schedule an in-person consultation to assess the project and provide an accurate quote.',
+                      style: TextStyle(
+                        color: Colors.blue[600],
+                        fontSize: 14,
                       ),
                     ),
                   ],
@@ -584,6 +828,17 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
     );
   }
 
+  String _getSubmitButtonText() {
+    switch (_quoteType) {
+      case 'phone_consultation':
+        return 'Request Phone Consultation';
+      case 'in_person_consultation':
+        return 'Request In-Person Consultation';
+      default:
+        return 'Submit Bid';
+    }
+  }
+
   Widget _buildSubmitButton() {
     return SizedBox(
       width: double.infinity,
@@ -619,7 +874,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
                   Icon(Icons.send),
                   SizedBox(width: 8),
                   Text(
-                    'Submit Bid',
+                    _getSubmitButtonText(),
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,

@@ -42,7 +42,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>We need access to your camera for identity verification and to take photos of your service needs.</string>
+	<string>We need access to your camera to take photos for your business profile, team members, and showcase your work to customers.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>We need access to your contacts to find your friends on Magic Home</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
@@ -50,7 +50,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>We need access to your microphone for voice input to describe your service needs.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>We need access to your photo library for identity verification and to upload photos of your service needs.</string>
+	<string>We need access to your photo library to upload photos for your business profile, team members, and showcase your work to customers.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>We need access to speech recognition to convert your voice into text for describing service needs.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
