@@ -15,6 +15,9 @@ import '../debug/function_test_screen.dart';
 import '../debug/token_debug_screen.dart';
 import '../bidding/provider_bid_screen.dart';
 import '../bidding/service_request_detail_screen.dart';
+import '../auth/services_edit_screen.dart';
+import '../auth/team_edit_screen.dart';
+import '../auth/work_showcase_edit_screen.dart';
 import '../../services/bidding_service.dart';
 import '../../services/user_task_service.dart';
 import '../../models/user_request.dart';
@@ -3380,18 +3383,28 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 
                 const SizedBox(height: 20),
                 
+                // Services Section
+                _buildServicesSection(data),
+                
+                const SizedBox(height: 20),
+                
+                // Team Section
+                _buildTeamSection(data),
+                
+                const SizedBox(height: 20),
+                
+                // Work Showcase Section
+                _buildWorkShowcaseSection(data),
+                
+                const SizedBox(height: 20),
+                
                 // Recommended Users Section
-                _buildRecommendedUsers(),
+                _buildRecommendedUsersSection(data),
                 
                 const SizedBox(height: 20),
                 
                 // Company Description Section
                 _buildCompanyDescription(data),
-                
-                const SizedBox(height: 20),
-                
-                // Reviews Section
-                _buildReviews(),
                 
                 const SizedBox(height: 20),
                 
@@ -4362,6 +4375,321 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             label: 'Profile',
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildServicesSection(Map<String, dynamic> data) {
+    final services = data['services'] as List<dynamic>? ?? [];
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.build, color: Color(0xFFFBB04C), size: 24),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Services I Offer',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _editServices,
+                icon: const Icon(Icons.edit, color: Color(0xFFFBB04C)),
+                tooltip: 'Edit Services',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          if (services.isEmpty)
+            const Text('Complete storefront setup to add services', style: TextStyle(color: Colors.grey))
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: services.map<Widget>((service) {
+                final serviceName = service['name'] ?? 'Service';
+                final hourlyRate = service['hourlyRate'] as double?;
+                
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFBB04C).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFFBB04C).withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    hourlyRate != null ? '$serviceName (\$${hourlyRate.toInt()}/hr)' : serviceName,
+                    style: const TextStyle(
+                      color: Color(0xFFFBB04C),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeamSection(Map<String, dynamic> data) {
+    final employees = data['employees'] as List<dynamic>? ?? [];
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.group, color: Color(0xFFFBB04C), size: 24),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'My Team',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _editTeam,
+                icon: const Icon(Icons.edit, color: Color(0xFFFBB04C)),
+                tooltip: 'Edit Team',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          if (employees.isEmpty)
+            const Text('Add team members in storefront setup', style: TextStyle(color: Colors.grey))
+          else
+            Column(
+              children: employees.map<Widget>((employee) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundImage: employee['photoUrl'] != null 
+                          ? NetworkImage(employee['photoUrl'])
+                          : null,
+                      child: employee['photoUrl'] == null 
+                          ? const Icon(Icons.person)
+                          : null,
+                    ),
+                    title: Text(employee['name'] ?? 'Team Member'),
+                    subtitle: Text(employee['role'] ?? ''),
+                  ),
+                );
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkShowcaseSection(Map<String, dynamic> data) {
+    final showcasePhotos = data['workShowcasePhotos'] as List<dynamic>? ?? [];
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.photo_library, color: Color(0xFFFBB04C), size: 24),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'My Work Showcase',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _editWorkShowcase,
+                icon: const Icon(Icons.edit, color: Color(0xFFFBB04C)),
+                tooltip: 'Edit Work Photos',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          if (showcasePhotos.isEmpty)
+            const Text('Add work photos in storefront setup', style: TextStyle(color: Colors.grey))
+          else
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemCount: showcasePhotos.length,
+              itemBuilder: (context, index) {
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    showcasePhotos[index],
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.image),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecommendedUsersSection(Map<String, dynamic> data) {
+    final referredByUserIds = List<String>.from(data['referred_by_user_ids'] ?? []);
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Recommended by',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          if (referredByUserIds.isEmpty)
+            const Text('No recommendations yet', style: TextStyle(color: Colors.grey))
+          else
+            const Text('Referral users will be displayed here', style: TextStyle(color: Colors.grey)),
+        ],
+      ),
+    );
+  }
+
+  void _editServices() async {
+    // Get current services data
+    final providerDoc = await FirebaseFirestore.instance
+        .collection('providers')
+        .doc(widget.user.uid)
+        .get();
+    
+    final currentServices = providerDoc.data()?['services'] as List<dynamic>? ?? [];
+    
+    // Navigate to full-screen services editing
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ServicesEditScreen(
+          providerId: widget.user.uid,
+          currentServices: currentServices,
+        ),
+      ),
+    );
+  }
+
+  void _editTeam() async {
+    // Get current team data
+    final providerDoc = await FirebaseFirestore.instance
+        .collection('providers')
+        .doc(widget.user.uid)
+        .get();
+    
+    final currentTeam = providerDoc.data()?['employees'] as List<dynamic>? ?? [];
+    
+    // Navigate to full-screen team editing
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TeamEditScreen(
+          providerId: widget.user.uid,
+          currentTeam: currentTeam,
+        ),
+      ),
+    );
+  }
+
+  void _editWorkShowcase() async {
+    // Navigate to full-screen work showcase editing
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WorkShowcaseEditScreen(
+          providerId: widget.user.uid,
+        ),
       ),
     );
   }
