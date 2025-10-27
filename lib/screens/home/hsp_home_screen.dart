@@ -4251,7 +4251,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Magic Home Provider'),
+        title: Image.asset('assets/images/logo.png', height: 32),
         backgroundColor: const Color(0xFFFBB04C),
         foregroundColor: Colors.white,
         elevation: 0,
