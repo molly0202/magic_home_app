@@ -55,6 +55,10 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> with TickerProv
   late AnimationController _photoAnimationController;
   List<String> _uploadedPhotosInSession = []; // Track uploaded photos
   
+  // Auto-exit timer for voice mode
+  Timer? _autoExitTimer;
+  bool _completionDetected = false;
+  
   // Form controllers to persist data
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _zipcodeController = TextEditingController();
@@ -114,6 +118,25 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> with TickerProv
       if (mounted) {
         setState(() {});
         _scrollToBottom();
+        
+        if (messages.isNotEmpty) {
+          final lastMessage = messages.last;
+          
+          final preview = lastMessage.content.length > 50 ? '${lastMessage.content.substring(0, 50)}...' : lastMessage.content;
+          print('📨 Message stream event - Type: ${lastMessage.type}, Phone active: $_isPhoneCallActive, Content: "$preview"');
+          
+          // Cancel auto-exit timer if user sends a new message
+          if (lastMessage.type == MessageType.user) {
+            print('👤 User message detected - cancelling auto-exit timer');
+            _cancelAutoExitTimer();
+          }
+          
+          // Detect completion in AI messages and start auto-exit timer
+          if (lastMessage.type == MessageType.ai && _isPhoneCallActive) {
+            print('🤖 AI message in voice mode - checking for completion keywords');
+            _checkForCompletionAndStartTimer(lastMessage.content);
+          }
+        }
       }
     });
     
@@ -152,6 +175,8 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> with TickerProv
     // Dispose animation controllers
     _phoneAnimationController.dispose();
     _photoAnimationController.dispose();
+    // Dispose auto-exit timer
+    _autoExitTimer?.cancel();
     // Dispose ElevenLabs service
     _elevenLabsService.dispose();
     super.dispose();
@@ -987,14 +1012,32 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> with TickerProv
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFBB04C),
-      appBar: AppBar(
+    return WillPopScope(
+      onWillPop: () async {
+        // If in voice mode, exit voice mode and stay on the screen
+        // Otherwise, allow navigation back
+        if (_isPhoneCallActive) {
+          _endPhoneCall();
+          return false; // Prevent navigation
+        }
+        return true; // Allow navigation back
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFBB04C),
+        appBar: AppBar(
         backgroundColor: const Color(0xFFFBB04C),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            // If in voice mode, exit voice mode and return to text mode
+            // Otherwise, exit the entire screen
+            if (_isPhoneCallActive) {
+              _endPhoneCall();
+            } else {
+              Navigator.pop(context);
+            }
+          },
         ),
         title: const Text(
           'Service Request',
@@ -1074,6 +1117,7 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> with TickerProv
           _buildFloatingPhoneButton(),
         ],
       ),
+    ),
     );
   }
 
@@ -1914,6 +1958,45 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> with TickerProv
           ),
           const SizedBox(height: 20),
           
+          // If state is mostly empty (ElevenLabs conversation), show conversation transcript
+          if (state.serviceCategory == null || state.serviceCategory!.isEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.voice_chat, color: Colors.blue[700], size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Voice Conversation Summary',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue[900],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'The following information was collected during your voice conversation:',
+                    style: TextStyle(fontSize: 13, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 12),
+                  ..._buildConversationTranscript(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          
           // Service Information Section
           _buildSummaryCategorySection(
             'Service Details',
@@ -2093,6 +2176,222 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> with TickerProv
         ),
       ),
     );
+  }
+  
+  /// Extract structured information from ElevenLabs conversation
+  Map<String, String> _extractConversationInfo() {
+    final info = <String, String>{};
+    final allMessages = _aiService.messages
+        .where((m) => m.type == MessageType.user || m.type == MessageType.ai)
+        .toList();
+    
+    // Combine all text to search for patterns
+    final fullConversation = allMessages.map((m) => m.content).join(' ');
+    
+    // Extract address (look for street numbers and keywords)
+    final addressRegex = RegExp(r'\d+[,\s]+\d+(?:st|nd|rd|th)?\s+(?:Avenue|Ave|Street|St|Road|Rd|Drive|Dr)[^.]*(?:Northeast|Northwest|Southeast|Southwest|NE|NW|SE|SW)?[^.]*(?:Bellevue|Seattle|[A-Z][a-z]+)[^.]*(?:Washington|WA)?[^.]*(?:\d{5})?', caseSensitive: false);
+    final addressMatch = addressRegex.firstMatch(fullConversation);
+    if (addressMatch != null) {
+      info['address'] = addressMatch.group(0)!.trim();
+    }
+    
+    // Extract phone number
+    final phoneRegex = RegExp(r'(?:\d{3}[-.\s]?)?\d{3}[-.\s]?\d{4}');
+    final phoneMatch = phoneRegex.firstMatch(fullConversation);
+    if (phoneMatch != null) {
+      info['phone'] = phoneMatch.group(0)!.trim();
+    }
+    
+    // Extract service type
+    final serviceKeywords = ['cleaning', 'plumbing', 'electrical', 'hvac', 'repair', 'installation', 'painting'];
+    for (final keyword in serviceKeywords) {
+      if (fullConversation.toLowerCase().contains(keyword)) {
+        info['service'] = keyword.substring(0, 1).toUpperCase() + keyword.substring(1);
+        break;
+      }
+    }
+    
+    // Extract date/time preferences
+    final timeKeywords = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'morning', 'afternoon', 'evening', 'a.m.', 'p.m.', '10 a.m.', '9 a.m.'];
+    final timeInfo = <String>[];
+    for (final keyword in timeKeywords) {
+      if (fullConversation.contains(keyword) || fullConversation.contains(keyword.toLowerCase())) {
+        if (!timeInfo.contains(keyword)) {
+          timeInfo.add(keyword);
+        }
+      }
+    }
+    if (timeInfo.isNotEmpty) {
+      info['preferred_time'] = timeInfo.join(', ');
+    }
+    
+    return info;
+  }
+  
+  /// Build conversation transcript for ElevenLabs conversations
+  List<Widget> _buildConversationTranscript() {
+    // Extract structured information first
+    final extractedInfo = _extractConversationInfo();
+    
+    final widgets = <Widget>[];
+    
+    // Show extracted information in a structured format
+    if (extractedInfo.isNotEmpty) {
+      widgets.add(
+        Container(
+          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: Colors.green[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green[200]!),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green[700], size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Extracted Information',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green[900],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ...extractedInfo.entries.map((entry) {
+                String label;
+                IconData icon;
+                switch (entry.key) {
+                  case 'service':
+                    label = 'Service Type';
+                    icon = Icons.home_repair_service;
+                    break;
+                  case 'address':
+                    label = 'Address';
+                    icon = Icons.location_on;
+                    break;
+                  case 'phone':
+                    label = 'Phone Number';
+                    icon = Icons.phone;
+                    break;
+                  case 'preferred_time':
+                    label = 'Preferred Time';
+                    icon = Icons.access_time;
+                    break;
+                  default:
+                    label = entry.key;
+                    icon = Icons.info;
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(icon, size: 16, color: Colors.green[700]),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              label,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black54,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              entry.value,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.green[900],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ],
+          ),
+        ),
+      );
+      
+      widgets.add(const Divider(height: 24));
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(
+            'Full Conversation',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // Get user and AI messages (skip system messages)
+    final conversationMessages = _aiService.messages
+        .where((m) => m.type == MessageType.user || m.type == MessageType.ai)
+        .take(20) // Limit to last 20 messages to keep it concise
+        .toList();
+    
+    if (conversationMessages.isEmpty) {
+      return [
+        const Text(
+          'No conversation recorded.',
+          style: TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic),
+        ),
+      ];
+    }
+    
+    widgets.addAll(conversationMessages.map((message) {
+      final isUser = message.type == MessageType.user;
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: isUser ? Colors.blue[100] : Colors.grey[100],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              isUser ? Icons.person : Icons.smart_toy,
+              size: 16,
+              color: isUser ? Colors.blue[700] : Colors.grey[700],
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message.content,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isUser ? Colors.blue[900] : Colors.black87,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }).toList());
+    
+    return widgets;
   }
   
   Widget _buildSummaryItem(String title, String content) {
@@ -2818,6 +3117,11 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> with TickerProv
     try {
       print('📞 Ending voice conversation...');
       
+      // Cancel auto-exit timer if active
+      _autoExitTimer?.cancel();
+      _autoExitTimer = null;
+      _completionDetected = false;
+      
       // Set mode back to text
       _elevenLabsService.setMode(ConversationMode.text);
       
@@ -2832,12 +3136,268 @@ class _AITaskIntakeScreenState extends State<AITaskIntakeScreen> with TickerProv
       });
 
       print('✅ Voice conversation ended - continuing in text mode');
-      _showInfoSnackBar('📞 Voice ended - you can now type messages');
+      
+      // Check if conversation is complete
+      // For ElevenLabs conversations, check if agent indicated completion
+      final conversationStep = _aiService.currentState.conversationStep;
+      final isCompleteByStep = conversationStep >= 8;
+      final isCompleteByContent = _detectElevenLabsCompletion();
+      final hasMinimumInfo = _validateMinimumInformation();
+      
+      print('🔍 Conversation step: $conversationStep');
+      print('🔍 Complete by step: $isCompleteByStep, Complete by content: $isCompleteByContent');
+      print('🔍 Has minimum info: $hasMinimumInfo');
+      
+      final isComplete = isCompleteByStep || isCompleteByContent;
+      
+      if (isComplete && hasMinimumInfo) {
+        // Conversation is complete - show summary and prompt to submit
+        setState(() {
+          _showSummary = true;
+          _showPhotoUpload = false;
+          _showCalendar = false;
+          _showLocationForm = false;
+          _showContactForm = false;
+        });
+        
+        // Show dialog asking if user wants to submit
+        await _showSubmitPromptDialog();
+      } else if (isComplete && !hasMinimumInfo) {
+        // Conversation reached completion but missing critical info
+        _showInfoSnackBar('📞 Voice ended - Please complete missing information below');
+        setState(() {
+          _showSummary = true;
+        });
+      } else {
+        _showInfoSnackBar('📞 Voice ended - you can now type messages or continue the conversation');
+      }
       
     } catch (e) {
       print('❌ Error ending phone call: $e');
       _showErrorSnackBar('Failed to end voice call: ${e.toString()}');
     }
+  }
+  
+  /// Detect if ElevenLabs agent indicated conversation completion
+  bool _detectElevenLabsCompletion() {
+    // If we already detected completion earlier, return true
+    if (_completionDetected) {
+      print('✅ Completion was already detected earlier');
+      return true;
+    }
+    
+    // Check recent AI messages for completion indicators (look at more messages)
+    final recentMessages = _aiService.messages
+        .where((m) => m.type == MessageType.ai)
+        .toList()
+        .reversed
+        .take(10); // Increased from 3 to 10 to catch completion even if user continued talking
+    
+    // Look for completion keywords in recent AI messages
+    final completionKeywords = [
+      'confirmed',
+      'confirmation',
+      'summary',
+      'scheduled',
+      'all set',
+      'finalize',
+      'have a great day',
+      'have a wonderful day',
+      'you\'ll receive',
+      'service is confirmed',
+      'service is complete',
+      'enjoy your',
+    ];
+    
+    for (final message in recentMessages) {
+      final lowerText = message.content.toLowerCase();
+      for (final keyword in completionKeywords) {
+        if (lowerText.contains(keyword)) {
+          print('✅ Detected completion keyword: "$keyword" in message: "${message.content}"');
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  /// Check for completion keywords in AI message and start timer
+  void _checkForCompletionAndStartTimer(String message) {
+    if (_completionDetected) return; // Already detected
+    
+    final lowerText = message.toLowerCase();
+    final completionKeywords = [
+      'have a great day',
+      'have a wonderful day',
+      'enjoy your',
+      'all set for',
+      'feel free to reach out',
+      'let me know if you need anything else',
+    ];
+    
+    for (final keyword in completionKeywords) {
+      if (lowerText.contains(keyword)) {
+        print('✅ Detected completion keyword: "$keyword" in real-time');
+        _startAutoExitTimer();
+        return;
+      }
+    }
+  }
+  
+  /// Start auto-exit timer (10 seconds after completion detected)
+  void _startAutoExitTimer() {
+    if (_completionDetected) return; // Already started
+    
+    _completionDetected = true;
+    _autoExitTimer?.cancel();
+    
+    print('⏱️ Auto-exit timer started: 10 seconds until voice mode ends');
+    _autoExitTimer = Timer(const Duration(seconds: 10), () {
+      if (_isPhoneCallActive && mounted) {
+        print('⏱️ Auto-exit timer expired - ending voice mode automatically');
+        _endPhoneCall();
+      }
+    });
+  }
+  
+  /// Cancel auto-exit timer (user is still talking)
+  void _cancelAutoExitTimer() {
+    if (!_completionDetected) return;
+    
+    _autoExitTimer?.cancel();
+    _autoExitTimer = null;
+    _completionDetected = false;
+    print('⏱️ Auto-exit timer cancelled - user is still talking');
+  }
+  
+  /// Validate if conversation has collected minimum required information
+  bool _validateMinimumInformation() {
+    final state = _aiService.currentState;
+    final summary = _aiService.getServiceRequestSummary();
+    
+    // Check for essential information in state
+    final hasServiceCategory = state.serviceCategory != null && state.serviceCategory!.isNotEmpty;
+    final hasDescription = state.description != null && state.description!.isNotEmpty;
+    
+    // Check location info (from either form or state)
+    final locationForm = summary['locationForm'] as Map<String, dynamic>? ?? {};
+    final hasLocation = (locationForm.isNotEmpty && locationForm['address'] != null) ||
+                       (state.address != null && state.address!.isNotEmpty);
+    
+    // Check contact info (from either form or state)
+    final contactForm = summary['contactForm'] as Map<String, dynamic>? ?? {};
+    final hasContact = (contactForm.isNotEmpty && contactForm['tel'] != null) ||
+                      (state.phoneNumber != null && state.phoneNumber!.isNotEmpty);
+    
+    print('🔍 Validation: Service=$hasServiceCategory, Description=$hasDescription, Location=$hasLocation, Contact=$hasContact');
+    
+    // For ElevenLabs conversations, the state might not be populated
+    // Check if we have a substantial conversation (at least 5 exchanges)
+    final messageCount = _aiService.messages.length;
+    final hasSubstantialConversation = messageCount >= 10; // At least 5 exchanges (user + AI)
+    
+    if (hasSubstantialConversation && !hasServiceCategory) {
+      print('✅ ElevenLabs conversation detected with $messageCount messages - bypassing strict validation');
+      return true; // Assume ElevenLabs collected the information
+    }
+    
+    // Standard validation: service category + description
+    return hasServiceCategory && hasDescription;
+  }
+  
+  /// Show dialog prompting user to review and submit service request
+  Future<void> _showSubmitPromptDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.check_circle, color: Colors.green, size: 28),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Conversation Complete!',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Great! I\'ve collected all the information for your service request.',
+                style: TextStyle(fontSize: 15),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Review the summary below and submit when ready.',
+                        style: TextStyle(fontSize: 13, color: Colors.blue[900]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Keep summary visible but don't auto-submit
+              },
+              child: const Text('Review First'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Scroll to summary section
+                _scrollToBottom();
+                // Highlight submit button (already visible in summary)
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFBB04C),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'View Summary',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   /// Show error snack bar

@@ -53,7 +53,6 @@ app.*.map.json
 # Auto-generated plugin registrants
 **/macos/Flutter/GeneratedPluginRegistrant.swift
 **/macos/Podfile
-**/ios/Runner.xcodeproj/project.pbxproj
 
 # Firebase config files
 google-services.json
