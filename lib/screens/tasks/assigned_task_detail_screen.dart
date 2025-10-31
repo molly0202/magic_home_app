@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/user_request.dart';
 import '../../services/user_task_service.dart';
+import '../../widgets/full_screen_media_viewer.dart';
 
 class AssignedTaskDetailScreen extends StatefulWidget {
   final UserRequest task;
@@ -183,10 +184,11 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            userData['displayName'] ?? 'Customer',
+                            userData['displayName'] ?? userData['name'] ?? 'Customer',
                             style: const TextStyle(
-                              fontSize: 18,
+                              fontSize: 20,
                               fontWeight: FontWeight.bold,
+                              color: Colors.black87,
                             ),
                           ),
                           if (userData['email'] != null) ...[
@@ -194,7 +196,7 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
                             Text(
                               userData['email'],
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: 15,
                                 color: Colors.grey[600],
                               ),
                             ),
@@ -207,59 +209,106 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
                 
                 const SizedBox(height: 16),
                 
-                // Phone number
+                // Phone number and contact buttons
                 if (widget.task.phoneNumber.isNotEmpty) ...[
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.green.withOpacity(0.3),
+                        width: 1,
+                      ),
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.phone,
-                          color: Colors.green[700],
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Phone Number',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey,
-                                ),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.phone,
+                              color: Colors.green[700],
+                              size: 24,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Phone Number',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  GestureDetector(
+                                    onTap: () => _makePhoneCall(widget.task.phoneNumber),
+                                    child: Text(
+                                      widget.task.phoneNumber,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green[700],
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 2),
-                              GestureDetector(
-                                onTap: () => _makePhoneCall(widget.task.phoneNumber),
-                                child: Text(
-                                  widget.task.phoneNumber,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _makePhoneCall(widget.task.phoneNumber),
+                                icon: const Icon(Icons.call, size: 20),
+                                label: const Text(
+                                  'Call',
                                   style: TextStyle(
                                     fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green[700],
-                                    decoration: TextDecoration.underline,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () => _makePhoneCall(widget.task.phoneNumber),
-                          icon: const Icon(Icons.call, size: 16),
-                          label: const Text('Call'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _makeVideoCall(widget.task.phoneNumber),
+                                icon: const Icon(Icons.videocam, size: 20),
+                                label: const Text(
+                                  'Video Call',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -716,40 +765,112 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Photos & Videos',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+          Row(
+            children: [
+              const Text(
+                'Photos & Videos',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Tap to enlarge',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           
           SizedBox(
-            height: 100,
+            height: 120,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: widget.task.mediaUrls.length,
               itemBuilder: (context, index) {
                 final url = widget.task.mediaUrls[index];
+                final isVideo = _isVideoUrl(url);
+                
                 return Container(
-                  width: 100,
+                  width: 120,
                   margin: const EdgeInsets.only(right: 12),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      url,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: Colors.grey[200],
-                          child: const Icon(
-                            Icons.broken_image,
-                            color: Colors.grey,
+                  child: GestureDetector(
+                    onTap: () => _openFullScreenMedia(url, !isVideo, isVideo),
+                    child: Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            width: 120,
+                            height: 120,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: Colors.grey.withOpacity(0.3),
+                                width: 1,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: isVideo
+                                ? Stack(
+                                    children: [
+                                      Container(
+                                        width: 120,
+                                        height: 120,
+                                        color: Colors.black12,
+                                        child: const Icon(
+                                          Icons.play_circle_filled,
+                                          size: 40,
+                                          color: Colors.white70,
+                                        ),
+                                      ),
+                                      const Positioned(
+                                        bottom: 8,
+                                        right: 8,
+                                        child: Icon(
+                                          Icons.videocam,
+                                          size: 20,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Image.network(
+                                    url,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        color: Colors.grey[200],
+                                        child: const Icon(
+                                          Icons.broken_image,
+                                          color: Colors.grey,
+                                          size: 30,
+                                        ),
+                                      );
+                                    },
+                                  ),
                           ),
-                        );
-                      },
+                        ),
+                        // Tap indicator overlay
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: Colors.black.withOpacity(0.1),
+                            ),
+                            child: const Icon(
+                              Icons.zoom_in,
+                              color: Colors.white70,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -792,10 +913,38 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
     );
   }
 
+  bool _isVideoUrl(String url) {
+    final videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+    return videoExtensions.any((ext) => url.toLowerCase().endsWith(ext));
+  }
+
+  void _openFullScreenMedia(String mediaUrl, bool isImage, bool isVideo) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FullScreenMediaViewer(
+          mediaUrl: mediaUrl,
+          isImage: isImage,
+          isVideo: isVideo,
+        ),
+      ),
+    );
+  }
+
   void _makePhoneCall(String phoneNumber) async {
     final uri = Uri.parse('tel:$phoneNumber');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+    }
+  }
+
+  void _makeVideoCall(String phoneNumber) async {
+    // Try FaceTime first, then fall back to regular call
+    final facetimeUri = Uri.parse('facetime:$phoneNumber');
+    if (await canLaunchUrl(facetimeUri)) {
+      await launchUrl(facetimeUri);
+    } else {
+      // Fallback to regular phone call if FaceTime isn't available
+      _makePhoneCall(phoneNumber);
     }
   }
 
