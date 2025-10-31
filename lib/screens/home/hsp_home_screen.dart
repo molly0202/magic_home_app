@@ -599,23 +599,29 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             ),
             child: Row(
               children: [
-                GestureDetector(
-                  onTap: _updateProviderAddress,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.location_on, color: Colors.white),
-                      const SizedBox(width: 8),
-                      Text(
-                        _currentAddress,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _updateProviderAddress,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.location_on, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _currentAddress,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.edit, color: Colors.white70, size: 16),
-                    ],
+                        const SizedBox(width: 4),
+                        const Icon(Icons.edit, color: Colors.white70, size: 16),
+                      ],
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -1407,12 +1413,16 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                   children: [
                     const Icon(Icons.location_on, color: Colors.white),
                     const SizedBox(width: 8),
-                    Text(
-                      _currentAddress,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
+                    Expanded(
+                      child: Text(
+                        _currentAddress,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -2062,19 +2072,19 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                       ],
                     ),
                     
-                    // Availability
-                    if (task.userAvailability.isNotEmpty && 
-                        task.userAvailability['preferredTime'] != null) ...[
+                    // Final Scheduled Time
+                    if (task.finalServiceSchedule != null && task.finalServiceSchedule!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
+                          Icon(Icons.event_available, size: 16, color: Colors.green[600]),
                           const SizedBox(width: 4),
                           Text(
-                            'Available: ${task.userAvailability['preferredTime']}',
+                            'Scheduled: ${task.finalServiceSchedule}',
                             style: TextStyle(
-                              color: Colors.grey[700],
+                              color: Colors.green[700],
                               fontSize: 14,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
@@ -4251,7 +4261,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Image.asset('assets/images/logo.png', height: 32),
+        title: Image.asset('assets/images/logo.png', height: 48),
         backgroundColor: const Color(0xFFFBB04C),
         foregroundColor: Colors.white,
         elevation: 0,

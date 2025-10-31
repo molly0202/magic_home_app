@@ -39,26 +39,20 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
             // Status Header
             _buildStatusHeader(),
 
-            // User Contact Card
+            // a. Customer name and contact
             _buildUserContactCard(),
 
-            // Task Details Card
-            _buildTaskDetailsCard(),
-
-            // Address Card
-            _buildAddressCard(),
-
-            // Availability Card
-            _buildAvailabilityCard(),
-
-            // Final Service Schedule Card (if confirmed)
+            // b. Final Scheduled time
             if (widget.task.finalServiceSchedule != null && widget.task.finalServiceSchedule!.isNotEmpty)
               _buildFinalScheduleCard(),
 
-            // Description Card
-            _buildDescriptionCard(),
+            // c. Service address
+            _buildAddressCard(),
 
-            // Media Card (if has media)
+            // d. Task details (combined with detailed description)
+            _buildCombinedTaskDetailsCard(),
+
+            // e. Photos & Videos
             if (widget.task.mediaUrls.isNotEmpty)
               _buildMediaCard(),
 
@@ -113,7 +107,7 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
                   ),
                 ),
                 Text(
-                  'Quote accepted - Contact customer to schedule',
+                  'Quote accepted',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],
@@ -587,6 +581,76 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCombinedTaskDetailsCard() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Task Details:',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Task metadata
+          _buildDetailRow('Category', widget.task.serviceCategory.replaceAll('_', ' ').toUpperCase()),
+          _buildDetailRow('Created', _formatDateTime(widget.task.createdAt)),
+          _buildDetailRow('Priority', 'Priority ${widget.task.priority}'),
+          
+          if (widget.task.preferences != null && widget.task.preferences!['budget'] != null)
+            _buildDetailRow('Budget', widget.task.preferences!['budget'].toString()),
+            
+          const SizedBox(height: 16),
+          
+          // Detailed Description section
+          const Text(
+            'Detailed Description:',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.withOpacity(0.2)),
+            ),
+            child: Text(
+              widget.task.description,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.black87,
+                height: 1.5,
+              ),
             ),
           ),
         ],
