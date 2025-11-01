@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'hsp_phone_login_screen.dart';
 import 'hsp_phone_register_screen.dart';
+import '../../widgets/translatable_text.dart';
 
 class HspEntryScreen extends StatelessWidget {
   const HspEntryScreen({super.key});
@@ -17,7 +18,7 @@ class HspEntryScreen extends StatelessWidget {
             // Logo
             Image.asset('assets/images/logo.png', width: 100, height: 100),
             const SizedBox(height: 24),
-            const Text(
+            const TranslatableText(
               'Provider Portal',
               style: TextStyle(
                 fontSize: 32,
@@ -50,7 +51,7 @@ class HspEntryScreen extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  child: const Text('Sign in as Provider'),
+                  child: const TranslatableText('Sign in as Provider'),
                 ),
               ),
             ),
@@ -78,7 +79,7 @@ class HspEntryScreen extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  child: const Text('Sign up as Provider'),
+                  child: const TranslatableText('Sign up as Provider'),
                 ),
               ),
             ),

@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../services/email_service.dart';
 import '../../services/admin_notification_service.dart';
+import '../../widgets/translatable_text.dart';
 import '../home/hsp_home_screen.dart';
 import 'hsp_storefront_setup_screen.dart';
 

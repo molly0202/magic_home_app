@@ -344,7 +344,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             if (_errorMessage != null)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
-                child: Text(
+                child: TranslatableText(
                   _errorMessage!,
                   style: const TextStyle(color: Colors.red),
                   textAlign: TextAlign.center,
@@ -364,23 +364,24 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     MaterialPageRoute(builder: (context) => const HspEntryScreen()),
                   );
                 },
-                child: Text.rich(
-                  TextSpan(
-                    text: 'Are you a service provider? ',
-                    style: const TextStyle(color: Colors.blue, fontSize: 12),
-                    children: [
-                      TextSpan(
-                        text: 'Click here',
-                        style: const TextStyle(
-                          decoration: TextDecoration.underline,
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
-                        ),
+                child: Column(
+                  children: [
+                    const TranslatableText(
+                      'Are you a service provider?',
+                      style: TextStyle(color: Colors.blue, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                    const TranslatableText(
+                      'Click here to start.',
+                      style: TextStyle(
+                        decoration: TextDecoration.underline,
+                        color: Colors.blue,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
                       ),
-                      const TextSpan(text: ' to start.'),
-                    ],
-                  ),
-                  textAlign: TextAlign.center,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -416,7 +417,7 @@ class _ProfileSetupDialogState extends State<_ProfileSetupDialog> {
     final address = _addressController.text.trim();
     if (name.isEmpty || phone.isEmpty || address.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields')),
+        const SnackBar(content: TranslatableText('Please fill in all fields')),
       );
       return;
     }
@@ -431,25 +432,25 @@ class _ProfileSetupDialogState extends State<_ProfileSetupDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Set Up Your Profile'),
+      title: const TranslatableText('Set Up Your Profile'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Name'),
+              decoration: const InputDecoration(labelText: 'Name'), // Note: InputDecoration labels need separate handling
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Phone'),
+              decoration: const InputDecoration(labelText: 'Phone'), // Note: InputDecoration labels need separate handling
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _addressController,
-              decoration: const InputDecoration(labelText: 'Address'),
+              decoration: const InputDecoration(labelText: 'Address'), // Note: InputDecoration labels need separate handling
             ),
           ],
         ),
@@ -459,7 +460,7 @@ class _ProfileSetupDialogState extends State<_ProfileSetupDialog> {
           onPressed: _saving ? null : _saveProfile,
           child: _saving
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Save'),
+              : const TranslatableText('Save'),
         ),
       ],
     );
