@@ -1541,35 +1541,48 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
       child: SingleChildScrollView(
         child: Column(
         children: [
-            // Header
+            // Header with + button
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: const BoxDecoration(
                 color: Color(0xFFFBB04C),
               ),
-              child: GestureDetector(
-                onTap: _updateProviderAddress,
-                child: Row(
-                  children: [
-                    const Icon(Icons.location_on, color: Colors.white),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _currentAddress,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const TranslatableText(
+                    'Discover',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _showCreatePostOptions,
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.add,
+                        color: Color(0xFFFBB04C),
+                        size: 24,
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.edit, color: Colors.white70, size: 16),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             
@@ -4855,6 +4868,203 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     if (totalJobs == 0) return 0;
     
     return ((thumbsUp / totalJobs) * 100).round();
+  }
+
+  void _showCreatePostOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 20),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              
+              // Create New Post option
+              ListTile(
+                leading: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFBB04C).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.add_photo_alternate,
+                    color: Color(0xFFFBB04C),
+                  ),
+                ),
+                title: const TranslatableText(
+                  'Create New Post',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+                subtitle: const TranslatableText(
+                  'Share your work and expertise',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _createNewPost();
+                },
+              ),
+              
+              const Divider(),
+              
+              // Share Referral option
+              ListTile(
+                leading: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.share,
+                    color: Colors.blue,
+                  ),
+                ),
+                title: const TranslatableText(
+                  'Share Referral Code',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+                subtitle: const TranslatableText(
+                  'Invite friends and earn rewards',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareReferralCode();
+                },
+              ),
+              
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _createNewPost() {
+    // TODO: Implement create post functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: TranslatableText('Create Post feature coming soon!'),
+        backgroundColor: Color(0xFFFBB04C),
+      ),
+    );
+  }
+
+  void _shareReferralCode() async {
+    // TODO: Get actual referral code from provider data
+    final referralCode = widget.user.uid.substring(0, 8).toUpperCase();
+    final appLink = 'https://magic-home.app/ref/$referralCode';
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const TranslatableText('Share Magic Home'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const TranslatableText(
+              'Invite friends to use Magic Home and earn rewards!',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  const TranslatableText(
+                    'Your Referral Code',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    referralCode,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFFBB04C),
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              appLink,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.blue[700],
+                decoration: TextDecoration.underline,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const TranslatableText('Close'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              // TODO: Implement share functionality
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: TranslatableText('Share functionality coming soon!'),
+                  backgroundColor: Colors.blue,
+                ),
+              );
+            },
+            icon: const Icon(Icons.share),
+            label: const TranslatableText('Share'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
