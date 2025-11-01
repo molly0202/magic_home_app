@@ -172,22 +172,22 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
-            title: const Text('Select Image Source'),
-            content: const Text('Choose how you want to add your document:'),
+            title: const TranslatableText('Select Image Source'),
+            content: const TranslatableText('Choose how you want to add your document:'),
             actions: [
               TextButton.icon(
                 onPressed: () => Navigator.pop(context, ImageSource.camera),
                 icon: const Icon(Icons.camera_alt),
-                label: const Text('Take Photo'),
+                label: const TranslatableText('Take Photo'),
               ),
               TextButton.icon(
                 onPressed: () => Navigator.pop(context, ImageSource.gallery),
                 icon: const Icon(Icons.photo_library),
-                label: const Text('Choose from Gallery'),
+                label: const TranslatableText('Choose from Gallery'),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: const TranslatableText('Cancel'),
               ),
             ],
           );
@@ -237,12 +237,12 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Permission Required'),
+          title: const TranslatableText('Permission Required'),
           content: Text(errorMessage),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
+              child: const TranslatableText('OK'),
             ),
           ],
         ),
@@ -530,7 +530,7 @@ class _HspVerificationScreenState extends State<HspVerificationScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Verification'),
+        title: const TranslatableText('Verification'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,

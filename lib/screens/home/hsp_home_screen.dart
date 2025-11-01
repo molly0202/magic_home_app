@@ -146,7 +146,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Failed to update status. Please try again.'),
+            content: TranslatableText('Failed to update status. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -160,7 +160,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Update Your Address'),
+        title: const TranslatableText('Update Your Address'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
         children: [
