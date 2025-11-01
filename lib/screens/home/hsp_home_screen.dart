@@ -711,7 +711,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const TranslatableText(
             'My Stats',
             style: TextStyle(
               fontSize: 18,
@@ -734,7 +734,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
+                    TranslatableText(
                       'This Month',
                       style: TextStyle(
                         fontSize: 14,
@@ -762,7 +762,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
+                    TranslatableText(
                       'Total Tasks',
                       style: TextStyle(
                         fontSize: 14,
@@ -790,7 +790,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
+                    TranslatableText(
                       'Earned',
                       style: TextStyle(
                         fontSize: 14,
@@ -861,7 +861,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-            const Text(
+            const TranslatableText(
               'Upcoming Task',
               style: TextStyle(
                 fontSize: 18,
@@ -905,7 +905,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                           color: Colors.grey[400],
                         ),
                         const SizedBox(height: 8),
-                        Text(
+                        TranslatableText(
                           'No upcoming tasks',
                           style: TextStyle(
                             fontSize: 16,
@@ -1640,8 +1640,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '🔥 Bidding Opportunities',
+                TranslatableText(
+                  '🔥 New Requests',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1665,8 +1665,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '🔥 Bidding Opportunities',
+                TranslatableText(
+                  '🔥 New Requests',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1689,8 +1689,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                         color: Colors.grey[500],
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        'No Active Bidding Opportunities',
+                      TranslatableText(
+                        'No Active New Requests',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -1698,7 +1698,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
+                      TranslatableText(
                         'We\'ll notify you when customers post requests matching your skills',
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -1723,8 +1723,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             children: [
               Row(
                 children: [
-                                  Text(
-                  '🔥 Bidding Opportunities',
+                                  TranslatableText(
+                  '🔥 New Requests',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1845,7 +1845,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                           color: Colors.red,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text(
+                        child: const TranslatableText(
                           'URGENT',
                           style: TextStyle(
                             color: Colors.white,
@@ -1932,14 +1932,14 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          TranslatableText(
                             'Time Remaining',
                             style: TextStyle(
                               fontSize: 10,
                               color: Colors.grey[600],
                             ),
                           ),
-                          Text(
+                          TranslatableText(
                             timeRemaining != null 
                                 ? BiddingService.formatTimeRemaining(timeRemaining)
                                 : 'Unknown',
@@ -1965,8 +1965,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: const Text(
-                          'BID',
+                        child: const TranslatableText(
+                          'Reply',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,

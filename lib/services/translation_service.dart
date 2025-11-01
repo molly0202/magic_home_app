@@ -19,6 +19,51 @@ class TranslationService extends ChangeNotifier {
     'es': 'Spanish',
   };
 
+  // Custom translation overrides for better accuracy
+  static const Map<String, Map<String, String>> customTranslations = {
+    'zh': {
+      'Earned': '赚得',
+      'Bidding Opportunities': '新请求',
+      'New Requests': '新请求',
+      '🔥 New Requests': '🔥 新请求',
+      'No upcoming tasks': '没有即将到来的任务',
+      'No Active New Requests': '没有活跃的新请求',
+      'URGENT': '紧急',
+      'Time Remaining': '剩余时间',
+      'BID': '投标',
+      'Reply': '回复',
+      'Unknown': '未知',
+      'Service Opportunity': '服务机会',
+      'Cannot Submit Bid': '无法提交报价',
+      'Go Back': '返回',
+      'Submit Your Bid': '提交您的报价',
+      'Your Quote': '您的报价',
+      'Provide Direct Quote': '提供直接报价',
+      'I can provide a price estimate now': '我现在可以提供价格估算',
+      'Need Phone Consultation': '需要电话咨询',
+      'I need to discuss details before pricing': '我需要在定价前讨论细节',
+      'Need In-Person Consultation': '需要现场咨询',
+      'I need to visit the location before pricing': '我需要在定价前实地查看',
+    },
+    'es': {
+      'Earned': 'Ganado',
+      'New Requests': 'Nuevas Solicitudes',
+      '🔥 New Requests': '🔥 Nuevas Solicitudes',
+      'URGENT': 'URGENTE',
+      'Time Remaining': 'Tiempo Restante',
+      'Reply': 'Responder',
+      'Unknown': 'Desconocido',
+      'Service Opportunity': 'Oportunidad de Servicio',
+      'Cannot Submit Bid': 'No se puede enviar oferta',
+      'Go Back': 'Volver',
+      'Submit Your Bid': 'Enviar su Oferta',
+      'Your Quote': 'Su Cotización',
+      'Provide Direct Quote': 'Proporcionar Cotización Directa',
+      'Need Phone Consultation': 'Necesito Consulta Telefónica',
+      'Need In-Person Consultation': 'Necesito Consulta en Persona',
+    },
+  };
+
   // Language codes for Google Translate
   static const Map<String, String> languageCodes = {
     'en': 'en',
@@ -78,6 +123,14 @@ class TranslationService extends ChangeNotifier {
     // If target language is English, return original
     if (target == 'en') {
       return text;
+    }
+
+    // Check for custom translations first
+    if (customTranslations.containsKey(target) && 
+        customTranslations[target]!.containsKey(text)) {
+      final customTranslation = customTranslations[target]![text]!;
+      developer.log('Using custom translation for "$text" to $target: "$customTranslation"');
+      return customTranslation;
     }
 
     try {

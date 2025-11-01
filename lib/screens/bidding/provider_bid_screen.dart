@@ -7,6 +7,7 @@ import '../../services/price_benchmark_service.dart';
 import '../../widgets/price_benchmark_widget.dart';
 import '../../widgets/market_price_guidance_card.dart';
 import '../../widgets/service_request_card.dart';
+import '../../widgets/translatable_text.dart';
 
 class ProviderBidScreen extends StatefulWidget {
   final String requestId;
@@ -178,14 +179,14 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
           children: [
             Icon(Icons.check_circle, color: Colors.green, size: 28),
             SizedBox(width: 8),
-            Text('Bid Submitted!'),
+            TranslatableText('Bid Submitted!'),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Your bid has been submitted successfully.'),
+            TranslatableText('Your bid has been submitted successfully.'),
             SizedBox(height: 12),
             Container(
               padding: EdgeInsets.all(12),
@@ -224,7 +225,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
               Navigator.of(context).pop(); // Close dialog only
               // Don't navigate back automatically - let user see the result
             },
-            child: Text('OK'),
+            child: TranslatableText('OK'),
           ),
         ],
       ),
@@ -239,14 +240,14 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
           children: [
             Icon(Icons.error, color: Colors.red, size: 28),
             SizedBox(width: 8),
-            Text('Error'),
+            TranslatableText('Error'),
           ],
         ),
         content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
+            child: TranslatableText('OK'),
           ),
         ],
       ),
@@ -282,7 +283,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Service Opportunity', style: TextStyle(fontSize: 18)),
+            TranslatableText('Service Opportunity', style: TextStyle(fontSize: 18)),
             if (widget.deadline != null)
               Text(
                 _timeRemaining.isNotEmpty ? _timeRemaining : 'Loading...',
@@ -315,7 +316,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
               color: Colors.grey,
             ),
             SizedBox(height: 16),
-            Text(
+            TranslatableText(
               'Cannot Submit Bid',
               style: TextStyle(
                 fontSize: 24,
@@ -324,7 +325,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
               ),
             ),
             SizedBox(height: 8),
-            Text(
+            TranslatableText(
               _eligibilityMessage ?? 'You are not eligible to bid on this request',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -335,7 +336,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
             SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Go Back'),
+              child: TranslatableText('Go Back'),
             ),
           ],
         ),
@@ -373,7 +374,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
             SizedBox(height: 24),
             
             // Bid Form Section
-            Text(
+            TranslatableText(
               'Submit Your Bid',
               style: TextStyle(
                 fontSize: 20,
@@ -417,7 +418,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            TranslatableText(
               'Your Quote',
               style: TextStyle(
                 fontSize: 16,
@@ -453,14 +454,14 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
+                              TranslatableText(
                                 'Provide Direct Quote',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: _quoteType == 'price' ? const Color(0xFFFBB04C) : Colors.black87,
                                 ),
                               ),
-                              Text(
+                              TranslatableText(
                                 'I can provide a price estimate now',
                                 style: TextStyle(
                                   fontSize: 12,
@@ -507,14 +508,14 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
+                              TranslatableText(
                                 'Need Phone Consultation',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: _quoteType == 'phone_consultation' ? Colors.blue : Colors.black87,
                                 ),
                               ),
-                              Text(
+                              TranslatableText(
                                 'I need to discuss details before pricing',
                                 style: TextStyle(
                                   fontSize: 12,
@@ -561,14 +562,14 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
+                              TranslatableText(
                                 'Need In-Person Consultation',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: _quoteType == 'in_person_consultation' ? Colors.purple : Colors.black87,
                                 ),
                               ),
-                              Text(
+                              TranslatableText(
                                 'I need to visit the location before pricing',
                                 style: TextStyle(
                                   fontSize: 12,
@@ -865,7 +866,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
                     ),
                   ),
                   SizedBox(width: 12),
-                  Text('Submitting Bid...'),
+                  TranslatableText('Submitting Bid...'),
                 ],
               )
             : Row(

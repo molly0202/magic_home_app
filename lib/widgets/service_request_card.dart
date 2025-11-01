@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/user_request.dart';
 import 'full_screen_media_viewer.dart';
+import 'translatable_text.dart';
 
 class ServiceRequestCard extends StatelessWidget {
   final UserRequest userRequest;
@@ -68,7 +69,7 @@ class ServiceRequestCard extends StatelessWidget {
             SizedBox(height: 12),
             
             // Service Description
-            Text(
+            TranslatableText(
               'Service Details',
               style: TextStyle(
                 fontSize: 16,
@@ -116,7 +117,7 @@ class ServiceRequestCard extends StatelessWidget {
             // Media attachments if any
             if (userRequest.mediaUrls.isNotEmpty) ...[
               SizedBox(height: 16),
-              Text(
+              TranslatableText(
                 'Attachments',
                 style: TextStyle(
                   fontSize: 14,
@@ -131,7 +132,7 @@ class ServiceRequestCard extends StatelessWidget {
             // Customer preferences
             if (userRequest.preferences != null && userRequest.preferences!.isNotEmpty) ...[
               SizedBox(height: 16),
-              Text(
+              TranslatableText(
                 'Customer Preferences',
                 style: TextStyle(
                   fontSize: 14,
@@ -194,7 +195,7 @@ class ServiceRequestCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              TranslatableText(
                 label,
                 style: TextStyle(
                   fontSize: 12,
