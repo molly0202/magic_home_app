@@ -846,7 +846,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
   Widget _buildUpcomingTasks() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
