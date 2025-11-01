@@ -4556,7 +4556,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         backgroundColor: const Color(0xFFFBB04C),
         foregroundColor: Colors.white,
         elevation: 0,
-        toolbarHeight: 70, // Increased height for better alignment
+        toolbarHeight: 60, // Increased height for better alignment
         title: Align(
           alignment: Alignment.centerLeft,
           child: Image.asset('assets/images/logo.png', height: 60), // Bigger logo
@@ -4565,7 +4565,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         actions: [
           // + button for create post/share referral aligned vertically
           Padding(
-            padding: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.only(right: 12),
             child: IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 32),
               onPressed: _showCreatePostOptions,
