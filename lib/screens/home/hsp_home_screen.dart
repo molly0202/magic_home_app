@@ -1550,7 +1550,6 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             // Service Provider Feed
             _buildServiceProviderFeed(),
         ],
-        ),
       ),
     );
   }
