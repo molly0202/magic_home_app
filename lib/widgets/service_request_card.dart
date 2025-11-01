@@ -85,7 +85,7 @@ class ServiceRequestCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.grey[200]!),
               ),
-              child: Text(
+              child: TranslatableText(
                 userRequest.description,
                 style: TextStyle(
                   fontSize: 14,
@@ -156,7 +156,7 @@ class ServiceRequestCard extends StatelessWidget {
                     color: Colors.blue.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text(
+                  child: TranslatableText(
                     tag,
                     style: TextStyle(
                       fontSize: 11,
@@ -204,7 +204,7 @@ class ServiceRequestCard extends StatelessWidget {
                 ),
               ),
               SizedBox(height: 2),
-              Text(
+              TranslatableText(
                 value,
                 style: TextStyle(
                   fontSize: 14,
@@ -332,7 +332,7 @@ class ServiceRequestCard extends StatelessWidget {
                   color: Colors.amber[700],
                 ),
                 SizedBox(width: 8),
-                Text(
+                TranslatableText(
                   '${_formatPreferenceKey(entry.key)}: ',
                   style: TextStyle(
                     fontSize: 12,
@@ -341,7 +341,7 @@ class ServiceRequestCard extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  child: Text(
+                  child: TranslatableText(
                     entry.value.toString(),
                     style: TextStyle(
                       fontSize: 12,
