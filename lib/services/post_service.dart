@@ -11,13 +11,14 @@ class PostService {
   static Future<String> createPost({
     required String providerId,
     required String providerName,
-    String? providerPhotoUrl,
+    String? providerAvatar,
+    String? companyName,
     required String city,
     String? state,
     required String serviceCategory,
     required String description,
     required List<File> images,
-    Map<String, dynamic>? location,
+    dynamic location,
   }) async {
     try {
       // Upload images to Firebase Storage
@@ -39,7 +40,8 @@ class PostService {
       final post = ProviderPost(
         providerId: providerId,
         providerName: providerName,
-        providerPhotoUrl: providerPhotoUrl,
+        providerAvatar: providerAvatar,
+        companyName: companyName,
         city: city,
         state: state,
         serviceCategory: serviceCategory,

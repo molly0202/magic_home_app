@@ -4553,15 +4553,23 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Image.asset('assets/images/logo.png', height: 48),
         backgroundColor: const Color(0xFFFBB04C),
         foregroundColor: Colors.white,
         elevation: 0,
+        toolbarHeight: 70, // Increased height for better alignment
+        title: Align(
+          alignment: Alignment.centerLeft,
+          child: Image.asset('assets/images/logo.png', height: 60), // Bigger logo
+        ),
+        titleSpacing: 16, // Add left spacing
         actions: [
-          // + button for create post/share referral
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline, size: 28),
-            onPressed: _showCreatePostOptions,
+          // + button for create post/share referral aligned vertically
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: IconButton(
+              icon: const Icon(Icons.add_circle_outline, size: 32),
+              onPressed: _showCreatePostOptions,
+            ),
           ),
         ],
       ),
