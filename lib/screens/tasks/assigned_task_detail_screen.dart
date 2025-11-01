@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/user_request.dart';
 import '../../services/user_task_service.dart';
 import '../../widgets/full_screen_media_viewer.dart';
+import '../../widgets/translatable_text.dart';
 
 class AssignedTaskDetailScreen extends StatefulWidget {
   final UserRequest task;
@@ -22,7 +23,7 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text(
+        title: const TranslatableText(
           'Assigned Task Details',
           style: TextStyle(
             fontWeight: FontWeight.bold,
@@ -145,7 +146,7 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              const TranslatableText(
                 'Customer Contact:',
                 style: TextStyle(
                   fontSize: 16,
@@ -236,7 +237,7 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  const TranslatableText(
                                     'Phone Number',
                                     style: TextStyle(
                                       fontSize: 14,
@@ -269,7 +270,7 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
                               child: ElevatedButton.icon(
                                 onPressed: () => _makePhoneCall(widget.task.phoneNumber),
                                 icon: const Icon(Icons.call, size: 20),
-                                label: const Text(
+                                label: const TranslatableText(
                                   'Call',
                                   style: TextStyle(
                                     fontSize: 16,
@@ -291,7 +292,7 @@ class _AssignedTaskDetailScreenState extends State<AssignedTaskDetailScreen> {
                               child: ElevatedButton.icon(
                                 onPressed: () => _makeVideoCall(widget.task.phoneNumber),
                                 icon: const Icon(Icons.videocam, size: 20),
-                                label: const Text(
+                                label: const TranslatableText(
                                   'Video Call',
                                   style: TextStyle(
                                     fontSize: 16,
