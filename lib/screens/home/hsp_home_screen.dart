@@ -602,7 +602,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
           // Header
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             decoration: const BoxDecoration(
               color: Color(0xFFFBB04C),
             ),
@@ -1570,7 +1570,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 TranslatableText(
                   '🔥 New Requests',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: Colors.grey[800],
                   ),
@@ -1595,7 +1595,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 TranslatableText(
                   '🔥 New Requests',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: Colors.grey[800],
                   ),
@@ -1653,7 +1653,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                                   TranslatableText(
                   '🔥 New Requests',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: Colors.grey[800],
                   ),
@@ -1787,12 +1787,13 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 const SizedBox(height: 8), // Reduced spacing
                 
                 // Description
-                Text(
+                TranslatableText(
                   request.description,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 16,
                     color: Colors.grey[800],
                     height: 1.3,
+                    fontWeight: FontWeight.w500,
                   ),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
@@ -1803,14 +1804,15 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 // Location
                 Row(
                   children: [
-                    Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
+                    Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
                     const SizedBox(width: 4),
                     Expanded(
-                      child: Text(
+                      child: TranslatableText(
                         request.address.split(',').first, // Show just city
                         style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
+                          fontSize: 14,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -4556,16 +4558,16 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         backgroundColor: const Color(0xFFFBB04C),
         foregroundColor: Colors.white,
         elevation: 0,
-        toolbarHeight: 60, // Increased height for better alignment
+        toolbarHeight: 70, // Increased height for better alignment
         title: Align(
           alignment: Alignment.centerLeft,
-          child: Image.asset('assets/images/logo.png', height: 60), // Bigger logo
+          child: Image.asset('assets/images/logo.png', height: 65), // Bigger logo
         ),
         titleSpacing: 16, // Add left spacing
         actions: [
           // + button for create post/share referral aligned vertically
           Padding(
-            padding: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.only(right: 16),
             child: IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 32),
               onPressed: _showCreatePostOptions,
