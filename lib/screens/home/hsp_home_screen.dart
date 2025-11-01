@@ -1537,55 +1537,9 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
   }
 
   Widget _buildDiscover() {
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
+    return SingleChildScrollView(
+      child: Column(
         children: [
-            // Header with + button
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: const BoxDecoration(
-                color: Color(0xFFFBB04C),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const TranslatableText(
-                    'Discover',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: _showCreatePostOptions,
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.add,
-                        color: Color(0xFFFBB04C),
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
             const SizedBox(height: 20),
             
             // Promotional Banner Carousel
@@ -4383,57 +4337,10 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          // Notification icon
-            StreamBuilder<QuerySnapshot>(
-            stream: NotificationService.getNotificationHistory(widget.user.uid),
-            builder: (context, snapshot) {
-              int unreadCount = 0;
-              if (snapshot.hasData) {
-                unreadCount = snapshot.data!.docs.length;
-              }
-              
-              return Stack(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications),
-                    onPressed: () {
-                      _showNotificationHistory(context);
-                    },
-                  ),
-                  if (unreadCount > 0)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 16,
-                          minHeight: 16,
-                        ),
-                        child: Text(
-                          '$unreadCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
+          // + button for create post/share referral
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              _loadProviderStats();
-              setState(() {});
-            },
+            icon: const Icon(Icons.add_circle_outline, size: 28),
+            onPressed: _showCreatePostOptions,
           ),
         ],
       ),
