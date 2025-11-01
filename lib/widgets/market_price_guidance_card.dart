@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'translatable_text.dart';
 
 class MarketPriceGuidanceCard extends StatelessWidget {
   final Map<String, dynamic>? aiPriceEstimation;
@@ -38,7 +39,7 @@ class MarketPriceGuidanceCard extends StatelessWidget {
                 Icon(Icons.insights, color: Colors.blue, size: 24),
                 SizedBox(width: 8),
                 Expanded(
-                  child: Text(
+                  child: TranslatableText(
                     "AI Market Price Guidance",
                     style: TextStyle(
                       fontSize: 18,
@@ -180,7 +181,7 @@ class MarketPriceGuidanceCard extends StatelessWidget {
               children: [
                 Icon(Icons.info_outline, color: Colors.orange),
                 SizedBox(width: 8),
-                Text(
+                TranslatableText(
                   "Pricing Guidance",
                   style: TextStyle(
                     fontSize: 18,
@@ -190,7 +191,7 @@ class MarketPriceGuidanceCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: 12),
-            Text(
+            TranslatableText(
               "AI price estimation is not available for this request. Consider market rates for ${serviceCategory.toLowerCase()} services in your area.",
               style: TextStyle(color: Colors.grey[600]),
             ),
@@ -206,7 +207,7 @@ class MarketPriceGuidanceCard extends StatelessWidget {
                   Icon(Icons.tips_and_updates, color: Colors.blue, size: 20),
                   SizedBox(width: 8),
                   Expanded(
-                    child: Text(
+                    child: TranslatableText(
                       "Consider your costs, time, and local market rates when pricing",
                       style: TextStyle(
                         fontSize: 12,
@@ -248,7 +249,7 @@ class MarketPriceGuidanceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: badgeColor.withOpacity(0.5)),
       ),
-      child: Text(
+      child: TranslatableText(
         label,
         style: TextStyle(
           color: badgeColor,
@@ -264,7 +265,7 @@ class MarketPriceGuidanceCard extends StatelessWidget {
       children: [
         Icon(icon, color: color, size: 20),
         SizedBox(height: 4),
-        Text(
+        TranslatableText(
           label,
           style: TextStyle(
             fontSize: 12,
@@ -339,15 +340,15 @@ class MarketPriceGuidanceCard extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
+            TranslatableText(
               "Lower",
               style: TextStyle(fontSize: 10, color: Colors.grey[600]),
             ),
-            Text(
+            TranslatableText(
               "Market Rate",
               style: TextStyle(fontSize: 10, color: Colors.grey[600]),
             ),
-            Text(
+            TranslatableText(
               "Higher",
               style: TextStyle(fontSize: 10, color: Colors.grey[600]),
             ),
