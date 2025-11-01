@@ -19,6 +19,7 @@ import '../debug/token_debug_screen.dart';
 import '../bidding/provider_bid_screen.dart';
 import '../bidding/service_request_detail_screen.dart';
 import '../tasks/assigned_task_detail_screen.dart';
+import '../social/create_provider_post_screen.dart';
 import '../auth/services_edit_screen.dart';
 import '../auth/team_edit_screen.dart';
 import '../auth/work_showcase_edit_screen.dart';
@@ -4879,11 +4880,10 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
   }
 
   void _createNewPost() {
-    // TODO: Implement create post functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: TranslatableText('Create Post feature coming soon!'),
-        backgroundColor: Color(0xFFFBB04C),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateProviderPostScreen(user: widget.user),
       ),
     );
   }
