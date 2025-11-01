@@ -4,7 +4,8 @@ class ProviderPost {
   final String? postId;
   final String providerId;
   final String providerName;
-  final String? providerPhotoUrl;
+  final String? providerAvatar; // Changed from providerPhotoUrl to match existing code
+  final String? companyName; // Added for compatibility
   final String city;
   final String? state;
   final String serviceCategory;
@@ -13,13 +14,14 @@ class ProviderPost {
   final DateTime createdAt;
   final int likesCount;
   final int sharesCount;
-  final Map<String, dynamic>? location;
+  final dynamic location; // Changed to dynamic for flexibility
 
   ProviderPost({
     this.postId,
     required this.providerId,
     required this.providerName,
-    this.providerPhotoUrl,
+    this.providerAvatar,
+    this.companyName,
     required this.city,
     this.state,
     required this.serviceCategory,
@@ -37,7 +39,8 @@ class ProviderPost {
       postId: doc.id,
       providerId: data['providerId'] ?? '',
       providerName: data['providerName'] ?? '',
-      providerPhotoUrl: data['providerPhotoUrl'],
+      providerAvatar: data['providerAvatar'],
+      companyName: data['companyName'],
       city: data['city'] ?? '',
       state: data['state'],
       serviceCategory: data['serviceCategory'] ?? '',
@@ -46,7 +49,7 @@ class ProviderPost {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       likesCount: data['likesCount'] ?? 0,
       sharesCount: data['sharesCount'] ?? 0,
-      location: data['location'] != null ? Map<String, dynamic>.from(data['location']) : null,
+      location: data['location'],
     );
   }
 
@@ -54,7 +57,8 @@ class ProviderPost {
     return {
       'providerId': providerId,
       'providerName': providerName,
-      'providerPhotoUrl': providerPhotoUrl,
+      'providerAvatar': providerAvatar,
+      'companyName': companyName,
       'city': city,
       'state': state,
       'serviceCategory': serviceCategory,

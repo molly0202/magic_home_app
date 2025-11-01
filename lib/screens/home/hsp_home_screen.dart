@@ -25,7 +25,9 @@ import '../auth/team_edit_screen.dart';
 import '../auth/work_showcase_edit_screen.dart';
 import '../../services/bidding_service.dart';
 import '../../services/user_task_service.dart';
+import '../../services/post_service.dart';
 import '../../models/user_request.dart';
+import '../../models/provider_post.dart';
 import '../tasks/assigned_task_detail_screen.dart';
 import '../../services/reviews_service.dart';
 
@@ -2232,7 +2234,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               TranslatableText(
-                'Recent Customer Reviews',
+                'Recent Reviews & Posts',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -2259,8 +2261,10 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          FutureBuilder<List<Map<String, dynamic>>>(
-            future: _loadProviderReviews(),
+          
+          // Show provider posts stream
+          StreamBuilder<List<ProviderPost>>(
+            stream: PostService.getAllPosts(limit: 20),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
@@ -2284,13 +2288,13 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                   child: Column(
                     children: [
                       Icon(
-                        Icons.rate_review_outlined,
+                        Icons.post_add,
                         size: 48,
                         color: Colors.grey[500],
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        'No Reviews Yet',
+                      TranslatableText(
+                        'No Posts Yet',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -2298,8 +2302,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        'Customer reviews will appear here to help you understand market trends',
+                      TranslatableText(
+                        'Provider posts and customer reviews will appear here',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 12,
@@ -2313,7 +2317,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
 
               return Column(
                 children: snapshot.data!
-                    .map((review) => _buildReviewCard(review))
+                    .map((post) => _buildPostCard(post))
                     .toList(),
               );
             },
@@ -2321,6 +2325,223 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildPostCard(ProviderPost post) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with provider info
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundImage: post.providerAvatar != null
+                      ? NetworkImage(post.providerAvatar!)
+                      : null,
+                  backgroundColor: Colors.grey[300],
+                  child: post.providerAvatar == null
+                      ? const Icon(Icons.business, color: Colors.grey)
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              post.companyName ?? post.providerName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          const Icon(
+                            Icons.verified,
+                            color: Color(0xFFFBB04C),
+                            size: 16,
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            size: 12,
+                            color: Colors.grey[500],
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${post.city}${post.state != null ? ', ${post.state}' : ''}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Post images
+          if (post.imageUrls.isNotEmpty)
+            _buildPostImages(post.imageUrls),
+          
+          // Post content
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Service category badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFBB04C).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    post.serviceCategory,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFFFBB04C),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                
+                // Description
+                TranslatableText(
+                  post.description,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[800],
+                    height: 1.4,
+                  ),
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // Actions (likes, shares, time)
+                Row(
+                  children: [
+                    Icon(Icons.favorite_border, size: 18, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${post.likesCount}',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    const SizedBox(width: 16),
+                    Icon(Icons.share, size: 18, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${post.sharesCount}',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    const Spacer(),
+                    Text(
+                      _formatPostTime(post.createdAt),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostImages(List<String> imageUrls) {
+    if (imageUrls.isEmpty) return const SizedBox.shrink();
+    
+    if (imageUrls.length == 1) {
+      return ClipRRect(
+        child: Image.network(
+          imageUrls[0],
+          width: double.infinity,
+          height: 250,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Container(
+            height: 250,
+            color: Colors.grey[300],
+            child: const Icon(Icons.image_not_supported),
+          ),
+        ),
+      );
+    } else {
+      return SizedBox(
+        height: 250,
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          itemCount: imageUrls.length,
+          itemBuilder: (context, index) {
+            return Padding(
+              padding: EdgeInsets.only(right: index < imageUrls.length - 1 ? 4 : 0),
+              child: ClipRRect(
+                child: Image.network(
+                  imageUrls[index],
+                  width: 250,
+                  height: 250,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 250,
+                    height: 250,
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.image_not_supported),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
+  }
+
+  String _formatPostTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inDays > 7) {
+      return '${dateTime.month}/${dateTime.day}/${dateTime.year}';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
   }
 
   Future<List<Map<String, dynamic>>> _loadProviderReviews() async {
