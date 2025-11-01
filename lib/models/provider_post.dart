@@ -4,69 +4,66 @@ class ProviderPost {
   final String? postId;
   final String providerId;
   final String providerName;
-  final String? providerAvatar;
-  final String? companyName;
+  final String? providerPhotoUrl;
+  final String city;
+  final String? state;
   final String serviceCategory;
   final String description;
   final List<String> imageUrls;
-  final String city;
-  final String location; // Full address for filtering
   final DateTime createdAt;
   final int likesCount;
-  final int viewsCount;
-  
+  final int sharesCount;
+  final Map<String, dynamic>? location;
+
   ProviderPost({
     this.postId,
     required this.providerId,
     required this.providerName,
-    this.providerAvatar,
-    this.companyName,
+    this.providerPhotoUrl,
+    required this.city,
+    this.state,
     required this.serviceCategory,
     required this.description,
     required this.imageUrls,
-    required this.city,
-    required this.location,
     DateTime? createdAt,
     this.likesCount = 0,
-    this.viewsCount = 0,
+    this.sharesCount = 0,
+    this.location,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  // Create from Firestore document
   factory ProviderPost.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return ProviderPost(
       postId: doc.id,
       providerId: data['providerId'] ?? '',
       providerName: data['providerName'] ?? '',
-      providerAvatar: data['providerAvatar'],
-      companyName: data['companyName'],
+      providerPhotoUrl: data['providerPhotoUrl'],
+      city: data['city'] ?? '',
+      state: data['state'],
       serviceCategory: data['serviceCategory'] ?? '',
       description: data['description'] ?? '',
       imageUrls: List<String>.from(data['imageUrls'] ?? []),
-      city: data['city'] ?? '',
-      location: data['location'] ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       likesCount: data['likesCount'] ?? 0,
-      viewsCount: data['viewsCount'] ?? 0,
+      sharesCount: data['sharesCount'] ?? 0,
+      location: data['location'] != null ? Map<String, dynamic>.from(data['location']) : null,
     );
   }
 
-  // Convert to Firestore document
   Map<String, dynamic> toFirestore() {
     return {
       'providerId': providerId,
       'providerName': providerName,
-      'providerAvatar': providerAvatar,
-      'companyName': companyName,
+      'providerPhotoUrl': providerPhotoUrl,
+      'city': city,
+      'state': state,
       'serviceCategory': serviceCategory,
       'description': description,
       'imageUrls': imageUrls,
-      'city': city,
-      'location': location,
       'createdAt': Timestamp.fromDate(createdAt),
       'likesCount': likesCount,
-      'viewsCount': viewsCount,
+      'sharesCount': sharesCount,
+      'location': location,
     };
   }
 }
-
