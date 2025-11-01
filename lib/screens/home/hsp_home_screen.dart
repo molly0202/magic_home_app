@@ -1576,147 +1576,13 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             const SizedBox(height: 20),
             
             // Promotional Banner Carousel
-            Column(
-              children: [
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  height: 200,
-                  child: PageView(
-                    onPageChanged: (index) {
-                      setState(() {
-                        _currentPromoPage = index;
-                      });
-                    },
-                    children: [
-                      // Promo 1
-                      _buildPromoCard(
-                        'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400',
-                        'sendhelper',
-                        'DEEP CLEANING SERVICE',
-                        '10% OFF',
-                        'ENTER PROMO CODE',
-                        'DCFS',
-                      ),
-                      // Promo 2
-                      _buildPromoCard(
-                        'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=400',
-                        'Magic Home',
-                        'NEW PROVIDER SPECIAL',
-                        '15% OFF',
-                        'FIRST 3 JOBS',
-                        'WELCOME15',
-                      ),
-                      // Promo 3
-                      _buildPromoCard(
-                        'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=400',
-                        'Refer & Earn',
-                        'REFERRAL BONUS',
-                        '\$50',
-                        'REFER A FRIEND',
-                        'SHARE',
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Page indicators
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(3, (index) => Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: _currentPromoPage == index ? 24 : 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: _currentPromoPage == index 
-                          ? const Color(0xFFFBB04C) 
-                          : Colors.grey[300],
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  )),
-                ),
-              ],
-            ),
+            const _PromoCarousel(),
             
             const SizedBox(height: 20),
             
             // Service Provider Feed
             _buildServiceProviderFeed(),
         ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPromoCard(String imageUrl, String brandName, String title, String discount, String subtitle, String code) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        image: DecorationImage(
-          image: NetworkImage(imageUrl),
-          fit: BoxFit.cover,
-        ),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [
-              Colors.black.withOpacity(0.7),
-              Colors.transparent,
-            ],
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                brandName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w300,
-                ),
-              ),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                discount,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                ),
-              ),
-              Text(
-                code,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -4989,5 +4855,156 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     if (totalJobs == 0) return 0;
     
     return ((thumbsUp / totalJobs) * 100).round();
+  }
+}
+
+// Separate stateful widget for promo carousel to avoid rebuild issues
+class _PromoCarousel extends StatefulWidget {
+  const _PromoCarousel();
+  
+  @override
+  State<_PromoCarousel> createState() => _PromoCarouselState();
+}
+
+class _PromoCarouselState extends State<_PromoCarousel> {
+  int _currentPage = 0;
+  
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          height: 200,
+          child: PageView(
+            onPageChanged: (index) {
+              setState(() {
+                _currentPage = index;
+              });
+            },
+            children: [
+              // Promo 1
+              _buildPromoCard(
+                'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400',
+                'sendhelper',
+                'DEEP CLEANING SERVICE',
+                '10% OFF',
+                'ENTER PROMO CODE',
+                'DCFS',
+              ),
+              // Promo 2
+              _buildPromoCard(
+                'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=400',
+                'Magic Home',
+                'NEW PROVIDER SPECIAL',
+                '15% OFF',
+                'FIRST 3 JOBS',
+                'WELCOME15',
+              ),
+              // Promo 3
+              _buildPromoCard(
+                'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=400',
+                'Refer & Earn',
+                'REFERRAL BONUS',
+                '\$50',
+                'REFER A FRIEND',
+                'SHARE',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Page indicators
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(3, (index) => Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            width: _currentPage == index ? 24 : 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: _currentPage == index 
+                  ? const Color(0xFFFBB04C) 
+                  : Colors.grey[300],
+              borderRadius: BorderRadius.circular(4),
+            ),
+          )),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildPromoCard(String imageUrl, String brandName, String title, String discount, String subtitle, String code) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        image: DecorationImage(
+          image: NetworkImage(imageUrl),
+          fit: BoxFit.cover,
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Colors.black.withOpacity(0.7),
+              Colors.transparent,
+            ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                brandName,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w300,
+                ),
+              ),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                discount,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                ),
+              ),
+              Text(
+                code,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
