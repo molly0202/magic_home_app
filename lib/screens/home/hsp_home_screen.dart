@@ -656,7 +656,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                           size: 16,
                         ),
                         const SizedBox(width: 6),
-                        Text(
+                        TranslatableText(
                           _isAcceptingNewTasks ? 'Available' : 'Off',
                           style: TextStyle(
                             color: _isAcceptingNewTasks ? Colors.white : const Color(0xFFFBB04C),
@@ -913,7 +913,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
+                        TranslatableText(
                           'You\'ll see your scheduled tasks here',
                           style: TextStyle(
                             fontSize: 12,
@@ -962,7 +962,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             Row(
               children: [
                 Expanded(
-                  child: Text(
+                  child: TranslatableText(
                     task.description,
                     style: const TextStyle(
                       fontSize: 18,
@@ -1022,7 +1022,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: Text(
+                  child: TranslatableText(
                     task.address,
                     style: TextStyle(
                       color: Colors.grey[700],
@@ -1039,7 +1039,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               children: [
                 Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
                 const SizedBox(width: 4),
-                Text(
+                TranslatableText(
                   task.finalServiceSchedule ?? 'Schedule TBD',
                   style: TextStyle(
                     color: Colors.grey[700],

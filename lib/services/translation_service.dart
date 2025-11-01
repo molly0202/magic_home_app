@@ -44,6 +44,12 @@ class TranslationService extends ChangeNotifier {
       'I need to discuss details before pricing': '我需要在定价前讨论细节',
       'Need In-Person Consultation': '需要现场咨询',
       'I need to visit the location before pricing': '我需要在定价前实地查看',
+      'Customer Availability': '客户可行的时间',
+      'Available': '可接单',
+      'Off': '暂停',
+      'Upcoming Task': '即将到来的任务',
+      'This Month': '本月',
+      'Total Tasks': '任务总数',
     },
     'es': {
       'Earned': 'Ganado',

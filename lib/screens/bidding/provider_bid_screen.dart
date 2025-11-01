@@ -738,7 +738,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            TranslatableText(
               'Availability',
               style: TextStyle(
                 fontSize: 16,
@@ -775,7 +775,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
                 'This weekend',
                 'Within 24 hours',
               ].map((option) => ActionChip(
-                label: Text(option, style: TextStyle(fontSize: 12)),
+                label: TranslatableText(option, style: TextStyle(fontSize: 12)),
                 onPressed: () {
                   _availabilityController.text = option;
                 },
@@ -794,7 +794,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            TranslatableText(
               'Message to Customer',
               style: TextStyle(
                 fontSize: 16,
@@ -874,7 +874,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
                 children: [
                   Icon(Icons.send),
                   SizedBox(width: 8),
-                  Text(
+                  TranslatableText(
                     _getSubmitButtonText(),
                     style: TextStyle(
                       fontSize: 16,
@@ -902,7 +902,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
             children: [
               Icon(Icons.info_outline, size: 16, color: Colors.blue),
               SizedBox(width: 8),
-              Text(
+              TranslatableText(
                 'Important Notes',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
@@ -912,7 +912,7 @@ class _ProviderBidScreenState extends State<ProviderBidScreen> {
             ],
           ),
           SizedBox(height: 8),
-          Text(
+          TranslatableText(
             '• You have ${_timeRemaining} to submit your bid\n'
             '• Your bid is binding once submitted\n'
             '• The customer will review all bids before deciding\n'
