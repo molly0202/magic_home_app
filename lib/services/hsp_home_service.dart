@@ -71,34 +71,50 @@ class HspHomeService {
     }
   }
 
-  // Get upcoming tasks (scheduled orders)
-  static Stream<List<ServiceOrder>> getUpcomingTasks(String providerId) {
-    final now = DateTime.now();
-    
+  // Get upcoming tasks (assigned requests with finalServiceSchedule)
+  static Stream<List<UserRequest>> getUpcomingTasks(String providerId) {
     return _firestore
-        .collection('service_orders')
-        .where('provider_id', isEqualTo: providerId)
-        .where('status', whereIn: ['confirmed', 'in_progress'])
-        .where('scheduled_time', isGreaterThan: Timestamp.fromDate(now))
-        .orderBy('scheduled_time')
+        .collection('user_requests')
+        .where('assignedProviderId', isEqualTo: providerId)
+        .where('status', isEqualTo: 'assigned')
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs.map((doc) {
-            final data = doc.data();
-            return ServiceOrder(
-              orderId: doc.id,
-              requestId: data['request_id'] ?? '',
-              providerId: data['provider_id'] ?? '',
-              userId: data['user_id'] ?? '',
-              finalPrice: (data['final_price'] ?? 0.0).toDouble(),
-              scheduledTime: (data['scheduled_time'] as Timestamp).toDate(),
-              confirmedAddress: data['confirmed_address'] ?? '',
-              status: data['status'] ?? '',
-              serviceDescription: data['service_description'],
-              customerName: data['customer_name'],
-              customerPhotoUrl: data['customer_photo_url'],
-            );
-          }).toList();
+          final now = DateTime.now();
+          
+          // Filter and sort by finalServiceSchedule
+          final upcomingTasks = snapshot.docs
+              .map((doc) => UserRequest.fromFirestore(doc))
+              .where((task) {
+                // Only include tasks with a finalServiceSchedule
+                if (task.finalServiceSchedule == null || task.finalServiceSchedule!.isEmpty) {
+                  return false;
+                }
+                
+                // Try to parse the finalServiceSchedule to check if it's in the future
+                try {
+                  final scheduleTime = DateTime.parse(task.finalServiceSchedule!);
+                  return scheduleTime.isAfter(now);
+                } catch (e) {
+                  // If we can't parse the date, include it anyway
+                  return true;
+                }
+              })
+              .toList();
+          
+          // Sort by finalServiceSchedule (earliest first)
+          upcomingTasks.sort((a, b) {
+            try {
+              final timeA = DateTime.parse(a.finalServiceSchedule!);
+              final timeB = DateTime.parse(b.finalServiceSchedule!);
+              return timeA.compareTo(timeB);
+            } catch (e) {
+              // If parsing fails, maintain original order
+              return 0;
+            }
+          });
+          
+          return upcomingTasks;
         });
   }
 

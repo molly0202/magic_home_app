@@ -15,6 +15,7 @@ import '../debug/function_test_screen.dart';
 import '../debug/token_debug_screen.dart';
 import '../bidding/provider_bid_screen.dart';
 import '../bidding/service_request_detail_screen.dart';
+import '../tasks/assigned_task_detail_screen.dart';
 import '../auth/services_edit_screen.dart';
 import '../auth/team_edit_screen.dart';
 import '../auth/work_showcase_edit_screen.dart';
@@ -593,7 +594,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
           // Header
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: const BoxDecoration(
               color: Color(0xFFFBB04C),
             ),
@@ -628,51 +629,35 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 GestureDetector(
                   onTap: _toggleNewTasksStatus,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: _isAcceptingNewTasks 
-                          ? Colors.green.withOpacity(0.2)
-                          : Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(
-                        color: _isAcceptingNewTasks 
-                            ? Colors.green.withOpacity(0.5)
-                            : Colors.white.withOpacity(0.3),
-                      ),
+                          ? Colors.green
+                          : Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text(
-                          'New Tasks',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        Icon(
+                          _isAcceptingNewTasks ? Icons.check_circle : Icons.pause_circle,
+                          color: _isAcceptingNewTasks ? Colors.white : const Color(0xFFFBB04C),
+                          size: 16,
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 40,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: _isAcceptingNewTasks ? Colors.green : Colors.grey,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: AnimatedAlign(
-                            duration: const Duration(milliseconds: 200),
-                            alignment: _isAcceptingNewTasks 
-                                ? Alignment.centerRight 
-                                : Alignment.centerLeft,
-                            child: Container(
-                              width: 16,
-                              height: 16,
-                              margin: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _isAcceptingNewTasks ? 'Available' : 'Off',
+                          style: TextStyle(
+                            color: _isAcceptingNewTasks ? Colors.white : const Color(0xFFFBB04C),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -687,10 +672,11 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
                   _buildStatusCard(providerData),
                   if (isVerified) ...[
                     _buildStatsDashboard(),
+                    _buildUpcomingTasks(),
                     _buildBiddingOpportunities(),
                     // Removed _buildPendingRequests from Home tab - it was redundant with bidding opportunities
                   ],
@@ -705,8 +691,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
 
   Widget _buildStatsDashboard() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -729,7 +715,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
               color: Color(0xFFFBB04C),
             ),
           ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
@@ -855,8 +841,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
 
   Widget _buildUpcomingTasks() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -879,8 +865,8 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 color: Color(0xFFFBB04C),
               ),
             ),
-            const SizedBox(height: 16),
-            StreamBuilder<List<ServiceOrder>>(
+            const SizedBox(height: 12),
+            StreamBuilder<List<UserRequest>>(
               stream: HspHomeService.getUpcomingTasks(widget.user.uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -935,12 +921,132 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                   );
                 }
                 
-                return Column(
-                  children: tasks.take(3).map((task) => _buildTaskItem(task)).toList(),
-                );
+                // Show the next upcoming task prominently
+                final nextTask = tasks.first;
+                return _buildNextTaskCard(nextTask);
               },
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNextTaskCard(UserRequest task) {
+    return GestureDetector(
+      onTap: () {
+        // Navigate to task details directly
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AssignedTaskDetailScreen(task: task),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.orange.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.orange.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    task.description,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // Customer info - will be loaded separately
+                FutureBuilder<Map<String, dynamic>?>(
+                  future: UserTaskService.getUserDetails(task.userId),
+                  builder: (context, snapshot) {
+                    final userData = snapshot.data;
+                    final customerName = userData?['displayName'] ?? userData?['name'] ?? 'Customer';
+                    
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.orange,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Center(
+                            child: Text(
+                              customerName.substring(0, 1).toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          customerName,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[700],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    task.address,
+                    style: TextStyle(
+                      color: Colors.grey[700],
+                      fontSize: 14,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  task.finalServiceSchedule ?? 'Schedule TBD',
+                  style: TextStyle(
+                    color: Colors.grey[700],
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1092,7 +1198,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
 
   Widget _buildCompletedTasks() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -2965,7 +3071,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
   }
 
   Widget _buildUpcomingTasksTab() {
-    return StreamBuilder<List<ServiceOrder>>(
+    return StreamBuilder<List<UserRequest>>(
       stream: HspHomeService.getUpcomingTasks(widget.user.uid),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -3092,7 +3198,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     );
   }
 
-  Widget _buildUpcomingTaskCard(ServiceOrder task) {
+  Widget _buildUpcomingTaskCard(UserRequest task) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -3130,9 +3236,9 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 ),
                 const Spacer(),
                 Text(
-                  '\$${task.finalPrice.toStringAsFixed(0)}',
+                  task.finalServiceSchedule ?? 'TBD',
                        style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: Colors.green,
                   ),
@@ -3141,7 +3247,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              task.serviceDescription ?? 'Service Task',
+              task.description,
               style: const TextStyle(
                          fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -3155,7 +3261,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
                      const SizedBox(width: 4),
                 Text(
-                  _formatDateTime(task.scheduledTime),
+                  task.finalServiceSchedule ?? 'Schedule TBD',
                   style: TextStyle(
                     color: Colors.grey[600],
                     fontSize: 14,
@@ -3170,7 +3276,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    task.confirmedAddress,
+                    task.address,
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 14,
