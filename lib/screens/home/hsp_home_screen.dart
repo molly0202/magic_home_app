@@ -1971,7 +1971,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                           size: 20,
                         ),
                         const SizedBox(width: 8),
-                        Text(
+                        TranslatableText(
                           'QUOTE ACCEPTED',
                           style: TextStyle(
                             color: Colors.green[700],
@@ -2074,7 +2074,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    TranslatableText(
                       task.description,
                       style: const TextStyle(
                         fontSize: 16,
@@ -2139,7 +2139,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                           child: ElevatedButton.icon(
                             onPressed: () => _viewTaskDetails(task),
                             icon: const Icon(Icons.visibility, size: 16),
-                            label: const Text('View Details'),
+                            label: const TranslatableText('View Details'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green,
                               foregroundColor: Colors.white,
@@ -2152,7 +2152,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                           child: ElevatedButton.icon(
                             onPressed: () => _markTaskCompleted(task),
                             icon: const Icon(Icons.done, size: 16),
-                            label: const Text('Mark Complete'),
+                            label: const TranslatableText('Mark Complete'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.white,
@@ -4558,7 +4558,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
         backgroundColor: const Color(0xFFFBB04C),
         foregroundColor: Colors.white,
         elevation: 0,
-        toolbarHeight: 70, // Increased height for better alignment
+        toolbarHeight: 60, // Increased height for better alignment
         title: Align(
           alignment: Alignment.centerLeft,
           child: Image.asset('assets/images/logo.png', height: 65), // Bigger logo
