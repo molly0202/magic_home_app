@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
 import '../auth/welcome_screen.dart';
 import '../auth/hsp_verification_screen.dart';
 import '../../services/notification_service.dart';
@@ -41,6 +44,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
   bool _isAcceptingNewTasks = false;
   String _currentAddress = 'Lynnwood, WA 98036';
   String? _dismissedStatusPanelForStatus;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -3424,43 +3428,79 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                   ),
                   child: Column(
                     children: [
-                      // Profile Photo
-                      Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: const Color(0xFFFBB04C),
-                            width: 3,
-                          ),
-                        ),
-                        child: ClipOval(
-                          child: data['profileImageUrl'] != null
-                              ? Image.network(
-                                  data['profileImageUrl'],
-                                  width: 120,
-                                  height: 120,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      color: Colors.grey[300],
-                                      child: const Icon(
-                                        Icons.business,
-                                        size: 50,
-                                        color: Colors.grey,
-                                      ),
-                                    );
-                                  },
-                                )
-                              : Container(
-                                  color: Colors.grey[300],
-                                  child: const Icon(
-                                    Icons.business,
-                                    size: 50,
-                                    color: Colors.grey,
-                                  ),
+                      // Profile Photo with edit functionality
+                      GestureDetector(
+                        onTap: () => _updateProfilePhoto(),
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFFFBB04C),
+                                  width: 3,
                                 ),
+                              ),
+                              child: ClipOval(
+                                child: data['profileImageUrl'] != null
+                                    ? Image.network(
+                                        data['profileImageUrl'],
+                                        width: 120,
+                                        height: 120,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            color: Colors.grey[300],
+                                            child: const Icon(
+                                              Icons.business,
+                                              size: 50,
+                                              color: Colors.grey,
+                                            ),
+                                          );
+                                        },
+                                      )
+                                    : Container(
+                                        color: Colors.grey[300],
+                                        child: const Icon(
+                                          Icons.business,
+                                          size: 50,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            // Edit icon overlay
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFBB04C),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -3515,7 +3555,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                 const SizedBox(height: 20),
                 
                 // Recommended Users Section
-                _buildRecommendedUsersSection(data),
+                _buildRecommendedUsers(),
                 
                 const SizedBox(height: 20),
                 
@@ -4717,43 +4757,83 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
     );
   }
 
-  Widget _buildRecommendedUsersSection(Map<String, dynamic> data) {
-    final referredByUserIds = List<String>.from(data['referred_by_user_ids'] ?? []);
-    
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+
+  Future<void> _updateProfilePhoto() async {
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Updating profile photo...'),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Recommended by',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+        ),
+      );
+
+      // Pick image from gallery
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 500,
+        maxHeight: 500,
+        imageQuality: 80,
+      );
+      
+      if (pickedFile == null) {
+        Navigator.of(context).pop(); // Close loading dialog
+        return;
+      }
+
+      // Upload to Firebase Storage (using existing allowed path)
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_pictures')
+          .child(widget.user.uid)
+          .child('profile.jpg');
+      
+      final uploadTask = storageRef.putFile(File(pickedFile.path));
+      final snapshot = await uploadTask;
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+
+      // Update Firestore document
+      await FirebaseFirestore.instance
+          .collection('providers')
+          .doc(widget.user.uid)
+          .update({
+        'profileImageUrl': downloadUrl,
+      });
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+        
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile photo updated successfully!'),
+            backgroundColor: Color(0xFFFBB04C),
           ),
-          const SizedBox(height: 16),
-          
-          if (referredByUserIds.isEmpty)
-            const Text('No recommendations yet', style: TextStyle(color: Colors.grey))
-          else
-            const Text('Referral users will be displayed here', style: TextStyle(color: Colors.grey)),
-        ],
-      ),
-    );
+        );
+      }
+      
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+        
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating profile photo: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _editServices() async {
