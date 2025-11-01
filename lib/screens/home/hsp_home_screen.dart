@@ -1807,7 +1807,7 @@ class _HspHomeScreenState extends State<HspHomeScreen> {
                     Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
                     const SizedBox(width: 4),
                     Expanded(
-                      child: TranslatableText(
+                      child: Text(
                         request.address.split(',').first, // Show just city
                         style: TextStyle(
                           fontSize: 14,
